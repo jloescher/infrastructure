@@ -1,0 +1,189 @@
+---
+# UFW Firewall Rules Configuration
+# This file defines firewall rules for all server types
+
+# Default policies
+default_incoming: deny
+default_outgoing: allow
+default_routed: deny
+
+# Logging
+logging: "on"
+log_level: medium
+
+# Rate limiting for SSH (max 6 connections in 30 seconds)
+ssh_rate_limit: true
+ssh_limit_connections: 6
+ssh_limit_seconds: 30
+
+# Common rules for all servers
+common_rules:
+  # SSH - Allow from anywhere (or restrict to specific IPs)
+  - port: 22
+    protocol: tcp
+    comment: "SSH access"
+    # Uncomment to restrict SSH to specific IPs
+    # from_ip: "192.168.1.0/24"
+
+  # Tailscale - Allow all traffic from Tailscale network
+  - port: "41641"
+    protocol: udp
+    comment: "Tailscale VPN"
+  
+  # ICMP - Allow ping
+  - protocol: icmp
+    comment: "ICMP ping"
+
+# DB Server specific rules
+db_server_rules:
+  # PostgreSQL - From Tailscale network only
+  - port: 5432
+    protocol: tcp
+    from_ip: "100.64.0.0/10"
+    comment: "PostgreSQL from Tailscale"
+
+  # Patroni REST API - From Tailscale network
+  - port: 8008
+    protocol: tcp
+    from_ip: "100.64.0.0/10"
+    comment: "Patroni REST API"
+
+  # Redis - From Tailscale network
+  - port: 6379
+    protocol: tcp
+    from_ip: "100.64.0.0/10"
+    comment: "Redis from Tailscale"
+
+  # PostgreSQL Exporter - From monitoring (router-01)
+  - port: 9187
+    protocol: tcp
+    from_ip: "100.102.220.16"
+    comment: "PostgreSQL Exporter"
+
+  # Redis Exporter - From monitoring
+  - port: 9121
+    protocol: tcp
+    from_ip: "100.102.220.16"
+    comment: "Redis Exporter"
+
+  # Node Exporter - From monitoring
+  - port: 9100
+    protocol: tcp
+    from_ip: "100.102.220.16"
+    comment: "Node Exporter"
+
+# Router specific rules
+router_rules:
+  # HAProxy PostgreSQL Write
+  - port: 5000
+    protocol: tcp
+    from_ip: "100.64.0.0/10"
+    comment: "HAProxy PostgreSQL Write"
+
+  # HAProxy PostgreSQL Read
+  - port: 5001
+    protocol: tcp
+    from_ip: "100.64.0.0/10"
+    comment: "HAProxy PostgreSQL Read"
+
+  # HAProxy Stats
+  - port: 8404
+    protocol: tcp
+    from_ip: "100.64.0.0/10"
+    comment: "HAProxy Stats"
+
+  # etcd - From cluster nodes
+  - port: 2379
+    protocol: tcp
+    from_ip: "100.64.0.0/10"
+    comment: "etcd client"
+
+  - port: 2380
+    protocol: tcp
+    from_ip: "100.64.0.0/10"
+    comment: "etcd peer"
+
+  # Prometheus
+  - port: 9090
+    protocol: tcp
+    from_ip: "100.64.0.0/10"
+    comment: "Prometheus"
+
+  # Grafana
+  - port: 3000
+    protocol: tcp
+    comment: "Grafana (public or Cloudflare only)"
+    # Uncomment to restrict to Cloudflare IPs
+    # from_ips:
+    #   - "173.245.48.0/20"
+    #   - "103.21.244.0/22"
+    #   - "103.22.200.0/22"
+    #   - "103.31.4.0/22"
+    #   - "141.101.64.0/18"
+    #   - "108.162.192.0/18"
+    #   - "190.93.240.0/20"
+    #   - "188.114.96.0/20"
+    #   - "197.234.240.0/22"
+    #   - "198.41.128.0/17"
+    #   - "162.158.0.0/15"
+    #   - "104.16.0.0/13"
+    #   - "104.24.0.0/14"
+    #   - "172.64.0.0/13"
+    #   - "131.0.72.0/22"
+
+  # Alertmanager
+  - port: 9093
+    protocol: tcp
+    from_ip: "100.64.0.0/10"
+    comment: "Alertmanager"
+
+  # Node Exporter
+  - port: 9100
+    protocol: tcp
+    comment: "Node Exporter"
+
+  # HAProxy Exporter
+  - port: 9101
+    protocol: tcp
+    from_ip: "100.102.220.16"
+    comment: "HAProxy Exporter"
+
+# App Server specific rules
+app_server_rules:
+  # HTTP/HTTPS - Public access
+  - port: 80
+    protocol: tcp
+    comment: "HTTP"
+
+  - port: 443
+    protocol: tcp
+    comment: "HTTPS"
+
+  # Application ports (customize based on your apps)
+  - port: 3000
+    protocol: tcp
+    from_ip: "100.64.0.0/10"
+    comment: "Application port 3000"
+
+  - port: 8080
+    protocol: tcp
+    from_ip: "100.64.0.0/10"
+    comment: "Application port 8080"
+
+  # Node Exporter
+  - port: 9100
+    protocol: tcp
+    from_ip: "100.102.220.16"
+    comment: "Node Exporter"
+
+  # Docker metrics (if enabled)
+  - port: 9323
+    protocol: tcp
+    from_ip: "100.102.220.16"
+    comment: "Docker metrics"
+
+  # Application metrics
+  - port: 9091
+    protocol: tcp
+    from_ip: "100.102.220.16"
+    comment: "Application metrics"

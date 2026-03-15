@@ -1,0 +1,66 @@
+---
+# PostgreSQL/Patroni cluster configuration (discovered from live systems)
+postgres_version: 18
+postgres_version_full: "18.3"
+postgres_data_dir: /var/lib/postgresql/{{ postgres_version }}/main
+postgres_config_dir: /etc/postgresql/{{ postgres_version }}/main
+postgres_port: 5432
+postgres_unix_socket: /var/run/postgresql
+
+# Patroni configuration
+patroni_scope: quantyra_pg
+patroni_namespace: /db/
+patroni_restapi_port: 8008
+
+# PostgreSQL performance tuning (current values)
+postgres_max_connections: 300
+postgres_shared_buffers: 8GB
+postgres_effective_cache_size: 24GB
+postgres_maintenance_work_mem: 2GB
+postgres_work_mem: 64MB
+postgres_wal_keep_size: 8GB
+postgres_wal_level: replica
+postgres_synchronous_commit: "off"
+postgres_hot_standby: "on"
+postgres_max_wal_senders: 10
+postgres_max_replication_slots: 10
+postgres_max_worker_processes: 8
+postgres_max_locks_per_transaction: 64
+
+# PgBouncer
+pgbouncer_enabled: true
+pgbouncer_port: 6432
+pgbouncer_pool_mode: transaction
+
+# HAProxy endpoints
+postgres_write_endpoint: "100.102.220.16:5000"
+postgres_read_endpoint: "100.102.220.16:5001"
+postgres_write_endpoint_secondary: "100.116.175.9:5000"
+postgres_read_endpoint_secondary: "100.116.175.9:5001"
+
+# Backup configuration (not yet deployed)
+pgbackrest_enabled: false
+pgbackrest_repo_path: /backup/pgbackrest
+pgbackrest_retention_full: 4
+pgbackrest_retention_diff: 30
+
+# Current cluster topology
+postgres_nodes:
+  - name: re-node-01
+    tailscale_ip: 100.126.103.51
+    public_ip: 104.225.216.26
+    port: 5432
+    patroni_api: 8008
+    role: leader_or_replica
+  - name: re-node-03
+    tailscale_ip: 100.114.117.46
+    public_ip: 172.93.54.145
+    port: 5432
+    patroni_api: 8008
+    role: replica
+  - name: re-node-04
+    tailscale_ip: 100.115.75.119
+    public_ip: 172.93.54.122
+    port: 5432
+    patroni_api: 8008
+    role: replica

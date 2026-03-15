@@ -1,0 +1,198 @@
+---
+- name: Update system packages
+  hosts: all
+  become: yes
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+
+    - name: Upgrade all packages
+      apt:
+        upgrade: dist
+        autoremove: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Check if reboot required
+      stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+
+    - name: Reboot if required
+      reboot:
+        msg: "Reboot initiated by Ansible for kernel updates"
+        connect_timeout: 5
+        reboot_timeout: 300
+        pre_reboot_delay: 0
+        post_reboot_delay: 30
+      when: reboot_required.stat.exists
+
+- name: Update PostgreSQL nodes (rolling)
+  hosts: postgres_cluster
+  become: yes
+  serial: 1
+  tasks:
+    - name: Check if this is the leader
+      command: patronictl query --format json
+      register: patroni_status
+      changed_when: false
+
+    - name: Set fact for leader status
+      set_fact:
+        is_leader: "{{ patroni_status.stdout | from_json | selectattr('Role', 'equalto', 'Leader') | list | length > 0 }}"
+
+    - name: Switchover if leader
+      command: patronictl switchover --force
+      when: is_leader
+      run_once: yes
+
+    - name: Wait for new leader
+      pause:
+        seconds: 30
+      when: is_leader
+
+    - name: Restart patroni
+      systemd:
+        name: patroni
+        state: restarted
+
+    - name: Wait for patroni to be healthy
+      wait_for:
+        port: 8008
+        timeout: 300
+
+    - name: Verify node is healthy
+      command: curl -sf http://localhost:8008/health
+      retries: 5
+      delay: 10
+
+- name: Update Redis (replica first, then master)
+  hosts: redis_cluster
+  become: yes
+  serial: 1
+  tasks:
+    - name: Check Redis role
+      command: redis-cli -h {{ tailscale_ip }} INFO replication
+      register: redis_info
+      changed_when: false
+
+    - name: Set fact for master status
+      set_fact:
+        is_master: "'role:master' in redis_info.stdout"
+
+    - name: Update replicas first
+      block:
+        - name: Restart Redis
+          systemd:
+            name: redis
+            state: restarted
+
+        - name: Wait for Redis
+          wait_for:
+            port: 6379
+            timeout: 60
+
+        - name: Verify Redis is healthy
+          command: redis-cli -h {{ tailscale_ip }} ping
+          retries: 5
+          delay: 5
+      when: not is_master
+
+    - name: Update master last
+      block:
+        - name: Wait for replicas to be ready
+          pause:
+            minutes: 2
+
+        - name: Restart Redis
+          systemd:
+            name: redis
+            state: restarted
+
+        - name: Wait for Redis
+          wait_for:
+            port: 6379
+            timeout: 60
+
+        - name: Verify Redis is healthy
+          command: redis-cli -h {{ tailscale_ip }} ping
+          retries: 5
+          delay: 5
+      when: is_master
+
+- name: Update HAProxy
+  hosts: haproxy
+  become: yes
+  serial: 1
+  tasks:
+    - name: Restart HAProxy
+      systemd:
+        name: haproxy
+        state: restarted
+
+    - name: Wait for HAProxy
+      wait_for:
+        port: 8404
+        timeout: 60
+
+    - name: Verify HAProxy is healthy
+      uri:
+        url: "http://localhost:8404/stats"
+        method: GET
+        user: admin
+        password: admin
+        status_code: 200
+
+- name: Update monitoring
+  hosts: monitoring
+  become: yes
+  tasks:
+    - name: Restart Prometheus
+      systemd:
+        name: prometheus
+        state: restarted
+
+    - name: Restart Grafana
+      systemd:
+        name: grafana-server
+        state: restarted
+
+    - name: Restart Alertmanager
+      systemd:
+        name: alertmanager
+        state: restarted
+
+    - name: Wait for services
+      wait_for:
+        port: "{{ item }}"
+        timeout: 60
+      loop:
+        - 9090
+        - 3000
+        - 9093
+
+- name: Update Docker containers
+  hosts: app_servers
+  become: yes
+  tasks:
+    - name: Pull latest images
+      command: docker-compose pull
+      args:
+        chdir: /opt/apps/web-app
+      become_user: deploy
+
+    - name: Restart containers
+      command: docker-compose up -d --remove-orphans
+      args:
+        chdir: /opt/apps/web-app
+      become_user: deploy
+
+    - name: Wait for application health
+      uri:
+        url: "http://localhost:3000/health"
+        method: GET
+        status_code: 200
+      retries: 30
+      delay: 10

@@ -1,0 +1,119 @@
+global:
+  resolve_timeout: 5m
+  slack_api_url: "${SLACK_WEBHOOK_URL}"
+
+route:
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'default-receiver'
+  routes:
+    # Critical alerts - immediate notification
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      group_wait: 10s
+      repeat_interval: 1h
+
+    # Database alerts
+    - match:
+        job: postgres_exporter
+      receiver: 'database-team'
+
+    # Infrastructure alerts
+    - match:
+        job: node_exporter
+      receiver: 'infrastructure-team'
+
+    # HAProxy alerts
+    - match:
+        job: haproxy_exporter
+      receiver: 'infrastructure-team'
+
+receivers:
+  - name: 'default-receiver'
+    slack_configs:
+      - channel: '#infrastructure-alerts'
+        send_resolved: true
+        title: '{{ .Status | toUpper }}: {{ .CommonAnnotations.summary }}'
+        text: >-
+          {{ range .Alerts }}
+          *Alert:* {{ .Labels.alertname }}
+          *Instance:* {{ .Labels.instance }}
+          *Severity:* {{ .Labels.severity }}
+          *Description:* {{ .Annotations.description }}
+          *Details:*
+          {{ range .Labels.SortedPairs }} • *{{ .Name }}:* {{ .Value }}
+          {{ end }}
+          {{ end }}
+
+  - name: 'critical-alerts'
+    slack_configs:
+      - channel: '#critical-alerts'
+        send_resolved: true
+        title: ':rotating_light: CRITICAL: {{ .CommonAnnotations.summary }}'
+        text: >-
+          {{ range .Alerts }}
+          *Alert:* {{ .Labels.alertname }}
+          *Instance:* {{ .Labels.instance }}
+          *Description:* {{ .Annotations.description }}
+          *Time:* {{ .StartsAt }}
+          {{ end }}
+    pagerduty_configs:
+      - service_key: "${PAGERDUTY_SERVICE_KEY}"
+        severity: critical
+        description: '{{ .CommonAnnotations.summary }}'
+        details:
+          firing: '{{ template "pagerduty.default.instances" .Alerts.Firing }}'
+          resolved: '{{ template "pagerduty.default.instances" .Alerts.Resolved }}'
+          num_firing: '{{ .Alerts.Firing | len }}'
+          num_resolved: '{{ .Alerts.Resolved | len }}'
+
+  - name: 'database-team'
+    slack_configs:
+      - channel: '#database-alerts'
+        send_resolved: true
+        title: ':database: {{ .Status | toUpper }}: {{ .CommonAnnotations.summary }}'
+        text: >-
+          {{ range .Alerts }}
+          *Alert:* {{ .Labels.alertname }}
+          *Instance:* {{ .Labels.instance }}
+          *Severity:* {{ .Labels.severity }}
+          *Description:* {{ .Annotations.description }}
+          {{ end }}
+
+  - name: 'infrastructure-team'
+    slack_configs:
+      - channel: '#infrastructure-alerts'
+        send_resolved: true
+        title: ':server: {{ .Status | toUpper }}: {{ .CommonAnnotations.summary }}'
+        text: >-
+          {{ range .Alerts }}
+          *Alert:* {{ .Labels.alertname }}
+          *Instance:* {{ .Labels.instance }}
+          *Severity:* {{ .Labels.severity }}
+          *Description:* {{ .Annotations.description }}
+          {{ end }}
+
+inhibit_rules:
+  # If a node is down, inhibit all other alerts for that instance
+  - source_match:
+      alertname: 'NodeDown'
+    target_match_re:
+      alertname: '.*'
+    equal: ['instance']
+
+  # If PostgreSQL is down, inhibit connection-related alerts
+  - source_match:
+      alertname: 'PostgreSQLDown'
+    target_match_re:
+      alertname: 'PostgreSQL.*'
+    equal: ['instance']
+
+  # If HAProxy is down, inhibit backend alerts
+  - source_match:
+      alertname: 'HAProxyDown'
+    target_match_re:
+      alertname: 'HAProxy.*'
+    equal: ['instance']

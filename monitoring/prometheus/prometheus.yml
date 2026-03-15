@@ -1,0 +1,149 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'quantyra'
+    environment: 'production'
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - localhost:9093
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          instance: 'router-01'
+
+  # Node Exporter - All servers
+  - job_name: 'node_exporter'
+    static_configs:
+      # DB Servers
+      - targets:
+          - '100.126.103.51:9100'
+          - '100.114.117.46:9100'
+          - '100.115.75.119:9100'
+        labels:
+          type: 'db_server'
+      # Routers
+      - targets:
+          - '100.102.220.16:9100'
+          - '100.116.175.9:9100'
+        labels:
+          type: 'router'
+      # App Servers
+      - targets:
+          - '100.92.26.38:9100'
+          - '100.101.39.22:9100'
+        labels:
+          type: 'app_server'
+
+  # PostgreSQL Exporter - DB Servers
+  - job_name: 'postgres_exporter'
+    static_configs:
+      - targets:
+          - '100.126.103.51:9187'
+          - '100.114.117.46:9187'
+          - '100.115.75.119:9187'
+        labels:
+          type: 'postgresql'
+          cluster: 'quantyra_pg'
+
+  # Redis Exporter
+  - job_name: 'redis_exporter'
+    static_configs:
+      - targets:
+          - '100.126.103.51:9121'
+          - '100.114.117.46:9121'
+        labels:
+          type: 'redis'
+
+  # HAProxy Exporter - Routers
+  - job_name: 'haproxy_exporter'
+    static_configs:
+      - targets:
+          - '100.102.220.16:9101'
+          - '100.116.175.9:9101'
+        labels:
+          type: 'haproxy'
+
+  # Patroni Metrics
+  - job_name: 'patroni'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets:
+          - '100.126.103.51:8008'
+          - '100.114.117.46:8008'
+          - '100.115.75.119:8008'
+        labels:
+          cluster: 'quantyra_pg'
+
+  # etcd Metrics
+  - job_name: 'etcd'
+    static_configs:
+      - targets: ['100.102.220.16:2379']
+        labels:
+          type: 'etcd'
+
+  # Blackbox Exporter - Endpoint monitoring
+  - job_name: 'blackbox_http'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - https://grafana.quantyra.com
+          - https://api.quantyra.com/health
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: localhost:9115
+
+  # TCP Probe - PostgreSQL HAProxy endpoints
+  - job_name: 'blackbox_tcp_postgres'
+    metrics_path: /probe
+    params:
+      module: [tcp_connect]
+    static_configs:
+      - targets:
+          - '100.102.220.16:5000'
+          - '100.102.220.16:5001'
+          - '100.116.175.9:5000'
+          - '100.116.175.9:5001'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: localhost:9115
+        labels:
+          service: 'postgres_haproxy'
+
+  # Docker monitoring (if using Docker)
+  - job_name: 'docker'
+    static_configs:
+      - targets:
+          - '100.92.26.38:9323'
+          - '100.101.39.22:9323'
+        labels:
+          type: 'app_server'
+
+  # Custom application metrics
+  - job_name: 'app_metrics'
+    static_configs:
+      - targets:
+          - '100.92.26.38:9091'
+          - '100.101.39.22:9091'
+        labels:
+          type: 'application'

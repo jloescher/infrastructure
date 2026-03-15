@@ -1,0 +1,108 @@
+# SSH Hardened Configuration
+# Place in /etc/ssh/sshd_config
+
+# Network settings
+Port 22
+AddressFamily any
+ListenAddress 0.0.0.0
+ListenAddress ::
+
+# Host keys
+HostKey /etc/ssh/ssh_host_rsa_key
+HostKey /etc/ssh/ssh_host_ecdsa_key
+HostKey /etc/ssh/ssh_host_ed25519_key
+
+# Authentication
+PermitRootLogin prohibit-password
+StrictModes yes
+MaxAuthTries 3
+MaxSessions 5
+PubkeyAuthentication yes
+AuthorizedKeysFile .ssh/authorized_keys
+
+# Disable password authentication (enforce key-based auth)
+PasswordAuthentication no
+PermitEmptyPasswords no
+ChallengeResponseAuthentication no
+
+# Disable keyboard-interactive authentication
+KbdInteractiveAuthentication no
+
+# GSSAPI authentication (disable if not used)
+GSSAPIAuthentication no
+GSSAPICleanupCredentials yes
+
+# Kerberos authentication (disable if not used)
+KerberosAuthentication no
+
+# X11 forwarding (disable for servers)
+X11Forwarding no
+X11DisplayOffset 10
+X11UseLocalhost yes
+
+# Print MOTD and last log
+PrintMotd no
+PrintLastLog yes
+TCPKeepAlive yes
+
+# Login grace time
+LoginGraceTime 60
+
+# Disconnect inactive sessions
+ClientAliveInterval 300
+ClientAliveCountMax 2
+
+# Logging
+SyslogFacility AUTH
+LogLevel VERBOSE
+
+# SFTP subsystem
+Subsystem sftp /usr/lib/openssh/sftp-server -l INFO
+
+# Allow agent forwarding (useful for deployments)
+AllowAgentForwarding yes
+
+# Allow TCP forwarding (disable if not needed)
+AllowTcpForwarding no
+
+# Disable tunneling
+PermitTunnel no
+
+# Disable user environment
+PermitUserEnvironment no
+
+# Disable user rhosts
+IgnoreRhosts yes
+
+# Compression (disable for servers)
+Compression no
+
+# Restrict users/groups (uncomment and customize)
+# AllowUsers deploy admin@100.64.0.0/10
+# AllowGroups ssh-users
+
+# Cryptographic algorithms (modern, secure defaults)
+KexAlgorithms curve25519-sha256@libssh.org,diffie-hellman-group-exchange-sha256
+Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr
+MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256
+
+# Trusted user CA keys (for centralized key management)
+# TrustedUserCAKeys /etc/ssh/user_ca.pub
+
+# Revoked keys
+# RevokedKeys /etc/ssh/revoked_keys
+
+# Banner (optional)
+# Banner /etc/ssh/banner
+
+# Rate limiting (also handled by UFW/fail2ban)
+MaxStartups 10:30:60
+
+# Accept environment variables (restrict as needed)
+AcceptEnv LANG LC_*
+
+# Use DNS (disable for faster connections)
+UseDNS no
+
+# PAM authentication
+UsePAM yes

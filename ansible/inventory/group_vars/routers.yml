@@ -1,0 +1,118 @@
+---
+# Router configuration (discovered from live systems)
+
+router_01:
+  hostname: router-01
+  tailscale_ip: 100.102.220.16
+  public_ip: 172.93.54.112
+  ipv6: 2602:ff16:11:12a0::1
+  roles:
+    - haproxy
+    - etcd
+    - prometheus
+    - grafana
+    - primary_router
+  services:
+    haproxy:
+      version: "2.8"
+      status: running
+      stats_port: 8404
+      pg_write: 5000
+      pg_read: 5001
+    etcd:
+      status: running
+      client_port: 2379
+      peer_port: 2380
+    prometheus:
+      status: running
+      port: 9090
+    grafana:
+      status: running
+      port: 3000
+    node_exporter:
+      status: running
+      port: 9100
+  security:
+    ufw: active
+    ssh_permit_root_login: without-password
+
+router_02:
+  hostname: router-02
+  tailscale_ip: 100.116.175.9
+  public_ip: 23.29.118.6
+  ipv6: 2602:ff16:3:10a3::1
+  roles:
+    - haproxy
+    - secondary_router
+  services:
+    haproxy:
+      version: "2.8.16"
+      status: running
+      stats_port: 8405
+      pg_write: 5000
+      pg_read: 5001
+      web_http: 80
+      web_https: 443
+    node_exporter:
+      status: running
+      port: 9100
+  security:
+    ufw: active
+    ssh_permit_root_login: yes
+    ssh_hardening_required: true
+
+# UFW rules to apply
+router_firewall_common:
+  - port: 22
+    protocol: tcp
+    comment: "SSH"
+  - port: 41641
+    protocol: udp
+    comment: "Tailscale"
+  - from_ip: "100.64.0.0/10"
+    comment: "Tailscale network"
+
+router_01_firewall:
+  - port: 5000
+    protocol: tcp
+    from_ip: "100.64.0.0/10"
+    comment: "HAProxy PostgreSQL Write"
+  - port: 5001
+    protocol: tcp
+    from_ip: "100.64.0.0/10"
+    comment: "HAProxy PostgreSQL Read"
+  - port: 8404
+    protocol: tcp
+    comment: "HAProxy Stats"
+  - port: 2379
+    protocol: tcp
+    from_ip: "100.64.0.0/10"
+    comment: "etcd client"
+  - port: 2380
+    protocol: tcp
+    from_ip: "100.64.0.0/10"
+    comment: "etcd peer"
+  - port: 9090
+    protocol: tcp
+    from_ip: "100.64.0.0/10"
+    comment: "Prometheus"
+  - port: 3000
+    protocol: tcp
+    comment: "Grafana"
+
+router_02_firewall:
+  - port: 5000
+    protocol: tcp
+    comment: "HAProxy PostgreSQL Write"
+  - port: 5001
+    protocol: tcp
+    comment: "HAProxy PostgreSQL Read"
+  - port: 8405
+    protocol: tcp
+    comment: "HAProxy Metrics"
+  - port: 80
+    protocol: tcp
+    comment: "HTTP"
+  - port: 443
+    protocol: tcp
+    comment: "HTTPS"

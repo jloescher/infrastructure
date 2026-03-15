@@ -1,0 +1,191 @@
+{
+  "dashboard": {
+    "title": "Quantyra - PostgreSQL & HAProxy",
+    "tags": ["postgresql", "haproxy", "quantyra"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 0,
+    "refresh": "30s",
+    "panels": [
+      {
+        "title": "Patroni Cluster Status",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "count(patroni_role{cluster=\"quantyra_pg\"} == 1)",
+            "legendFormat": "Leader",
+            "refId": "A"
+          },
+          {
+            "expr": "count(patroni_role{cluster=\"quantyra_pg\"} == 0)",
+            "legendFormat": "Replicas",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "title": "PostgreSQL Connections",
+        "type": "gauge",
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+        "targets": [
+          {
+            "expr": "(sum(pg_stat_activity_count) / sum(pg_settings_max_connections)) * 100",
+            "legendFormat": "Connection %",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "green", "value": 0},
+                {"color": "yellow", "value": 70},
+                {"color": "red", "value": 85}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Replication Lag",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "max(pg_replication_lag_seconds)",
+            "legendFormat": "Lag (seconds)",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "title": "HAProxy Backend Status",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+        "targets": [
+          {
+            "expr": "sum(haproxy_backend_active_servers{backend=~\"postgres.*\"})",
+            "legendFormat": "Active Backends",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "title": "PostgreSQL Query Rate",
+        "type": "graph",
+        "gridPos": {"h": 6, "w": 12, "x": 0, "y": 4},
+        "targets": [
+          {
+            "expr": "rate(pg_stat_database_xact_commit{datname!=\"template0\"}[5m])",
+            "legendFormat": "{{instance}} - {{datname}}",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(pg_stat_database_xact_rollback{datname!=\"template0\"}[5m])",
+            "legendFormat": "{{instance}} - {{datname}} (rollback)",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "title": "PostgreSQL TPS",
+        "type": "graph",
+        "gridPos": {"h": 6, "w": 12, "x": 12, "y": 4},
+        "targets": [
+          {
+            "expr": "sum(rate(pg_stat_database_xact_commit[1m])) by (instance)",
+            "legendFormat": "{{instance}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "title": "HAProxy Connections",
+        "type": "graph",
+        "gridPos": {"h": 6, "w": 12, "x": 0, "y": 10},
+        "targets": [
+          {
+            "expr": "rate(haproxy_frontend_connections_total{frontend=\"postgres_write\"}[5m])",
+            "legendFormat": "Write (5000)",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(haproxy_frontend_connections_total{frontend=\"postgres_read\"}[5m])",
+            "legendFormat": "Read (5001)",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "title": "PostgreSQL Cache Hit Ratio",
+        "type": "graph",
+        "gridPos": {"h": 6, "w": 12, "x": 12, "y": 10},
+        "targets": [
+          {
+            "expr": "rate(pg_stat_database_blks_hit{datname!=\"template0\"}[5m]) / (rate(pg_stat_database_blks_hit{datname!=\"template0\"}[5m]) + rate(pg_stat_database_blks_read{datname!=\"template0\"}[5m])) * 100",
+            "legendFormat": "{{instance}} - {{datname}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "title": "Node CPU Usage",
+        "type": "graph",
+        "gridPos": {"h": 6, "w": 12, "x": 0, "y": 16},
+        "targets": [
+          {
+            "expr": "100 - (avg by(instance) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+            "legendFormat": "{{instance}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "title": "Node Memory Usage",
+        "type": "graph",
+        "gridPos": {"h": 6, "w": 12, "x": 12, "y": 16},
+        "targets": [
+          {
+            "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+            "legendFormat": "{{instance}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "title": "Disk I/O",
+        "type": "graph",
+        "gridPos": {"h": 6, "w": 12, "x": 0, "y": 22},
+        "targets": [
+          {
+            "expr": "rate(node_disk_read_bytes_total[5m])",
+            "legendFormat": "{{instance}} - {{device}} Read",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(node_disk_written_bytes_total[5m])",
+            "legendFormat": "{{instance}} - {{device}} Write",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "title": "Disk Space",
+        "type": "graph",
+        "gridPos": {"h": 6, "w": 12, "x": 12, "y": 22},
+        "targets": [
+          {
+            "expr": "(node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"}) * 100",
+            "legendFormat": "{{instance}} - {{mountpoint}}",
+            "refId": "A"
+          }
+        ]
+      }
+    ]
+  },
+  "overwrite": true
+}

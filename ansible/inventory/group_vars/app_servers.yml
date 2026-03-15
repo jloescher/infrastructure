@@ -1,0 +1,73 @@
+---
+# Application server configuration (discovered from live systems)
+
+# Docker (needs to be installed)
+docker_enabled: false
+docker_compose_version: "2.24.0"
+docker_install_required: true
+
+# Application deployment
+app_deploy_user: root
+app_deploy_dir: /opt/apps
+app_log_dir: /var/log/apps
+
+# Database connections (via HAProxy)
+postgres_write_host: 100.102.220.16
+postgres_write_port: 5000
+postgres_read_host: 100.102.220.16
+postgres_read_port: 5001
+postgres_write_secondary_host: 100.116.175.9
+postgres_write_secondary_port: 5000
+postgres_read_secondary_host: 100.116.175.9
+postgres_read_secondary_port: 5001
+
+# Redis connections
+redis_master_host: 100.126.103.51
+redis_replica_host: 100.114.117.46
+redis_port: 6379
+
+# Environment
+node_env: production
+
+# Web server ports (currently exposed)
+web_http_port: 80
+web_https_port: 443
+app_port: 8001
+prometheus_port: 9090
+
+# Background workers
+worker_processes: 4
+worker_memory_limit: "2GB"
+
+# Log rotation
+logrotate_enabled: true
+logrotate_retention_days: 30
+logrotate_compress: true
+
+# Backup configuration (not yet deployed)
+app_backup_enabled: false
+app_backup_dir: /backup/apps
+app_backup_retention_days: 30
+
+# Current server status
+app_servers:
+  - name: re-db
+    tailscale_ip: 100.92.26.38
+    public_ip: 208.87.128.115
+    ipv6: 2602:ff16:3:0:1:446:0:1
+    ports:
+      - 80
+      - 443
+      - 8001
+      - 9090
+    docker_installed: false
+    uptime_days: 1
+  - name: re-node-02
+    tailscale_ip: 100.101.39.22
+    public_ip: 23.29.118.8
+    ipv6: 2602:ff16:3:1299::1
+    ports:
+      - 80
+      - 443
+    docker_installed: false
+    uptime_days: 63

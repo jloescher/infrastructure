@@ -1,0 +1,128 @@
+2026-03-15 00:04:39,411 p=55787 u=jonathanloescher n=ansible INFO| Starting galaxy collection install process
+2026-03-15 00:04:39,461 p=55787 u=jonathanloescher n=ansible INFO| Nothing to do. All requested collections are already installed. If you want to reinstall them, consider using `--force`.
+2026-03-15 00:04:47,502 p=55886 u=jonathanloescher n=ansible WARNING| [WARNING]: Found variable using reserved name 'roles'.
+Origin: /Users/jonathanloescher/Code/infrastructure/ansible/inventory/hosts.yml:14:11
+
+12             storage_gb: 640
+13             storage_type: nvme
+14           roles:
+             ^ column 11
+
+
+2026-03-15 00:04:47,508 p=55886 u=jonathanloescher n=ansible WARNING| [WARNING]: Found variable using reserved name 'roles'.
+Origin: /Users/jonathanloescher/Code/infrastructure/ansible/inventory/hosts.yml:26:11
+
+24             storage_gb: 640
+25             storage_type: nvme
+26           roles:
+             ^ column 11
+
+
+2026-03-15 00:04:47,513 p=55886 u=jonathanloescher n=ansible WARNING| [WARNING]: Found variable using reserved name 'roles'.
+Origin: /Users/jonathanloescher/Code/infrastructure/ansible/inventory/hosts.yml:38:11
+
+36             storage_gb: 640
+37             storage_type: nvme
+38           roles:
+             ^ column 11
+
+
+2026-03-15 00:04:47,520 p=55886 u=jonathanloescher n=ansible WARNING| [WARNING]: Found variable using reserved name 'roles'.
+Origin: /Users/jonathanloescher/Code/infrastructure/ansible/inventory/hosts.yml:52:11
+
+50             storage_gb: 160
+51             storage_type: ssd
+52           roles:
+             ^ column 11
+
+
+2026-03-15 00:04:47,525 p=55886 u=jonathanloescher n=ansible WARNING| [WARNING]: Found variable using reserved name 'roles'.
+Origin: /Users/jonathanloescher/Code/infrastructure/ansible/inventory/hosts.yml:66:11
+
+64             storage_gb: 160
+65             storage_type: ssd
+66           roles:
+             ^ column 11
+
+
+2026-03-15 00:04:47,532 p=55886 u=jonathanloescher n=ansible WARNING| [WARNING]: Found variable using reserved name 'roles'.
+Origin: /Users/jonathanloescher/Code/infrastructure/ansible/inventory/hosts.yml:80:11
+
+78             storage_gb: 720
+79             storage_type: nvme
+80           roles:
+             ^ column 11
+
+
+2026-03-15 00:04:48,658 p=55886 u=jonathanloescher n=ansible WARNING| [WARNING]: Host 'router-01' is using the discovered Python interpreter at '/usr/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+
+2026-03-15 00:04:48,659 p=55886 u=jonathanloescher n=ansible INFO| router-01 | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python3.12"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+2026-03-15 00:04:48,660 p=55886 u=jonathanloescher n=ansible WARNING| [WARNING]: Found variable using reserved name 'roles'.
+Origin: /Users/jonathanloescher/Code/infrastructure/ansible/inventory/hosts.yml:92:11
+
+90             storage_gb: 720
+91             storage_type: nvme
+92           roles:
+             ^ column 11
+
+
+2026-03-15 00:04:49,178 p=55886 u=jonathanloescher n=ansible WARNING| [WARNING]: Host 're-node-03' is using the discovered Python interpreter at '/usr/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+
+2026-03-15 00:04:49,178 p=55886 u=jonathanloescher n=ansible INFO| re-node-03 | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python3.12"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+2026-03-15 00:04:49,428 p=55886 u=jonathanloescher n=ansible WARNING| [WARNING]: Host 'router-02' is using the discovered Python interpreter at '/usr/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+
+2026-03-15 00:04:49,428 p=55886 u=jonathanloescher n=ansible INFO| router-02 | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python3.12"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+2026-03-15 00:04:50,060 p=55886 u=jonathanloescher n=ansible WARNING| [WARNING]: Host 're-node-01' is using the discovered Python interpreter at '/usr/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+
+2026-03-15 00:04:50,061 p=55886 u=jonathanloescher n=ansible INFO| re-node-01 | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python3.12"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+2026-03-15 00:04:50,218 p=55886 u=jonathanloescher n=ansible WARNING| [WARNING]: Host 're-node-04' is using the discovered Python interpreter at '/usr/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+
+2026-03-15 00:04:50,218 p=55886 u=jonathanloescher n=ansible INFO| re-node-04 | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python3.12"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+2026-03-15 00:04:50,681 p=55886 u=jonathanloescher n=ansible WARNING| [WARNING]: Host 're-db' is using the discovered Python interpreter at '/usr/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+
+2026-03-15 00:04:50,682 p=55886 u=jonathanloescher n=ansible INFO| re-db | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python3.12"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+2026-03-15 00:04:51,080 p=55886 u=jonathanloescher n=ansible WARNING| [WARNING]: Host 're-node-02' is using the discovered Python interpreter at '/usr/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+
+2026-03-15 00:04:51,080 p=55886 u=jonathanloescher n=ansible INFO| re-node-02 | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python3.12"
+    },
+    "changed": false,
+    "ping": "pong"
+}

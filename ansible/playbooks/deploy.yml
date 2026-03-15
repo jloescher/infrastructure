@@ -1,0 +1,66 @@
+---
+- name: Deploy applications
+  hosts: app_servers
+  become: yes
+  vars:
+    app_name: "{{ app_name | default('web-app') }}"
+    deploy_dir: "/opt/apps/{{ app_name }}"
+    
+  tasks:
+    - name: Create application directory
+      file:
+        path: "{{ deploy_dir }}"
+        state: directory
+        owner: deploy
+        group: deploy
+        mode: '0755'
+
+    - name: Copy docker-compose file
+      copy:
+        src: "../docker/app-servers/docker-compose.yml"
+        dest: "{{ deploy_dir }}/docker-compose.yml"
+        owner: deploy
+        group: deploy
+        mode: '0644'
+
+    - name: Create environment file
+      copy:
+        content: |
+          NODE_ENV=production
+          DATABASE_URL=postgres://user:pass@100.102.220.16:5000/dbname
+          DATABASE_READ_URL=postgres://user:pass@100.102.220.16:5001/dbname
+          REDIS_URL=redis://100.126.103.51:6379
+        dest: "{{ deploy_dir }}/.env"
+        owner: deploy
+        group: deploy
+        mode: '0600'
+
+    - name: Pull latest images
+      command: docker-compose pull
+      args:
+        chdir: "{{ deploy_dir }}"
+      become_user: deploy
+
+    - name: Stop services
+      command: docker-compose down --remove-orphans
+      args:
+        chdir: "{{ deploy_dir }}"
+      become_user: deploy
+
+    - name: Start services
+      command: docker-compose up -d
+      args:
+        chdir: "{{ deploy_dir }}"
+      become_user: deploy
+
+    - name: Wait for health check
+      uri:
+        url: "http://localhost:3000/health"
+        method: GET
+        status_code: 200
+      retries: 30
+      delay: 10
+
+    - name: Clean up unused Docker resources
+      command: docker system prune -af --volumes
+      become_user: deploy

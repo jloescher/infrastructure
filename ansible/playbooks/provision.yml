@@ -1,0 +1,319 @@
+---
+- name: Provision servers
+  hosts: all
+  become: yes
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+
+    - name: Upgrade all packages
+      apt:
+        upgrade: dist
+        autoremove: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Install common packages
+      apt:
+        name:
+          - curl
+          - wget
+          - htop
+          - iotop
+          - vim
+          - git
+          - unzip
+          - jq
+          - net-tools
+          - tcpdump
+          - strace
+          - sysstat
+          - logrotate
+          - python3
+          - python3-pip
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Set timezone
+      timezone:
+        name: UTC
+
+    - name: Configure NTP
+      apt:
+        name: systemd-timesyncd
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Enable timesyncd
+      systemd:
+        name: systemd-timesyncd
+        enabled: yes
+        state: started
+
+- name: Configure firewall
+  hosts: all
+  become: yes
+  tasks:
+    - name: Install UFW
+      apt:
+        name: ufw
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Allow SSH
+      ufw:
+        rule: limit
+        name: OpenSSH
+
+    - name: Allow Tailscale
+      ufw:
+        rule: allow
+        port: "41641"
+        proto: udp
+
+    - name: Allow all from Tailscale network
+      ufw:
+        rule: allow
+        from_ip: "100.64.0.0/10"
+
+    - name: Enable UFW
+      ufw:
+        state: enabled
+        policy: deny
+        direction: incoming
+
+- name: Harden SSH
+  hosts: all
+  become: yes
+  tasks:
+    - name: Configure SSH
+      copy:
+        src: ../security/ssh/sshd_config
+        dest: /etc/ssh/sshd_config
+        owner: root
+        group: root
+        mode: '0644'
+        validate: 'sshd -t -f %s'
+      notify: Restart SSH
+
+    - name: Remove weak SSH keys
+      file:
+        path: "/etc/ssh/{{ item }}"
+        state: absent
+      loop:
+        - ssh_host_dsa_key
+        - ssh_host_dsa_key.pub
+        - ssh_host_rsa_key
+        - ssh_host_rsa_key.pub
+
+    - name: Generate ED25519 SSH host key
+      command: ssh-keygen -t ed25519 -f /etc/ssh/ssh_host_ed25519_key -N ""
+      args:
+        creates: /etc/ssh/ssh_host_ed25519_key
+
+  handlers:
+    - name: Restart SSH
+      systemd:
+        name: sshd
+        state: restarted
+
+- name: Install fail2ban
+  hosts: all
+  become: yes
+  tasks:
+    - name: Install fail2ban
+      apt:
+        name: fail2ban
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Configure fail2ban
+      copy:
+        src: ../security/fail2ban/jail.local
+        dest: /etc/fail2ban/jail.local
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Restart fail2ban
+
+    - name: Enable fail2ban
+      systemd:
+        name: fail2ban
+        enabled: yes
+        state: started
+
+  handlers:
+    - name: Restart fail2ban
+      systemd:
+        name: fail2ban
+        state: restarted
+
+- name: Install Node Exporter
+  hosts: all
+  become: yes
+  tasks:
+    - name: Create node exporter user
+      user:
+        name: node_exporter
+        shell: /bin/false
+        system: yes
+        create_home: no
+
+    - name: Download node exporter
+      get_url:
+        url: "https://github.com/prometheus/node_exporter/releases/download/v1.7.0/node_exporter-1.7.0.linux-amd64.tar.gz"
+        dest: /tmp/node_exporter.tar.gz
+
+    - name: Extract node exporter
+      unarchive:
+        src: /tmp/node_exporter.tar.gz
+        dest: /tmp
+        remote_src: yes
+
+    - name: Move node exporter binary
+      copy:
+        src: /tmp/node_exporter-1.7.0.linux-amd64/node_exporter
+        dest: /usr/local/bin/node_exporter
+        owner: root
+        group: root
+        mode: '0755'
+        remote_src: yes
+
+    - name: Create node exporter systemd service
+      copy:
+        content: |
+          [Unit]
+          Description=Node Exporter
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=node_exporter
+          ExecStart=/usr/local/bin/node_exporter
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/node_exporter.service
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Enable and start node exporter
+      systemd:
+        name: node_exporter
+        enabled: yes
+        state: started
+        daemon_reload: yes
+
+- name: Configure DB servers
+  hosts: db_servers
+  become: yes
+  tasks:
+    - name: Allow PostgreSQL port from Tailscale
+      ufw:
+        rule: allow
+        port: "5432"
+        proto: tcp
+        from_ip: "100.64.0.0/10"
+
+    - name: Allow Patroni REST API from Tailscale
+      ufw:
+        rule: allow
+        port: "8008"
+        proto: tcp
+        from_ip: "100.64.0.0/10"
+
+    - name: Allow Redis port from Tailscale
+      ufw:
+        rule: allow
+        port: "6379"
+        proto: tcp
+        from_ip: "100.64.0.0/10"
+
+    - name: Allow node exporter from monitoring
+      ufw:
+        rule: allow
+        port: "9100"
+        proto: tcp
+        from_ip: "100.102.220.16"
+
+- name: Configure routers
+  hosts: routers
+  become: yes
+  tasks:
+    - name: Allow HAProxy ports from Tailscale
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+        from_ip: "100.64.0.0/10"
+      loop:
+        - "5000"
+        - "5001"
+        - "8404"
+
+    - name: Allow etcd ports from Tailscale
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+        from_ip: "100.64.0.0/10"
+      loop:
+        - "2379"
+        - "2380"
+
+    - name: Allow Prometheus port
+      ufw:
+        rule: allow
+        port: "9090"
+        proto: tcp
+        from_ip: "100.64.0.0/10"
+
+    - name: Allow Grafana port
+      ufw:
+        rule: allow
+        port: "3000"
+        proto: tcp
+
+- name: Configure app servers
+  hosts: app_servers
+  become: yes
+  tasks:
+    - name: Install Docker
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Enable Docker
+      systemd:
+        name: docker
+        enabled: yes
+        state: started
+
+    - name: Allow HTTP/HTTPS
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - "80"
+        - "443"
+
+    - name: Create deploy user
+      user:
+        name: deploy
+        groups: docker
+        shell: /bin/bash
+
+    - name: Create app directory
+      file:
+        path: /opt/apps
+        state: directory
+        owner: deploy
+        group: deploy
+        mode: '0755'
