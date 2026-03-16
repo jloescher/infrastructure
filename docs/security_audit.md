@@ -108,25 +108,18 @@ This provides protection against brute force attacks while maintaining access if
 
 ---
 
-### 4. HIGH: HAProxy Stats Page Exposed
+### 4. ~~HIGH: HAProxy Stats Page Exposed~~ ✅ FIXED
 
-**Severity:** HIGH
+**Severity:** ~~HIGH~~ RESOLVED
 **Servers:** router-01, router-02
 
 **Finding:**
-HAProxy stats page (port 8404) is open to the internet with basic authentication.
+~~HAProxy stats page (port 8404) and metrics endpoint (port 8405) were open to the internet with basic authentication.~~
 
-**Risk:**
-- Infrastructure topology exposure
-- Backend server information
-- Attack surface for HAProxy vulnerabilities
-
-**Remediation:**
-```bash
-# Restrict to Tailscale network
-ufw delete allow 8404
-ufw allow from 100.64.0.0/10 to any port 8404
-```
+**Resolution (2026-03-16):**
+Both ports restricted to Tailscale network only via UFW:
+- Port 8404: HAProxy Stats page
+- Port 8405: HAProxy Prometheus metrics
 
 ---
 
