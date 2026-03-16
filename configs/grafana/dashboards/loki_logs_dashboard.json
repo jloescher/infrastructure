@@ -58,7 +58,7 @@
       "gridPos": {"h": 4, "w": 4, "x": 0, "y": 6},
       "targets": [
         {
-          "expr": "sum(count_over_time({job=~\".+\"} |= \"error\" [1h]))",
+          "expr": "sum(count_over_time({job=~\".+\", job!=\"syslog\"} |~ \"(?i)(error|fatal|panic|critical|exception)\" [1h]))",
           "legendFormat": "Errors",
           "refId": "A",
           "datasource": "Loki"
@@ -86,7 +86,7 @@
       "gridPos": {"h": 4, "w": 4, "x": 4, "y": 6},
       "targets": [
         {
-          "expr": "sum(count_over_time({job=~\".+\"} |= \"warning\" [1h]))",
+          "expr": "sum(count_over_time({job=~\".+\", job!=\"syslog\"} |~ \"(?i)(warn|warning)\" [1h]))",
           "legendFormat": "Warnings",
           "refId": "A",
           "datasource": "Loki"
@@ -106,12 +106,12 @@
       }
     },
     {
-      "title": "Auth Failures",
+      "title": "SSH Brute Force",
       "type": "stat",
       "gridPos": {"h": 4, "w": 4, "x": 8, "y": 6},
       "targets": [
         {
-          "expr": "sum(count_over_time({job=\"auth\"} |= \"Failed\" [1h]))",
+          "expr": "sum(count_over_time({job=\"auth\"} |= \"Failed password\" [1h]))",
           "legendFormat": "Failed Logins",
           "refId": "A",
           "datasource": "Loki"
@@ -123,9 +123,11 @@
             "mode": "absolute",
             "steps": [
               {"color": "green", "value": 0},
-              {"color": "red", "value": 5}
+              {"color": "yellow", "value": 50},
+              {"color": "red", "value": 200}
             ]
-          }
+          },
+          "description": "SSH brute force attempts - Fail2Ban is handling these"
         }
       }
     },
@@ -188,12 +190,12 @@
       }
     },
     {
-      "title": "Recent Errors",
+      "title": "Recent Errors (exclude syslog noise)",
       "type": "logs",
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 10},
       "targets": [
         {
-          "expr": "{job=~\".+\"} |= \"error\" |= \"fatal\" |= \"fail\" |= \"exception\"",
+          "expr": "{job=~\".+\", job!=\"syslog\", job!=\"auth\"} |~ \"(?i)(error|fatal|panic|critical|exception|fail)\"",
           "refId": "A",
           "datasource": "Loki"
         }
@@ -339,7 +341,7 @@
       "gridPos": {"h": 6, "w": 12, "x": 12, "y": 30},
       "targets": [
         {
-          "expr": "sum by (host) (rate({job=~\".+\"} |= \"error\" [5m]))",
+          "expr": "sum by (host) (rate({job=~\".+\", job!=\"syslog\"} |~ \"(?i)(error|fatal|panic|critical)\" [5m]))",
           "legendFormat": "{{host}}",
           "refId": "A",
           "datasource": "Loki"
