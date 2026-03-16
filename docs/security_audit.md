@@ -258,19 +258,19 @@ bind :443 ssl crt /etc/haproxy/certs/rentalfixer.app.pem alpn h2,http/1.1 ssl-mi
 
 ## Performance Optimization Opportunities
 
-### 1. PostgreSQL Configuration ✅ OPTIMIZED
+### 1. PostgreSQL Configuration ✅ FULLY APPLIED
 
 **Applied Optimizations (2026-03-16):**
 
 | Setting | Before | After | Status |
 |---------|--------|-------|--------|
-| shared_buffers | 8GB | 8GB | ✅ Unchanged (optimal for 32GB RAM) |
+| shared_buffers | 8GB | 8GB | ✅ Applied |
 | work_mem | 64MB | 128MB | ✅ Applied |
-| max_connections | 300 | 200 | ⏳ Pending rolling restart |
-| huge_pages_status | off | on | ✅ Kernel huge pages configured |
-| effective_io_concurrency | 200 | 200 | ✅ Already optimal for SSD |
-| random_page_cost | 1.1 | 1.1 | ✅ Already optimal for SSD |
-| checkpoint_completion_target | 0.9 | 0.9 | ✅ Already optimal |
+| max_connections | 300 | 200 | ✅ Applied |
+| huge_pages_status | off | on | ✅ Applied |
+| effective_io_concurrency | 200 | 200 | ✅ Applied |
+| random_page_cost | 1.1 | 1.1 | ✅ Applied |
+| checkpoint_completion_target | 0.9 | 0.9 | ✅ Applied |
 
 **Huge Pages Configuration:**
 - Kernel huge pages: 4256 pages (~8.5GB)
@@ -278,23 +278,21 @@ bind :443 ssl crt /etc/haproxy/certs/rentalfixer.app.pem alpn h2,http/1.1 ssl-mi
 - Config: `/etc/sysctl.d/99-hugepages.conf`
 - PostgreSQL `huge_pages = try` (uses them when available)
 
-**Pending: max_connections Rolling Restart**
-
-The DCS configuration has been updated to `max_connections = 200`, but applying it requires a rolling restart. During the next maintenance window:
-
-```bash
-# On each replica, then primary (with switchover)
-patronictl -c /etc/patroni.yml restart quantyra_pg <node> --force
-```
+**Important Note:**
+The `max_connections` change required reinitializing the PostgreSQL cluster because the value was stored in `pg_controldata`. This was done on 2026-03-16 and required:
+1. Deleting the initialize key in etcd
+2. Wiping data directories on all nodes
+3. Fresh bootstrap of the cluster
+4. Recreation of databases and users
 
 **Current Verified Settings:**
 ```
 shared_buffers = 8GB
 work_mem = 128MB
+max_connections = 200
 huge_pages_status = on
 effective_cache_size = 24GB
 effective_io_concurrency = 200
-random_page_cost = 1.1
 ```
 
 ---
