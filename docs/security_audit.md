@@ -69,36 +69,24 @@ ufw enable
 
 ---
 
-### 2. HIGH: Monitoring Exporters Exposed to Internet
+### 2. ~~HIGH: Monitoring Exporters Exposed to Internet~~ ✅ FIXED
 
-**Severity:** HIGH
+**Severity:** ~~HIGH~~ RESOLVED
 **Servers:** All servers with node_exporter, prometheus exporters
 
 **Finding:**
-Prometheus exporters (ports 9100, 9113, 9253, 9101, 9187, 9121) are bound to `0.0.0.0` (all interfaces) and accessible from the internet.
+~~Prometheus exporters (ports 9100, 9113, 9253, 9101, 9187, 9121) were bound to `0.0.0.0` (all interfaces) and accessible from the internet.~~
 
-**Open Ports Exposed:**
-- Port 9100: node_exporter (all servers)
-- Port 9113: prometheus-nginx-exporter (app servers)
-- Port 9253: php-fpm-exporter (app servers)
-- Port 9101: haproxy_exporter (routers)
-- Port 9187: postgres_exporter (db servers)
-- Port 9121: redis_exporter (db servers)
+**Resolution (2026-03-16):**
+All monitoring exporters now bind to Tailscale IPs only:
+- node_exporter: Binds to `100.x.x.x:9100` (Tailscale IP)
+- haproxy_exporter: Binds to `100.x.x.x:9101`
+- prometheus-nginx-exporter: Binds to `100.x.x.x:9113`
+- php-fpm-exporter: Binds to `100.x.x.x:9253`
+- redis_exporter: Binds to `100.x.x.x:9121`
+- postgres_exporter: Binds to `100.x.x.x:9187`
 
-**Risk:**
-- Metrics exposure reveals infrastructure details
-- Performance data can be used for attack planning
-- No authentication on exporter endpoints
-
-**Remediation:**
-```bash
-# Option 1: Bind to localhost only (if Prometheus runs locally)
-# /etc/systemd/system/node_exporter.service
-ExecStart=/usr/local/bin/node_exporter --web.listen-address=127.0.0.1:9100
-
-# Option 2: Use UFW to restrict access
-ufw allow from 100.102.220.16 to any port 9100  # Only from Prometheus server
-```
+Prometheus scrapes via Tailscale network only.
 
 ---
 
