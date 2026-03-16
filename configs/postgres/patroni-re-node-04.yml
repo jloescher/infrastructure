@@ -1,0 +1,76 @@
+scope: quantyra_pg
+namespace: /service/
+name: re-node-04
+
+restapi:
+  listen: 0.0.0.0:8008
+  connect_address: 100.115.75.119:8008
+
+etcd3:
+  hosts: 100.102.220.16:2379,100.116.175.9:2379,100.115.75.119:2379
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    failsafe_mode: true
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+      parameters:
+        wal_level: replica
+        hot_standby: "on"
+        max_connections: 300
+        max_wal_senders: 10
+        max_replication_slots: 10
+        wal_keep_size: 8GB
+        shared_buffers: 8GB
+        effective_cache_size: 24GB
+        maintenance_work_mem: 2GB
+        work_mem: 64MB
+        synchronous_commit: "off"
+        unix_socket_directories: /var/run/postgresql
+        listen_addresses: '127.0.0.1,100.115.75.119'
+      slots:
+        re_node_01:
+          type: physical
+        re_node_03:
+          type: physical
+        re_node_04:
+          type: physical
+
+postgresql:
+  listen: 127.0.0.1,100.115.75.119:5432
+  connect_address: 100.115.75.119:5432
+  data_dir: /var/lib/postgresql/18/main
+  config_dir: /etc/postgresql/18/main
+  bin_dir: /usr/lib/postgresql/18/bin
+  pgpass: /var/lib/postgresql/.pgpass_patroni
+
+  authentication:
+    superuser:
+      username: patroni_superuser
+      password: 2e7vBpaaVK4vTJzrKebC
+    replication:
+      username: patroni_repl
+      password: uxNZhqARqvmqbbGZ2XnD
+    rewind:
+      username: patroni_rewind
+      password: z6mR2xLosQavzjPbE9Uk
+
+  parameters:
+    unix_socket_directories: /var/run/postgresql
+
+  create_replica_methods:
+    - basebackup
+
+  basebackup:
+    checkpoint: fast
+
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false

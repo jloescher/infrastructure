@@ -1,0 +1,77 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'quantyra'
+    environment: 'production'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - '100.102.220.16:9093'
+
+rule_files:
+  - '/etc/prometheus/rules/*.yml'
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'node_exporter'
+    static_configs:
+      - targets:
+          - '100.126.103.51:9100'
+          - '100.114.117.46:9100'
+          - '100.115.75.119:9100'
+          - '100.102.220.16:9100'
+          - '100.116.175.9:9100'
+          - '100.92.26.38:9100'
+          - '100.101.39.22:9100'
+
+  - job_name: 'postgres_exporter'
+    static_configs:
+      - targets:
+          - '100.126.103.51:9187'
+          - '100.114.117.46:9187'
+          - '100.115.75.119:9187'
+
+  - job_name: 'redis_exporter'
+    static_configs:
+      - targets:
+          - '100.126.103.51:9121'
+          - '100.114.117.46:9121'
+
+  - job_name: 'haproxy_exporter'
+    static_configs:
+      - targets:
+          - '100.102.220.16:9101'
+          - '100.116.175.9:9101'
+
+  - job_name: 'patroni'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets:
+          - '100.126.103.51:8008'
+          - '100.114.117.46:8008'
+          - '100.115.75.119:8008'
+
+  - job_name: 'etcd'
+    static_configs:
+      - targets:
+          - "100.102.220.16:2379"
+          - "100.116.175.9:2379"
+          - "100.115.75.119:2379"
+
+  - job_name: 'nginx_exporter'
+    static_configs:
+      - targets:
+          - '100.92.26.38:9113'
+          - '100.101.39.22:9113'
+
+  - job_name: 'php_fpm_exporter'
+    static_configs:
+      - targets:
+          - '100.92.26.38:9253'
+          - '100.101.39.22:9253'
