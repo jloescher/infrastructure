@@ -1212,7 +1212,12 @@ def create_app():
             "redis_enabled": create_redis,
             "port": port if framework == "laravel" else None,
             "domains": [],
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.utcnow().isoformat(),
+            "build_commands": {
+                "install": request.form.get("install_cmd", ""),
+                "build": request.form.get("build_cmd", ""),
+                "start": request.form.get("start_cmd", "")
+            }
         }
         save_applications(applications)
         results["created"].append(f"Application: {app_name}")
@@ -1395,23 +1400,56 @@ def api_pull_deploy(app_name):
     
     app = applications[app_name]
     branch = request.json.get("branch", "main") if request.is_json else "main"
+    rolling = request.json.get("rolling", True) if request.is_json else True
     
-    results = {"servers": {}, "errors": [], "success": []}
+    results = {"servers": {}, "errors": [], "success": [], "rolling": rolling}
     
-    for server in APP_SERVERS:
-        deploy_cmd = f"/opt/scripts/deploy-app.sh {app_name} {branch} 2>&1"
-        result = ssh_command(server["ip"], deploy_cmd, timeout=300)
+    primary_server = APP_SERVERS[0]
+    secondary_servers = APP_SERVERS[1:]
+    
+    deploy_cmd = f"/opt/scripts/deploy-app.sh {app_name} {branch} production 2>&1"
+    
+    # Deploy to primary first
+    result = ssh_command(primary_server["ip"], deploy_cmd, timeout=300)
+    
+    results["servers"][primary_server["name"]] = {
+        "success": result["success"],
+        "output": result["stdout"][-2000:] if result["stdout"] else "",
+        "error": result["stderr"][-500:] if result.get("stderr") else None,
+        "role": "primary"
+    }
+    
+    if result["success"]:
+        results["success"].append(primary_server["name"])
         
-        results["servers"][server["name"]] = {
-            "success": result["success"],
-            "output": result["stdout"][-2000:] if result["stdout"] else "",
-            "error": result["stderr"][-500:] if result.get("stderr") else None
-        }
+        # Rolling deployment: wait for primary to be healthy before deploying to secondary
+        if rolling and secondary_servers:
+            health_cmd = f"curl -s -o /dev/null -w '%{{http_code}}' http://localhost:{app.get('port', 80)} 2>/dev/null || echo '000'"
+            health_result = ssh_command(primary_server["ip"], health_cmd)
+            health_code = health_result.get("stdout", "000").strip()
+            
+            if health_code not in ["200", "302", "301"]:
+                results["warnings"] = [f"Primary health check returned {health_code}, deploying to secondary anyway"]
         
-        if result["success"]:
-            results["success"].append(server["name"])
-        else:
-            results["errors"].append(f"{server['name']}: {result.get('stderr', 'Unknown error')[-200:]}")
+        # Deploy to secondary servers
+        for server in secondary_servers:
+            result = ssh_command(server["ip"], deploy_cmd, timeout=300)
+            
+            results["servers"][server["name"]] = {
+                "success": result["success"],
+                "output": result["stdout"][-2000:] if result["stdout"] else "",
+                "error": result["stderr"][-500:] if result.get("stderr") else None,
+                "role": "secondary"
+            }
+            
+            if result["success"]:
+                results["success"].append(server["name"])
+            else:
+                results["errors"].append(f"{server['name']}: {result.get('stderr', 'Unknown error')[-200:]}")
+    else:
+        results["errors"].append(f"{primary_server['name']}: {result.get('stderr', 'Unknown error')[-200:]}")
+        results["aborted"] = True
+        results["message"] = "Rolling deployment aborted - primary failed"
     
     results["success_flag"] = len(results["errors"]) == 0
     return jsonify(results)

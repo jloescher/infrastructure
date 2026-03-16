@@ -187,13 +187,17 @@
 <div class="progress-bar">
     <div class="progress-step active" id="step1-indicator">1. Framework</div>
     <div class="progress-step" id="step2-indicator">2. App Details</div>
-    <div class="progress-step" id="step3-indicator">3. Database</div>
-    <div class="progress-step" id="step4-indicator">4. Review & Deploy</div>
+    <div class="progress-step" id="step3-indicator">3. Build Settings</div>
+    <div class="progress-step" id="step4-indicator">4. Database</div>
+    <div class="progress-step" id="step5-indicator">5. Review & Deploy</div>
 </div>
 
 <form id="wizard-form" method="POST">
     <input type="hidden" name="framework" id="framework-input">
     <input type="hidden" name="workflow" id="workflow-input">
+    <input type="hidden" name="install_cmd" id="install_cmd_hidden">
+    <input type="hidden" name="build_cmd" id="build_cmd_hidden">
+    <input type="hidden" name="start_cmd" id="start_cmd_hidden">
     
     <div class="wizard-step active" id="step1">
         <div class="card">
@@ -274,6 +278,52 @@
     
     <div class="wizard-step" id="step3">
         <div class="card">
+            <h2>Build Settings</h2>
+            <p>Customize how your application is built and started. Default commands are based on the selected framework.</p>
+            
+            <div class="checkbox-group">
+                <input type="checkbox" id="auto_detect" name="auto_detect" checked onchange="toggleCustomCommands()">
+                <label for="auto_detect">
+                    <strong>Auto-detect build settings</strong>
+                    <div class="hint" style="margin: 0;">Analyze package.json, composer.json, etc. to determine optimal commands</div>
+                </label>
+            </div>
+            
+            <div id="custom-commands" style="display: none; margin-top: 1rem;">
+                <h3 style="margin-bottom: 1rem;">Custom Build Commands</h3>
+                
+                <div class="form-group">
+                    <label for="install_cmd">Install Command</label>
+                    <input type="text" id="install_cmd" name="install_cmd" placeholder="npm ci">
+                    <div class="hint">Command to install dependencies</div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="build_cmd">Build Command</label>
+                    <input type="text" id="build_cmd" name="build_cmd" placeholder="npm run build">
+                    <div class="hint">Command to build the application (leave empty if no build step)</div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="start_cmd">Start Command</label>
+                    <input type="text" id="start_cmd" name="start_cmd" placeholder="npm start">
+                    <div class="hint">Command to start the application</div>
+                </div>
+            </div>
+            
+            <div style="margin-top: 1.5rem; padding: 1rem; background: #16213e; border-radius: 8px;">
+                <h4>Detected Framework: <span id="detected-framework">-</span></h4>
+                <div id="default-commands-display" style="margin-top: 0.5rem; font-family: monospace; font-size: 0.875rem; color: #8899a6;">
+                    <div><strong>Install:</strong> <span id="default-install">-</span></div>
+                    <div><strong>Build:</strong> <span id="default-build">-</span></div>
+                    <div><strong>Start:</strong> <span id="default-start">-</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="wizard-step" id="step4">
+        <div class="card">
             <h2>Database Configuration</h2>
             
             <div class="checkbox-group">
@@ -305,7 +355,7 @@
         </div>
     </div>
     
-    <div class="wizard-step" id="step4">
+    <div class="wizard-step" id="step5">
         <div class="card">
             <h2>Summary</h2>
             <div id="summary"></div>
@@ -402,9 +452,38 @@
 {% block extra_scripts %}
 <script>
 let currentStep = 1;
-const totalSteps = 4;
+const totalSteps = 5;
 let generatedWorkflow = '';
 let appSecrets = [];
+let detectedCommands = {};
+
+const DEFAULT_COMMANDS = {
+    laravel: {
+        install: 'composer install --no-dev --optimize-autoloader',
+        build: 'npm ci && npm run build',
+        start: 'php artisan config:cache && php artisan route:cache && php artisan view:cache'
+    },
+    nextjs: {
+        install: 'npm ci',
+        build: 'npm run build',
+        start: 'npm start'
+    },
+    svelte: {
+        install: 'npm ci',
+        build: 'npm run build',
+        start: 'npm start'
+    },
+    python: {
+        install: 'pip install -r requirements.txt',
+        build: '',
+        start: 'gunicorn --bind 0.0.0.0:8000 app:app'
+    },
+    go: {
+        install: 'go mod download',
+        build: 'go build -o bin/app .',
+        start: './bin/app'
+    }
+};
 
 function updateProgress() {
     for (let i = 1; i <= totalSteps; i++) {
@@ -443,6 +522,10 @@ function nextStep() {
         }
     }
     
+    if (currentStep === 3) {
+        updateBuildSettings();
+    }
+    
     if (currentStep < totalSteps) {
         currentStep++;
         updateProgress();
@@ -453,10 +536,31 @@ function nextStep() {
     }
 }
 
+function toggleCustomCommands() {
+    const autoDetect = document.getElementById('auto_detect').checked;
+    document.getElementById('custom-commands').style.display = autoDetect ? 'none' : 'block';
+}
+
 function prevStep() {
     if (currentStep > 1) {
         currentStep--;
         updateProgress();
+    }
+}
+
+function updateBuildSettings() {
+    const framework = document.getElementById('framework-input').value;
+    const defaults = DEFAULT_COMMANDS[framework] || {install: '', build: '', start: ''};
+    
+    document.getElementById('detected-framework').textContent = framework.charAt(0).toUpperCase() + framework.slice(1);
+    document.getElementById('default-install').textContent = defaults.install || '(none)';
+    document.getElementById('default-build').textContent = defaults.build || '(none)';
+    document.getElementById('default-start').textContent = defaults.start || '(none)';
+    
+    if (!document.getElementById('auto_detect').checked) {
+        document.getElementById('install_cmd').placeholder = defaults.install || 'npm ci';
+        document.getElementById('build_cmd').placeholder = defaults.build || 'npm run build';
+        document.getElementById('start_cmd').placeholder = defaults.start || 'npm start';
     }
 }
 
@@ -465,6 +569,7 @@ document.querySelectorAll('.framework-card').forEach(card => {
         document.querySelectorAll('.framework-card').forEach(c => c.classList.remove('selected'));
         card.classList.add('selected');
         document.getElementById('framework-input').value = card.dataset.framework;
+        updateBuildSettings();
     });
 });
 
@@ -523,17 +628,35 @@ async function generateOutput() {
     const dbName = document.getElementById('db_name').value || appName;
     const createRedis = document.getElementById('create_redis').checked;
     
+    const autoDetect = document.getElementById('auto_detect').checked;
+    const defaults = DEFAULT_COMMANDS[framework] || {install: '', build: '', start: ''};
+    
+    const installCmd = autoDetect ? defaults.install : (document.getElementById('install_cmd').value || defaults.install);
+    const buildCmd = autoDetect ? defaults.build : (document.getElementById('build_cmd').value || defaults.build);
+    const startCmd = autoDetect ? defaults.start : (document.getElementById('start_cmd').value || defaults.start);
+    
+    document.getElementById('install_cmd_hidden').value = installCmd;
+    document.getElementById('build_cmd_hidden').value = buildCmd;
+    document.getElementById('start_cmd_hidden').value = startCmd;
+    
     let summaryHtml = '<table class="server-table">' +
         '<tr><th>Application</th><td><strong>' + appName + '</strong></td></tr>' +
         '<tr><th>Framework</th><td>' + framework + '</td></tr>' +
         '<tr><th>Description</th><td>' + appDesc + '</td></tr>' +
         '<tr><th>Git Repo</th><td>' + (gitRepo || 'Not specified') + '</td></tr>' +
         '<tr><th>Deploy Immediately</th><td>' + (deployNow ? 'Yes' : 'No') + '</td></tr>' +
-        '<tr><th>Target Servers</th><td>re-db, re-node-02 (both for redundancy)</td></tr>' +
+        '<tr><th>Target Servers</th><td>re-db, re-node-02 (rolling deployment)</td></tr>' +
         '<tr><th>Staging</th><td>' + (staging ? 'Yes' : 'No') + '</td></tr>' +
         '<tr><th>Database</th><td>' + (createDb ? dbName : 'None') + '</td></tr>' +
         '<tr><th>Redis</th><td>' + (createRedis ? 'Yes' : 'No') + '</td></tr>' +
     '</table>';
+    
+    summaryHtml += '<h3 style="margin-top: 1rem;">Build Commands</h3><table class="server-table">' +
+        '<tr><th>Install</th><td><code>' + (installCmd || '(none)') + '</code></td></tr>' +
+        '<tr><th>Build</th><td><code>' + (buildCmd || '(none)') + '</code></td></tr>' +
+        '<tr><th>Start</th><td><code>' + (startCmd || '(none)') + '</code></td></tr>' +
+    '</table>';
+    
     document.getElementById('summary').innerHTML = summaryHtml;
     
     try {
