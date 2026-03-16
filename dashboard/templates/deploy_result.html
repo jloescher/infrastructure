@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Deploy Result - Quantyra Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Deploy Result: {{ app_name }}</h1>
+    <a href="/apps/{{ app_name }}/status" class="btn">View Status</a>
+    <a href="/apps/{{ app_name }}/deploy" class="btn btn-secondary">Deploy Again</a>
+</div>
+
+{% if results.errors %}
+<div class="alert alert-error">
+    <strong>Errors:</strong>
+    <ul>
+        {% for error in results.errors %}
+        <li>{{ error }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+{% if results.success %}
+<div class="alert alert-success">
+    <strong>Completed:</strong>
+    <ul>
+        {% for item in results.success %}
+        <li>{{ item }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Server Results</h2>
+    <div class="table-container">
+        <table class="server-table">
+            <thead>
+                <tr><th>Server</th><th>Clone</th><th>Systemd</th><th>Restart</th></tr>
+            </thead>
+            <tbody>
+                {% for server_name, status in results.servers.items() %}
+                <tr>
+                    <td><strong>{{ server_name }}</strong></td>
+                    <td>
+                        {% if status.clone %}
+                        <span class="status-badge {% if status.clone in ['cloned', 'exists'] %}status-healthy{% else %}status-error{% endif %}">{{ status.clone }}</span>
+                        {% else %}
+                        <span class="status-badge status-warning">Skipped</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if status.systemd %}
+                        <span class="status-badge {% if status.systemd == 'created' %}status-healthy{% else %}status-error{% endif %}">{{ status.systemd }}</span>
+                        {% else %}
+                        <span class="status-badge status-warning">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if status.restart %}
+                        <span class="status-badge {% if status.restart == 'ok' %}status-healthy{% else %}status-error{% endif %}">{{ status.restart }}</span>
+                        {% else %}
+                        <span class="status-badge status-warning">-</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Manage Service</h2>
+    {% for server in app_servers %}
+        {% if server.name in selected_servers %}
+        <div class="server-commands">
+            <h3>{{ server.name }} <code>{{ server.ip }}</code></h3>
+            
+            <div class="command-box">
+                <div class="command-header">
+                    <span>Check Status</span>
+                    <button class="btn btn-sm btn-secondary" onclick="copyCommand('status-{{ server.name }}')">Copy</button>
+                </div>
+                <pre id="status-{{ server.name }}" class="code-block">ssh root@{{ server.ip }} "systemctl status {{ app_name }}"</pre>
+            </div>
+            
+            <div class="command-box">
+                <div class="command-header">
+                    <span>View Logs</span>
+                    <button class="btn btn-sm btn-secondary" onclick="copyCommand('logs-{{ server.name }}')">Copy</button>
+                </div>
+                <pre id="logs-{{ server.name }}" class="code-block">ssh root@{{ server.ip }} "journalctl -u {{ app_name }} -f --lines 100"</pre>
+            </div>
+            
+            <div class="command-box">
+                <div class="command-header">
+                    <span>Restart Service</span>
+                    <button class="btn btn-sm btn-secondary" onclick="copyCommand('restart-{{ server.name }}')">Copy</button>
+                </div>
+                <pre id="restart-{{ server.name }}" class="code-block">ssh root@{{ server.ip }} "systemctl restart {{ app_name }}"</pre>
+            </div>
+        </div>
+        {% endif %}
+    {% endfor %}
+</div>
+
+<div class="quick-actions" style="margin-top: 1.5rem;">
+    <a href="/apps" class="btn btn-secondary">View Applications</a>
+    <a href="/apps/{{ app_name }}/secrets" class="btn btn-secondary">Manage Secrets</a>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function copyCommand(id) {
+    const text = document.getElementById(id).textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        event.target.textContent = 'Copied!';
+        setTimeout(() => event.target.textContent = 'Copy', 2000);
+    });
+}
+</script>
+{% endblock %}

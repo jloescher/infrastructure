@@ -1,0 +1,64 @@
+---
+# Deploy PgBouncer configuration to routers
+# Usage: ansible-playbook playbooks/deploy-pgbouncer.yml
+
+- name: Deploy PgBouncer to routers
+  hosts: routers
+  become: yes
+  vars_files:
+    - ../inventory/group_vars/databases.yml
+  
+  tasks:
+    - name: Ensure PgBouncer is installed
+      apt:
+        name: pgbouncer
+        state: present
+        update_cache: yes
+
+    - name: Create postgres socket directory
+      file:
+        path: /var/run/postgresql
+        state: directory
+        owner: postgres
+        group: postgres
+        mode: '0755'
+
+    - name: Deploy PgBouncer config
+      template:
+        src: ../templates/pgbouncer.ini.j2
+        dest: /etc/pgbouncer/pgbouncer.ini
+        owner: postgres
+        group: postgres
+        mode: '0640'
+      vars:
+        pgbouncer_host: "{{ tailscale_ip }}"
+        pgbouncer_listen_addr: "{{ tailscale_ip }}"
+      notify: Restart PgBouncer
+
+    - name: Deploy PgBouncer userlist
+      template:
+        src: ../templates/pgbouncer_userlist.txt.j2
+        dest: /etc/pgbouncer/userlist.txt
+        owner: postgres
+        group: postgres
+        mode: '0600'
+      notify: Restart PgBouncer
+
+    - name: Ensure PgBouncer is running
+      systemd:
+        name: pgbouncer
+        state: started
+        enabled: yes
+
+    - name: Allow PgBouncer port from Tailscale
+      ufw:
+        rule: allow
+        port: '6432'
+        proto: tcp
+        from_ip: '100.64.0.0/10'
+
+  handlers:
+    - name: Restart PgBouncer
+      systemd:
+        name: pgbouncer
+        state: restarted

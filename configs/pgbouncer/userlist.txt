@@ -1,0 +1,3 @@
+"db_admin" "SCRAM-SHA-256$4096:v1L/Qk0Wrwvx22lLDwdn2A==$X310jIIBvOtEii2pKcfpLUZcmE9kdvHg/ORJsOmtRXo=:ts3hs2PWiSD4CAyApKBOpufa6rOhx6UC//1DdgSnDb8="
+"be_rw_db_user" "SCRAM-SHA-256$4096:JdA3cAXwiKnNI8OcvqOxQA==$LiWD5nNXMX5Jr5WGR2WdfkUo4VYyzKoh6k+lkc7LoZk=:a94NOZDDIoRry9sS705nVgDbB0ngulhhY/0/hDV8oug="
+"patroni_superuser" "SCRAM-SHA-256$4096:cGbQKksvjoriei9EvlJkjQ==$BSxMKXB1FmD3hTeacKa0XoFmfnFfFfQ8VZPyNY9Qcio=:Riw+nhS3hwcEvGAZrYiQDfmXHKJKeNmXHJQAqMd1Dlc="

@@ -1,0 +1,200 @@
+# XOTEC Data Layer - Caddy Configuration
+# Source: /etc/caddy/Caddyfile on re-db
+# Blue-Green Deployment with Health Checks
+#
+# This configuration enables zero-downtime deployments by:
+# 1. Load balancing between blue (8001) and green (8002) app instances
+# 2. Health checking each upstream before routing traffic
+# 3. Automatically failing over if one instance is down
+#
+# Domains:
+# - xotec.io (main app)
+# - asynq.xotec.io (queue monitor - basic auth protected)
+# - lzrcdn.com (CDN/media)
+# - media.lzrcdn.com (media proxy)
+
+{
+    # Global options
+    admin off
+
+    # Logging
+    log {
+        output file /var/log/caddy/access.log {
+            roll_size 100mb
+            roll_keep 5
+        }
+        format json
+    }
+}
+
+# Shared reverse proxy snippet for app backends
+(app_proxy) {
+    reverse_proxy localhost:8001 localhost:8002 {
+        lb_policy first
+        health_uri /health
+        health_interval 10s
+        health_timeout 5s
+        health_status 2xx
+        fail_duration 30s
+        lb_try_duration 5s
+        lb_try_interval 250ms
+
+        # X-Real-IP for client IP (Caddy auto-handles X-Forwarded-For/Proto)
+        header_up X-Real-IP {remote_host}
+        header_up Host {host}
+    }
+}
+
+# Sticky session proxy for routes with in-memory state (setup wizard SSE streams)
+(app_proxy_sticky) {
+    reverse_proxy localhost:8001 localhost:8002 {
+        lb_policy cookie xotec_backend
+        health_uri /health
+        health_interval 10s
+        health_timeout 5s
+        health_status 2xx
+        fail_duration 30s
+        lb_try_duration 5s
+        lb_try_interval 250ms
+
+        # X-Real-IP for client IP (Caddy auto-handles X-Forwarded-For/Proto)
+        header_up X-Real-IP {remote_host}
+        header_up Host {host}
+    }
+}
+
+# Shared security headers
+(security_headers) {
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+}
+
+# =====================================================
+# XOTEC.IO - Main Production Domain
+# =====================================================
+xotec.io {
+    tls {
+        protocols tls1.2 tls1.3
+    }
+
+    import security_headers
+
+    # Health check endpoint
+    handle /health {
+        import app_proxy
+    }
+
+    # API routes
+    handle /api/* {
+        import app_proxy
+    }
+
+    # Admin dashboard (regular routes)
+    handle /admin/* {
+        # Setup wizard uses sticky sessions for SSE progress streams
+        @setup path /admin/setup*
+        handle @setup {
+            import app_proxy_sticky
+        }
+        # Other admin routes use normal load balancing
+        handle {
+            import app_proxy
+        }
+    }
+
+    # Asynqmon queue monitor
+    handle /queue/* {
+        reverse_proxy localhost:9090 {
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    # Default handler
+    handle {
+        import app_proxy
+    }
+}
+
+# WWW redirect to root
+www.xotec.io {
+    redir https://xotec.io{uri} permanent
+}
+
+# =====================================================
+# LZRCDN.COM - CDN Domain
+# =====================================================
+lzrcdn.com {
+    tls {
+        protocols tls1.2 tls1.3
+    }
+
+    import security_headers
+
+    # Health check
+    handle /health {
+        import app_proxy
+    }
+
+    # API routes
+    handle /api/* {
+        import app_proxy
+    }
+
+    # Default handler
+    handle {
+        import app_proxy
+    }
+}
+
+# WWW redirect to root
+www.lzrcdn.com {
+    redir https://lzrcdn.com{uri} permanent
+}
+
+# =====================================================
+# ASYNQ.XOTEC.IO - Queue Monitor Dashboard
+# =====================================================
+# TEMPORARILY DISABLED - Enable after verifying:
+#   1. ASYNQ_USERNAME is set
+#   2. ASYNQ_PASSWORD_HASH is from: caddy hash-password --plaintext yourpassword
+# =====================================================
+# asynq.xotec.io {
+#     tls {
+#         protocols tls1.2 tls1.3
+#     }
+#     import security_headers
+#     basicauth {
+#         {$ASYNQ_USERNAME} {$ASYNQ_PASSWORD_HASH}
+#     }
+#     handle {
+#         reverse_proxy localhost:9090 {
+#             header_up X-Real-IP {remote_host}
+#             header_up Host {host}
+#         }
+#     }
+# }
+
+# =====================================================
+# MEDIA.LZRCDN.COM - Media Proxy Subdomain
+# =====================================================
+media.lzrcdn.com {
+    tls {
+        protocols tls1.2 tls1.3
+    }
+
+    # Media-specific headers (allow caching)
+    header {
+        X-Content-Type-Options nosniff
+        -Server
+        # Cache headers set by upstream
+    }
+
+    # All media requests go to app backend
+    handle {
+        import app_proxy
+    }
+}

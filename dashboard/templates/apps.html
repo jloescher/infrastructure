@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Applications - Quantyra Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Applications</h1>
+    <a href="/apps/create" class="btn">+ Create Application</a>
+</div>
+
+{% if applications %}
+<div class="card">
+    <h2>Deployed Applications</h2>
+    <div class="table-container">
+        <table class="server-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Framework</th>
+                    <th>Database</th>
+                    <th>Servers</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for app_key, app in applications.items() %}
+                <tr>
+                    <td><strong>{{ app.name }}</strong></td>
+                    <td>{{ app.framework }}</td>
+                    <td>{{ app.database or '-' }}</td>
+                    <td>{{ app.target_servers | join(', ') }}</td>
+                    <td>{{ app.created_at[:10] if app.created_at else '-' }}</td>
+                    <td>
+                        <a href="/apps/{{ app_key }}/status" class="btn btn-secondary btn-sm">Status</a>
+                        <a href="/apps/{{ app_key }}/domains" class="btn btn-secondary btn-sm">Domains</a>
+                        <a href="/apps/{{ app_key }}/deploy" class="btn btn-secondary btn-sm">Deploy</a>
+                        <form action="/apps/{{ app_key }}/delete" method="POST" style="display:inline;" onsubmit="return confirm('Delete {{ app.name }}?{% if app.database %} This will also delete the database {{ app.database }}.{% endif %}');">
+                            <input type="hidden" name="delete_database" value="{% if app.database %}true{% else %}false{% endif %}">
+                            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{% for server in app_servers %}
+<div class="card">
+    <h2>{{ server.name }}</h2>
+    <p>Tailscale: <code>{{ server.ip }}</code> | Public: <code>{{ server.public_ip }}</code></p>
+    
+    <h3>Deploy Command</h3>
+    <pre class="code-block">ssh root@{{ server.ip }} "cd /opt/apps/APP_NAME && git pull && systemctl restart APP_NAME"</pre>
+    
+    <div class="quick-actions" style="margin-top: 1rem;">
+        <a href="/apps/deploy?target={{ server.name }}" class="btn btn-secondary">Deploy to {{ server.name }}</a>
+    </div>
+</div>
+{% endfor %}
+
+<div class="card">
+    <h2>CI/CD Pipeline</h2>
+    <p>Applications are deployed via GitHub Actions or manual deploy button above.</p>
+    <p>Use the <a href="/apps/create" class="link">Create Application wizard</a> to set up a new application with database and GitHub Actions workflow.</p>
+    
+    <h3>API Deploy Endpoint</h3>
+    <pre class="code-block">curl -X POST -u admin:DbAdmin2026! \
+  -H "Content-Type: application/json" \
+  -d '{"target": "re-db", "branch": "main"}' \
+  http://100.102.220.16:8080/api/deploy</pre>
+</div>
+{% endblock %}

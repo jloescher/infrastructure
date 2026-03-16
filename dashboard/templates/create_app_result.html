@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}Application Created - Quantyra Dashboard{% endblock %}
+
+{% block content %}
+<h1>Application Created</h1>
+
+{% if results.errors %}
+<div class="alert alert-error">
+    <strong>Errors occurred:</strong>
+    <ul>
+        {% for error in results.errors %}
+        <li>{{ error }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+{% if results.created %}
+<div class="alert alert-success">
+    <strong>Created:</strong>
+    <ul>
+        {% for item in results.created %}
+        <li>{{ item }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Application Summary</h2>
+    <table class="server-table">
+        <tr><th>Name</th><td><strong>{{ app_name }}</strong></td></tr>
+        <tr><th>Framework</th><td>{{ framework }}</td></tr>
+        <tr><th>Target Servers</th><td>{{ target_servers | join(', ') }}</td></tr>
+        <tr><th>Staging Environment</th><td>{% if staging_env %}Yes{% else %}No{% endif %}</td></tr>
+        {% if create_db %}
+        <tr><th>Database</th><td>{{ db_name }}</td></tr>
+        {% if results.db_admin %}
+        <tr><th>DB Admin User</th><td><code>{{ results.db_admin }}</code></td></tr>
+        <tr><th>DB Password</th><td><code>{{ results.db_password }}</code></td></tr>
+        {% endif %}
+        {% endif %}
+    </table>
+</div>
+
+{% if results.clone_results %}
+<div class="card">
+    <h2>Repository Clone Results</h2>
+    <div class="table-container">
+        <table class="server-table">
+            <thead>
+                <tr><th>Server</th><th>Status</th><th>Message</th></tr>
+            </thead>
+            <tbody>
+                {% for r in results.clone_results %}
+                <tr>
+                    <td>{{ r.server }}</td>
+                    <td><span class="status-badge {% if r.status == 'cloned' or r.status == 'exists' %}status-healthy{% else %}status-error{% endif %}">{{ r.status }}</span></td>
+                    <td>{{ r.message }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{% if results.systemd_results %}
+<div class="card">
+    <h2>Systemd Service Status</h2>
+    <div class="table-container">
+        <table class="server-table">
+            <thead>
+                <tr><th>Server</th><th>Status</th><th>Service</th></tr>
+            </thead>
+            <tbody>
+                {% for r in results.systemd_results %}
+                <tr>
+                    <td>{{ r.server }}</td>
+                    <td><span class="status-badge {% if r.status == 'created' %}status-healthy{% else %}status-error{% endif %}">{{ r.status }}</span></td>
+                    <td><code>{{ app_name }}.service</code></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <h3 style="margin-top: 1rem;">Manage Service</h3>
+    <pre class="code-block"># Start service
+ssh root@SERVER_IP "systemctl start {{ app_name }}"
+
+# Check status
+ssh root@SERVER_IP "systemctl status {{ app_name }}"
+
+# View logs
+ssh root@SERVER_IP "journalctl -u {{ app_name }} -f"</pre>
+</div>
+{% endif %}
+
+{% if results.secrets_result %}
+<div class="card">
+    <h2>GitHub Secrets</h2>
+    {% if results.secrets_result.success %}
+    <div class="alert alert-success">
+        <strong>Secrets pushed to GitHub:</strong>
+        <ul>
+            {% for secret in results.secrets_result.pushed %}
+            <li>{{ secret }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% else %}
+    <div class="alert alert-error">
+        <strong>Failed to push secrets:</strong>
+        {% if results.secrets_result.error %}
+        <p>{{ results.secrets_result.error }}</p>
+        {% endif %}
+        {% if results.secrets_result.failed %}
+        <ul>
+            {% for f in results.secrets_result.failed %}
+            <li>{{ f.name }}: {{ f.error }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+    {% endif %}
+    <p><a href="/apps/{{ app_name }}/secrets" class="link">Manage additional secrets →</a></p>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>GitHub Actions Workflow</h2>
+    <p>Add this file to <code>.github/workflows/deploy.yml</code>:</p>
+    
+    <div class="generated-output">
+        <button id="copy-btn" class="btn btn-secondary" onclick="copyWorkflow()">Copy Workflow</button>
+        <pre id="workflow-yaml">{{ workflow }}</pre>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Next Steps</h2>
+    <ol>
+        <li>Copy the GitHub Actions workflow to your repository</li>
+        <li>Add the required secrets to your GitHub repository</li>
+        <li>Push to main branch to trigger deployment</li>
+    </ol>
+    
+    <h3>Required GitHub Secrets</h3>
+    <table class="server-table">
+        <thead>
+            <tr><th>Secret Name</th><th>Value</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>DEPLOY_HOST</code></td><td>100.102.220.16</td></tr>
+            <tr><td><code>DEPLOY_USER</code></td><td>admin</td></tr>
+            <tr><td><code>DEPLOY_PASSWORD</code></td><td>DbAdmin2026!</td></tr>
+            {% if create_db %}
+            <tr><td><code>DATABASE_URL</code></td><td>postgres://{{ results.db_admin }}:{{ results.db_password }}@100.102.220.16:6432/{{ db_name }}</td></tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<div class="quick-actions" style="margin-top: 1.5rem;">
+    <a href="/apps" class="btn">View Applications</a>
+    <a href="/databases" class="btn btn-secondary">View Databases</a>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function copyWorkflow() {
+    const text = document.getElementById('workflow-yaml').textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById('copy-btn');
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = 'Copy Workflow', 2000);
+    });
+}
+</script>
+{% endblock %}

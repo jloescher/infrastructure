@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}{{ doc_name | replace("_", " ") | title }} - Quantyra Dashboard{% endblock %}
+
+{% block content %}
+<a href="/docs" class="btn btn-secondary">← All Docs</a>
+
+<div class="docs-content">
+    {{ content | safe }}
+</div>
+{% endblock %}

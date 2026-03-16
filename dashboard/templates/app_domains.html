@@ -1,0 +1,445 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} Domains - Quantyra Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Domains: {{ app_name }}</h1>
+    <a href="/apps/{{ app_name }}/status" class="btn btn-secondary">← Back to Status</a>
+</div>
+
+<div class="card">
+    <h2>Application Info</h2>
+    <table class="server-table">
+        <tr><th>Framework</th><td>{{ app.framework }}</td></tr>
+        <tr><th>Repository</th><td>{{ app.git_repo or 'Not configured' }}</td></tr>
+        <tr><th>Port</th><td><code>{{ app.port or 8100 }}</code></td></tr>
+    </table>
+</div>
+
+{% if cf_configured %}
+<div class="card">
+    <h2>⚡ Provision Domains (Cloudflare)</h2>
+    <p>Select domains and configure production, staging, and additional CNAMEs.</p>
+    
+    <form method="POST" id="provision-form">
+        <input type="hidden" name="action" value="provision_full">
+        <input type="hidden" name="domain_configs" id="domain_configs_input">
+        
+        <div class="form-group">
+            <label>Select Domains</label>
+            <div style="position: relative;">
+                <input type="text" id="domain_search" placeholder="Type to search domains..." autocomplete="off" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">
+                <div id="domain_dropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid #ccc; border-top: none; max-height: 300px; overflow-y: auto; z-index: 1000;"></div>
+            </div>
+            
+            <div id="selected_domains" style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px;"></div>
+            <div class="hint" id="domain_count">{{ cf_zones | length }} domains available</div>
+        </div>
+        
+        <div id="domain_config_section" style="display: none;">
+            <h3 style="margin-top: 20px; color: #333;">Domain Configuration</h3>
+            <div id="domain_configs"></div>
+        </div>
+        
+        <div class="checkbox-group" style="margin-top: 20px;">
+            <input type="checkbox" id="enable_security" name="enable_security" checked>
+            <label for="enable_security">
+                <strong>Enable Cloudflare Security Rules</strong>
+                <div class="hint">Bot blocking (captcha), WordPress scanner protection, malicious ASN blocking</div>
+            </label>
+        </div>
+        
+        <button type="submit" class="btn" id="provision_btn" style="margin-top: 15px;">Provision Domains</button>
+    </form>
+</div>
+{% else %}
+<div class="card">
+    <h2>⚠️ Cloudflare Not Configured</h2>
+    <p>Configure Cloudflare API credentials in Settings for automatic DNS provisioning.</p>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Configured Domains</h2>
+    
+    {% if app.domains %}
+    <div class="table-container">
+        <table class="server-table">
+            <thead>
+                <tr>
+                    <th>Domain</th>
+                    <th>Type</th>
+                    <th>SSL</th>
+                    <th>DNS</th>
+                    <th>Security</th>
+                    <th>Password</th>
+                    <th>Added</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for domain in app.domains %}
+                <tr>
+                    <td>
+                        <strong>{{ domain.name }}</strong>
+                        {% if domain.www_redirect %}
+                        <br><small style="color: #888;">www. redirects here</small>
+                        {% elif domain.type == 'www_redirect' %}
+                        <br><small style="color: #888;">→ {{ domain.redirect_to }}</small>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if domain.type == 'staging' %}
+                        <span class="status-badge status-warning">Staging</span>
+                        {% elif domain.type == 'cname' %}
+                        <span class="status-badge status-info">CNAME</span>
+                        {% elif domain.type == 'www_redirect' %}
+                        <span class="status-badge status-info">WWW Redirect</span>
+                        {% else %}
+                        <span class="status-badge status-healthy">Production</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if domain.ssl_enabled %}
+                        <span class="status-badge status-healthy">Enabled</span>
+                        {% else %}
+                        <span class="status-badge status-error">Disabled</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if domain.dns_provisioned %}
+                        <span class="status-badge status-healthy">Auto</span>
+                        {% else %}
+                        <span class="status-badge status-warning">Manual</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if domain.security_enabled %}
+                        <span class="status-badge status-healthy">Protected</span>
+                        {% else %}
+                        <span class="status-badge status-warning">None</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if domain.password %}
+                        <code>{{ domain.password }}</code>
+                        {% else %}
+                        <span class="hint">-</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ domain.created_at[:10] if domain.created_at else '-' }}</td>
+                    <td>
+                        <form action="/apps/{{ app_name }}/domains/{{ domain.name }}/delete" method="POST" style="display:inline;" onsubmit="return confirm('Remove domain {{ domain.name }}?');">
+                            <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="empty-state">No domains configured</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>Add Custom Domain (Manual)</h2>
+    <p>For domains not managed by Cloudflare or custom configurations.</p>
+    
+    <form method="POST">
+        <input type="hidden" name="action" value="add_domain">
+        
+        <div class="form-row">
+            <div class="form-group">
+                <label for="domain">Domain Name</label>
+                <input type="text" id="domain" name="domain" required placeholder="example.com or api.example.com">
+            </div>
+            <div class="form-group">
+                <label for="domain_type">Domain Type</label>
+                <select id="domain_type" name="domain_type">
+                    <option value="production">Production</option>
+                    <option value="staging">Staging (with password)</option>
+                    <option value="cname">CNAME (additional subdomain)</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="checkbox-group">
+            <input type="checkbox" id="ssl_enabled" name="ssl_enabled" checked>
+            <label for="ssl_enabled">
+                <strong>Enable SSL (Let's Encrypt)</strong>
+            </label>
+        </div>
+        
+        <div class="form-group">
+            <label for="staging_password_manual">Staging Password (for staging type)</label>
+            <input type="text" id="staging_password_manual" name="staging_password" placeholder="Leave empty for auto-generated">
+        </div>
+        
+        <button type="submit" class="btn btn-secondary">Add Custom Domain</button>
+    </form>
+</div>
+
+<div class="card">
+    <h2>Security Rules</h2>
+    <p>When enabled, the following Cloudflare firewall rules are applied:</p>
+    
+    <table class="server-table">
+        <thead>
+            <tr><th>Priority</th><th>Rule</th><th>Action</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>1</td><td>Allow legitimate bots (Google, LetsEncrypt, etc.)</td><td>Allow</td></tr>
+            <tr><td>2</td><td>Bad bots (Yandex, Semrush, crawlers)</td><td>Managed Challenge (Captcha)</td></tr>
+            <tr><td>3</td><td>Suspicious cloud providers (AWS, GCP, Azure)</td><td>Managed Challenge (Captcha)</td></tr>
+            <tr><td>4</td><td>WordPress scanners and exploits</td><td>Managed Challenge (Captcha)</td></tr>
+            <tr><td>5</td><td>Malicious ASNs and attack patterns</td><td>Block</td></tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const allDomains = {{ cf_zones | tojson | safe }};
+let selectedDomains = [];
+
+const searchInput = document.getElementById('domain_search');
+const dropdown = document.getElementById('domain_dropdown');
+const selectedContainer = document.getElementById('selected_domains');
+const hiddenInput = document.getElementById('domain_configs_input');
+const configSection = document.getElementById('domain_config_section');
+const configContainer = document.getElementById('domain_configs');
+
+function renderDropdown(filter = '') {
+    const filtered = allDomains.filter(d => 
+        d.name.toLowerCase().includes(filter.toLowerCase()) && 
+        !selectedDomains.includes(d.name)
+    );
+    
+    if (filtered.length === 0) {
+        dropdown.style.display = 'none';
+        return;
+    }
+    
+    dropdown.innerHTML = filtered.slice(0, 20).map(d => 
+        `<div class="domain-option" data-domain="${d.name}" style="padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; color: #333; font-weight: 500;">${d.name}</div>`
+    ).join('');
+    
+    if (filtered.length > 20) {
+        dropdown.innerHTML += `<div style="padding: 10px; color: #666; font-style: italic;">...and ${filtered.length - 20} more (keep typing to narrow)</div>`;
+    }
+    
+    dropdown.style.display = 'block';
+}
+
+function renderSelected() {
+    selectedContainer.innerHTML = selectedDomains.map(domain => 
+        `<span class="domain-tag" style="display: inline-flex; align-items: center; background: #007bff; color: white; padding: 6px 12px; border-radius: 20px; font-size: 14px; margin: 2px;">
+            ${domain}
+            <span class="remove-domain" data-domain="${domain}" style="margin-left: 8px; cursor: pointer; font-weight: bold;">&times;</span>
+        </span>`
+    ).join('');
+    
+    renderDomainConfigs();
+}
+
+function renderDomainConfigs() {
+    if (selectedDomains.length === 0) {
+        configSection.style.display = 'none';
+        return;
+    }
+    
+    configSection.style.display = 'block';
+    
+    let html = '';
+    selectedDomains.forEach((domain, index) => {
+        html += `
+        <div class="domain-config-card" data-domain="${domain}" style="background: #1a1a1a; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+            <h4 style="margin: 0 0 15px 0; color: #fff;">${domain}</h4>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                <div>
+                    <label style="color: #aaa; font-size: 12px; display: block; margin-bottom: 5px;">Production</label>
+                    <select name="prod_type_${index}" class="prod-type" data-domain="${domain}" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #444; background: #2a2a2a; color: #fff;">
+                        <option value="root">Root Domain (${domain})</option>
+                        <option value="subdomain">Subdomain</option>
+                    </select>
+                    <input type="text" name="prod_prefix_${index}" class="prod-prefix" data-domain="${domain}" placeholder="e.g., app, www" style="display: none; width: 100%; padding: 8px; margin-top: 8px; border-radius: 4px; border: 1px solid #444; background: #2a2a2a; color: #fff;">
+                </div>
+                
+                <div>
+                    <label style="color: #aaa; font-size: 12px; display: block; margin-bottom: 5px;">Staging</label>
+                    <select name="staging_type_${index}" class="staging-type" data-domain="${domain}" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #444; background: #2a2a2a; color: #fff;">
+                        <option value="subdomain">Subdomain (staging.${domain})</option>
+                        <option value="none">None</option>
+                    </select>
+                    <input type="text" name="staging_prefix_${index}" value="staging" class="staging-prefix" data-domain="${domain}" placeholder="staging" style="width: 100%; padding: 8px; margin-top: 8px; border-radius: 4px; border: 1px solid #444; background: #2a2a2a; color: #fff;">
+                </div>
+            </div>
+            
+            <div style="margin-top: 15px;">
+                <label style="color: #aaa; font-size: 12px; display: block; margin-bottom: 5px;">Additional CNAMEs (comma separated)</label>
+                <input type="text" name="cnames_${index}" class="cnames-input" data-domain="${domain}" placeholder="e.g., api, dashboard, admin" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #444; background: #2a2a2a; color: #fff;">
+            </div>
+            
+            <div style="margin-top: 15px;">
+                <label style="color: #aaa; font-size: 12px; display: block; margin-bottom: 5px;">Staging Password (auto-generated if empty)</label>
+                <input type="text" name="staging_password_${index}" class="staging-password" data-domain="${domain}" placeholder="Leave empty for auto-generated" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #444; background: #2a2a2a; color: #fff;">
+            </div>
+            
+            <div class="preview-box" style="margin-top: 15px; padding: 10px; background: #2a2a2a; border-radius: 4px; color: #888; font-size: 13px;">
+                <strong style="color: #aaa;">Will create:</strong>
+                <div class="preview-list" style="margin-top: 8px;"></div>
+            </div>
+        </div>`;
+    });
+    
+    configContainer.innerHTML = html;
+    
+    // Bind events
+    document.querySelectorAll('.prod-type').forEach(select => {
+        select.addEventListener('change', (e) => {
+            const prefixInput = e.target.parentElement.querySelector('.prod-prefix');
+            prefixInput.style.display = e.target.value === 'subdomain' ? 'block' : 'none';
+            updatePreview(e.target.closest('.domain-config-card'));
+        });
+    });
+    
+    document.querySelectorAll('.staging-type').forEach(select => {
+        select.addEventListener('change', (e) => {
+            const prefixInput = e.target.parentElement.querySelector('.staging-prefix');
+            prefixInput.style.display = e.target.value === 'subdomain' ? 'block' : 'none';
+            updatePreview(e.target.closest('.domain-config-card'));
+        });
+    });
+    
+    document.querySelectorAll('.prod-prefix, .staging-prefix, .cnames-input').forEach(input => {
+        input.addEventListener('input', (e) => {
+            updatePreview(e.target.closest('.domain-config-card'));
+        });
+    });
+    
+    // Initial preview update
+    document.querySelectorAll('.domain-config-card').forEach(card => updatePreview(card));
+}
+
+function updatePreview(card) {
+    const domain = card.dataset.domain;
+    const prodType = card.querySelector('.prod-type').value;
+    const prodPrefix = card.querySelector('.prod-prefix').value;
+    const stagingType = card.querySelector('.staging-type').value;
+    const stagingPrefix = card.querySelector('.staging-prefix').value;
+    const cnames = card.querySelector('.cnames-input').value.split(',').map(c => c.trim()).filter(c => c);
+    
+    let previewHtml = '';
+    
+    // Production
+    if (prodType === 'root') {
+        previewHtml += `<div><code style="color: #fff; background: #333; padding: 2px 6px; border-radius: 3px;">${domain}</code> <span style="color: #666;">(production)</span></div>`;
+        previewHtml += `<div><code style="color: #888; background: #2a2a2a; padding: 2px 6px; border-radius: 3px;">www.${domain}</code> <span style="color: #555;">(redirects to ${domain})</span></div>`;
+    } else {
+        const prefix = prodPrefix || 'www';
+        previewHtml += `<div><code style="color: #fff; background: #333; padding: 2px 6px; border-radius: 3px;">${prefix}.${domain}</code> <span style="color: #666;">(production)</span></div>`;
+    }
+    
+    // Staging
+    if (stagingType === 'subdomain') {
+        const prefix = stagingPrefix || 'staging';
+        previewHtml += `<div><code style="color: #fff; background: #333; padding: 2px 6px; border-radius: 3px;">${prefix}.${domain}</code> <span style="color: #666;">(staging)</span></div>`;
+    }
+    
+    // CNAMEs
+    cnames.forEach(cname => {
+        previewHtml += `<div><code style="color: #fff; background: #333; padding: 2px 6px; border-radius: 3px;">${cname}.${domain}</code> <span style="color: #666;">(cname)</span></div>`;
+    });
+    
+    card.querySelector('.preview-list').innerHTML = previewHtml;
+}
+
+function collectConfigs() {
+    const configs = [];
+    
+    document.querySelectorAll('.domain-config-card').forEach((card, index) => {
+        const domain = card.dataset.domain;
+        const prodType = card.querySelector('.prod-type').value;
+        const prodPrefix = card.querySelector('.prod-prefix').value;
+        const stagingType = card.querySelector('.staging-type').value;
+        const stagingPrefix = card.querySelector('.staging-prefix').value;
+        const cnames = card.querySelector('.cnames-input').value.split(',').map(c => c.trim()).filter(c => c);
+        const stagingPassword = card.querySelector('.staging-password').value;
+        
+        configs.push({
+            domain: domain,
+            production: {
+                type: prodType,
+                prefix: prodPrefix
+            },
+            staging: {
+                type: stagingType,
+                prefix: stagingPrefix,
+                password: stagingPassword
+            },
+            cnames: cnames
+        });
+    });
+    
+    return JSON.stringify(configs);
+}
+
+searchInput.addEventListener('input', (e) => {
+    renderDropdown(e.target.value);
+});
+
+searchInput.addEventListener('focus', () => {
+    if (searchInput.value || selectedDomains.length < allDomains.length) {
+        renderDropdown(searchInput.value);
+    }
+});
+
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('#domain_search') && !e.target.closest('#domain_dropdown')) {
+        dropdown.style.display = 'none';
+    }
+    
+    if (e.target.classList.contains('domain-option')) {
+        const domain = e.target.dataset.domain;
+        if (!selectedDomains.includes(domain)) {
+            selectedDomains.push(domain);
+            renderSelected();
+            searchInput.value = '';
+            renderDropdown('');
+        }
+    }
+    
+    if (e.target.classList.contains('remove-domain')) {
+        const domain = e.target.dataset.domain;
+        selectedDomains = selectedDomains.filter(d => d !== domain);
+        renderSelected();
+    }
+});
+
+dropdown.addEventListener('mouseover', (e) => {
+    if (e.target.classList.contains('domain-option')) {
+        e.target.style.backgroundColor = '#f0f0f0';
+    }
+});
+
+dropdown.addEventListener('mouseout', (e) => {
+    if (e.target.classList.contains('domain-option')) {
+        e.target.style.backgroundColor = 'transparent';
+    }
+});
+
+document.getElementById('provision-form').addEventListener('submit', (e) => {
+    if (selectedDomains.length === 0) {
+        e.preventDefault();
+        alert('Please select at least one domain');
+        return false;
+    }
+    
+    hiddenInput.value = collectConfigs();
+});
+</script>
+{% endblock %}

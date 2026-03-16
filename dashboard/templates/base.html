@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{% block title %}Quantyra Dashboard{% endblock %}</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">Quantyra Dashboard</div>
+        <div class="nav-links">
+            <a href="/" class="{% if request.path == '/' %}active{% endif %}">Dashboard</a>
+            <a href="/databases" class="{% if '/databases' in request.path %}active{% endif %}">Databases</a>
+            <a href="/servers" class="{% if request.path == '/servers' %}active{% endif %}">Servers</a>
+            <a href="/apps" class="{% if '/apps' in request.path %}active{% endif %}">Applications</a>
+            <a href="/docs" class="{% if '/docs' in request.path %}active{% endif %}">Docs</a>
+            <a href="/settings" class="{% if request.path == '/settings' %}active{% endif %}">Settings</a>
+            <a href="{{ prometheus_url | default('http://100.102.220.16:9090') }}" target="_blank">Prometheus</a>
+            <a href="{{ grafana_url | default('http://100.102.220.16:3000') }}" target="_blank">Grafana</a>
+        </div>
+    </nav>
+    
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        {% block content %}{% endblock %}
+    </div>
+    
+    <footer class="footer">
+        <p>Quantyra Infrastructure Dashboard &copy; 2026</p>
+    </footer>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

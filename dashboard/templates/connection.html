@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}{{ db_name }} Connection - Quantyra Dashboard{% endblock %}
+
+{% block content %}
+<h1>{{ db_name }} - Connection Strings</h1>
+
+<a href="/databases" class="btn btn-secondary">← Back</a>
+
+<div class="card">
+    <h2>Users & Passwords</h2>
+    <div class="table-container">
+        <table class="server-table">
+            <thead>
+                <tr>
+                    <th>Username</th>
+                    <th>Password</th>
+                    <th>Roles</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in db.users %}
+                <tr>
+                    <td><code>{{ user.name }}</code></td>
+                    <td><code>{{ user.password }}</code></td>
+                    <td>{{ user.roles | join(', ') }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Router 01 (100.102.220.16)</h2>
+    
+    <div class="form-group">
+        <label>Write (Primary)</label>
+        <div class="command-box">
+            <pre class="code-block">postgres://{{ db.users[0].name }}:{{ db.users[0].password }}@100.102.220.16:6432/{{ db.name }}</pre>
+        </div>
+    </div>
+    
+    <div class="form-group">
+        <label>Read (Replica - Load Balanced)</label>
+        <div class="command-box">
+            <pre class="code-block">postgres://{{ db.users[0].name }}:{{ db.users[0].password }}@100.102.220.16:6432/{{ db.name }}_read</pre>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Router 02 (100.116.175.9)</h2>
+    
+    <div class="form-group">
+        <label>Write (Primary)</label>
+        <div class="command-box">
+            <pre class="code-block">postgres://{{ db.users[0].name }}:{{ db.users[0].password }}@100.116.175.9:6432/{{ db.name }}</pre>
+        </div>
+    </div>
+    
+    <div class="form-group">
+        <label>Read (Replica - Load Balanced)</label>
+        <div class="command-box">
+            <pre class="code-block">postgres://{{ db.users[0].name }}:{{ db.users[0].password }}@100.116.175.9:6432/{{ db.name }}_read</pre>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Direct Connection (No PgBouncer)</h2>
+    
+    <div class="form-group">
+        <label>Write via HAProxy (Port 5000)</label>
+        <div class="command-box">
+            <pre class="code-block">postgres://{{ db.users[0].name }}:{{ db.users[0].password }}@100.102.220.16:5000/{{ db.name }}</pre>
+        </div>
+    </div>
+    
+    <div class="form-group">
+        <label>Read via HAProxy (Port 5001)</label>
+        <div class="command-box">
+            <pre class="code-block">postgres://{{ db.users[0].name }}:{{ db.users[0].password }}@100.102.220.16:5001/{{ db.name }}</pre>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Redis Connection</h2>
+    
+    <div class="form-group">
+        <label>Write (Master)</label>
+        <div class="command-box">
+            <pre class="code-block">redis://:{{ redis_password }}@100.102.220.16:6379</pre>
+        </div>
+    </div>
+    
+    <div class="form-group">
+        <label>Read (Replica)</label>
+        <div class="command-box">
+            <pre class="code-block">redis://:{{ redis_password }}@100.102.220.16:6380</pre>
+        </div>
+    </div>
+</div>
+{% endblock %}

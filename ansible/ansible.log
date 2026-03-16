@@ -126,3 +126,7 @@ Origin: /Users/jonathanloescher/Code/infrastructure/ansible/inventory/hosts.yml:
     "changed": false,
     "ping": "pong"
 }
+2026-03-15 14:25:06,579 p=78849 u=jonathanloescher n=ansible ERROR| [ERROR]: The 'community.general.yaml' callback plugin has been removed. The plugin has been superseded by the option `result_format=yaml` in callback plugin ansible.builtin.default from ansible-core 2.13 onwards. This feature was removed from collection 'community.general' version 12.0.0.
+
+2026-03-15 14:25:19,836 p=78857 u=jonathanloescher n=ansible ERROR| [ERROR]: The 'community.general.yaml' callback plugin has been removed. The plugin has been superseded by the option `result_format=yaml` in callback plugin ansible.builtin.default from ansible-core 2.13 onwards. This feature was removed from collection 'community.general' version 12.0.0.
+

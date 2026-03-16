@@ -11,39 +11,51 @@ Infrastructure-as-code repository for managing Quantyra VPS infrastructure.
                             │
         ┌───────────────────┼───────────────────┐
         │                   │                   │
-   ┌────▼────┐         ┌────▼────┐        ┌────▼────┐
-   │router-01│         │router-02│        │         │
-   │ HAProxy │◄───────►│ HAProxy │        │         │
-   │  etcd   │         │         │        │         │
-   │Prometheus│        │         │        │         │
-   │ Grafana │         │         │        │         │
-   └────┬────┘         └────┬────┘        │         │
-        │                   │              │         │
-        │    HAProxy PG     │              │         │
-        │   Write: 5000     │              │         │
-        │   Read: 5001      │              │         │
-        │                   │              │         │
-   ┌────▼───────────────────▼────┐        │         │
-   │    Patroni PostgreSQL       │        │         │
-   │  ┌────────┐  ┌────────┐  ┌────────┐  │         │
-   │  │re-node-│  │re-node-│  │re-node-│  │         │
-   │  │   01   │  │   03   │  │   04   │  │         │
-   │  │Redis   │  │Redis   │  │        │  │         │
-   │  │Master  │  │Replica │  │        │  │         │
-   │  └────────┘  └────────┘  └────────┘  │         │
-   └─────────────────────────────────────┘          │
-                                                    │
-   ┌─────────────────────────────────────┐          │
-   │        Application Servers          │          │
-   │  ┌────────┐            ┌────────┐   │          │
-   │  │ re-db  │            │re-node-│   │          │
-   │  │        │            │   02   │   │          │
-   │  │ Web App│            │ Web App│   │          │
-   │  │   API  │            │   API  │   │          │
-   │  │Workers │            │Workers │   │          │
-   │  └────────┘            └────────┘   │          │
-   └─────────────────────────────────────┘          │
-                                                    │
+   ┌────▼────┐         ┌────▼────┐
+   │router-01│         │router-02│
+   │ HAProxy │◄───────►│ HAProxy │
+   │  etcd   │         │         │
+   │Prometheus│        │  Web    │
+   │ Grafana │         │  :80/443│
+   └────┬────┘         └────┬────┘
+        │                   │
+        │    HAProxy PG     │
+        │   Write: 5000     │
+        │   Read: 5001      │
+        │                   │
+   ┌────▼───────────────────▼────┐
+   │    Patroni PostgreSQL       │
+   │  ┌────────┐  ┌────────┐  ┌────────┐
+   │  │re-node-│  │re-node-│  │re-node-│
+   │  │   01   │  │   03   │  │   04   │
+   │  │Redis   │  │Redis   │  │        │
+   │  │Master  │  │Replica │  │        │
+   │  └────────┘  └────────┘  └────────┘
+   └─────────────────────────────────────┘
+
+   ┌─────────────────────────────────────┐
+   │     re-db (XOTEC Data Layer)        │
+   │  ┌──────────────────────────────┐   │
+   │  │ Caddy (Reverse Proxy)        │   │
+   │  │ :80, :443                    │   │
+   │  │ quantyra.io, lzrcdn.com         │   │
+   │  └──────────────┬───────────────┘   │
+   │                 │                    │
+   │  ┌──────────────┴───────────────┐   │
+   │  │ App Blue :8001  App Green :8002 │
+   │  └──────────────┬───────────────┘   │
+   │                 │                    │
+   │  ┌──────────────┴───────────────┐   │
+   │  │ Workers (Ingest/Media/Maint) │   │
+   │  │ Scheduler | Asynqmon :9090   │   │
+   │  └──────────────────────────────┘   │
+   └─────────────────────────────────────┘
+
+   ┌─────────────────────────────────────┐
+   │        re-node-02 (Idle)            │
+   │        Ready for deployment         │
+   └─────────────────────────────────────┘
+
 └──────────────────────────────────────────────────┘
                      Tailscale VPN
 ```
@@ -72,10 +84,12 @@ infrastructure/
 │   ├── scripts/                # Backup scripts
 │   └── configs/                # Backup configurations
 ├── configs/                    # Service configurations
+│   ├── caddy/                  # Caddy reverse proxy
 │   ├── haproxy/                # HAProxy configs
 │   ├── patroni/                # Patroni configs
+│   ├── postgresql/             # PostgreSQL configs
 │   ├── redis/                  # Redis configs
-│   └── etcd/                   # etcd configs
+│   └── quantyra/                  # XOTEC application configs
 ├── docker/                     # Docker Compose files
 │   ├── app-servers/            # App server compose files
 │   └── monitoring/             # Monitoring stack compose
@@ -83,6 +97,7 @@ infrastructure/
 │   ├── prometheus/             # Prometheus config
 │   ├── grafana/                # Grafana dashboards
 │   └── alertmanager/           # Alertmanager config
+├── reports/                    # Server reports
 ├── scripts/                    # Utility scripts
 ├── security/                   # Security configs
 │   ├── firewall/               # UFW rules
@@ -90,7 +105,9 @@ infrastructure/
 ├── docs/                       # Documentation
 │   ├── runbook.md              # Operational runbook
 │   ├── deployment.md           # Deployment guide
-│   └── disaster_recovery.md    # DR procedures
+│   ├── disaster_recovery.md    # DR procedures
+│   ├── action_items.md         # Prioritized tasks
+│   └── quantyra_application.md    # XOTEC app docs
 └── .github/                    # GitHub Actions
     └── workflows/              # CI/CD workflows
 ```
@@ -296,6 +313,42 @@ journalctl -u haproxy -f
 # Prometheus
 journalctl -u prometheus -f
 ```
+
+## XOTEC Application
+
+The XOTEC Data Layer is a Go application running on `re-db` that processes MLS real estate data.
+
+### Services
+
+| Service | Port | Description |
+|---------|------|-------------|
+| `quantyra-app-blue` | 8001 | HTTP server (active) |
+| `quantyra-app-green` | 8002 | HTTP server (standby) |
+| `quantyra-scheduler` | - | Job scheduler |
+| `quantyra-asynqmon` | 9090 | Queue monitor |
+| `quantyra-worker-*` | - | Background workers |
+| `caddy` | 80, 443 | Reverse proxy |
+
+### Domains
+
+- `quantyra.io` - Main application
+- `lzrcdn.com` - CDN/Media
+- `media.lzrcdn.com` - Media proxy
+
+### Quick Commands
+
+```bash
+# Check service status
+ssh root@100.92.26.38 'systemctl status quantyra-* --no-pager'
+
+# View logs
+journalctl -u quantyra-app-blue -f
+
+# Health check
+curl https://quantyra.io/health
+```
+
+See [XOTEC Application Documentation](docs/quantyra_application.md) for details.
 
 ## Contributing
 

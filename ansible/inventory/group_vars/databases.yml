@@ -1,0 +1,89 @@
+---
+# Database definitions for all SaaS products
+# Add new products here - configs will be generated automatically
+
+databases:
+  xotec_re:
+    name: xotec_re
+    description: "XOTEC Real Estate Platform"
+    owner: db_admin
+    users:
+      - name: db_admin
+        password_hash: "SCRAM-SHA-256$4096:v1L/Qk0Wrwvx22lLDwdn2A==$X310jIIBvOtEii2pKcfpLUZcmE9kdvHg/ORJsOmtRXo=:ts3hs2PWiSD4CAyApKBOpufa6rOhx6UC//1DdgSnDb8="
+        roles:
+          - SUPERUSER
+          - CREATEDB
+      - name: be_rw_db_user
+        password_hash: "SCRAM-SHA-256$4096:JdA3cAXwiKnNI8OcvqOxQA==$LiWD5nNXMX5Jr5WGR2WdfkUo4VYyzKoh6k+lkc7LoZk=:a94NOZDDIoRry9sS705nVgDbB0ngulhhY/0/hDV8oug="
+        roles:
+          - NOSUPERUSER
+          - NOCREATEDB
+      - name: patroni_superuser
+        password_hash: "SCRAM-SHA-256$4096:cGbQKksvjoriei9EvlJkjQ==$BSxMKXB1FmD3hTeacKa0XoFmfnFfFfQ8VZPyNY9Qcio=:Riw+nhS3hwcEvGAZrYiQDfmXHKJKeNmXHJQAqMd1Dlc="
+        roles:
+          - SUPERUSER
+          - CREATEDB
+          - CREATEROLE
+    pgbouncer_pool_size: 25
+    pgbouncer_max_clients: 200
+
+  rentalfixer:
+    name: rentalfixer
+    description: "RentalFixer Application"
+    owner: rf_admin
+    users:
+      - name: rf_admin
+        password_hash: "SCRAM-SHA-256$4096:udqkVdr98koiBzmWMajpdA==$LL5MSO1lQBFnjaAt6kx7xUaD7ksq4gEX6q280RhOdkM=:AGvnRhNKalD1dD7WPp8v9ucwD4MDFTFoHVyHxIG0B90="
+        roles:
+          - SUPERUSER
+          - CREATEDB
+      - name: rf_user
+        password_hash: "SCRAM-SHA-256$4096:M8+jzXRACeIsnJLNWL94QQ==$zYbKy82nliGeFXRkBrkAz7WhXNiskVIvtta44w4/gnM=:NuBVQHPnm7OiSL9zLv9kQVfy+QWRlhIgsq3bZ6tVvbk="
+        roles:
+          - NOSUPERUSER
+    pgbouncer_pool_size: 20
+    pgbouncer_max_clients: 150
+
+  # Example: Add new product
+  # product_two:
+  #   name: product_two
+  #   description: "Second SaaS Product"
+  #   owner: product_two_admin
+  #   users:
+  #     - name: product_two_admin
+  #       password_hash: "..."
+  #       roles:
+  #         - SUPERUSER
+  #         - CREATEDB
+  #     - name: product_two_app
+  #       password_hash: "..."
+  #       roles:
+  #         - NOSUPERUSER
+  #   pgbouncer_pool_size: 20
+  #   pgbouncer_max_clients: 150
+
+# PgBouncer global settings
+pgbouncer:
+  pool_mode: transaction
+  max_client_conn: 1000
+  default_pool_size: 25
+  min_pool_size: 5
+  reserve_pool_size: 5
+  reserve_pool_timeout: 3
+  server_reset_query: "DISCARD ALL"
+  server_check_query: "SELECT 1"
+  server_check_delay: 30
+  server_lifetime: 3600
+  server_idle_timeout: 600
+  query_timeout: 300
+  query_wait_timeout: 120
+  ignore_startup_parameters: "extra_float_digits,options"
+
+# Redis databases (by number)
+redis_databases:
+  xotec_re:
+    db_number: 0
+    description: "XOTEC Real Estate cache"
+  # product_two:
+  #   db_number: 1
+  #   description: "Product Two cache"

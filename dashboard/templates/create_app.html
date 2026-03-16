@@ -1,0 +1,427 @@
+{% extends "base.html" %}
+{% block title %}Create Application - Quantyra Dashboard{% endblock %}
+
+{% block extra_head %}
+<style>
+.wizard-step { display: none; }
+.wizard-step.active { display: block; }
+.progress-bar {
+    display: flex;
+    margin-bottom: 2rem;
+    gap: 0.5rem;
+}
+.progress-step {
+    flex: 1;
+    text-align: center;
+    padding: 0.75rem;
+    background: #16213e;
+    border-radius: 8px;
+    border: 1px solid #2a3a5e;
+    color: #8899a6;
+    font-size: 0.875rem;
+}
+.progress-step.active {
+    background: #00d4ff;
+    color: #0f1419;
+    border-color: #00d4ff;
+}
+.progress-step.completed {
+    background: #27ae60;
+    color: #fff;
+    border-color: #27ae60;
+}
+.framework-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+.framework-card {
+    padding: 1.5rem;
+    background: #0f1419;
+    border: 2px solid #2a3a5e;
+    border-radius: 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.framework-card:hover {
+    border-color: #00d4ff;
+}
+.framework-card.selected {
+    border-color: #00d4ff;
+    background: rgba(0, 212, 255, 0.1);
+}
+.framework-icon {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+.framework-name {
+    font-weight: 600;
+}
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: #0f1419;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+.checkbox-group input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+}
+.generated-output {
+    background: #0f1419;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-top: 1.5rem;
+}
+.generated-output pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 400px;
+    overflow-y: auto;
+}
+.copy-btn {
+    float: right;
+    margin-bottom: 1rem;
+}
+.wizard-actions {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #2a3a5e;
+}
+.workflow-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Create New Application</h1>
+
+<div class="progress-bar">
+    <div class="progress-step active" id="step1-indicator">1. Framework</div>
+    <div class="progress-step" id="step2-indicator">2. App Details</div>
+    <div class="progress-step" id="step3-indicator">3. Database</div>
+    <div class="progress-step" id="step4-indicator">4. Review & Deploy</div>
+</div>
+
+<form id="wizard-form" method="POST">
+    <input type="hidden" name="framework" id="framework-input">
+    <input type="hidden" name="workflow" id="workflow-input">
+    
+    <div class="wizard-step active" id="step1">
+        <div class="card">
+            <h2>Select Framework</h2>
+            <div class="framework-grid">
+                <div class="framework-card" data-framework="laravel">
+                    <div class="framework-icon">🔴</div>
+                    <div class="framework-name">Laravel</div>
+                </div>
+                <div class="framework-card" data-framework="nextjs">
+                    <div class="framework-icon">⚫</div>
+                    <div class="framework-name">Next.js</div>
+                </div>
+                <div class="framework-card" data-framework="python">
+                    <div class="framework-icon">🐍</div>
+                    <div class="framework-name">Python</div>
+                </div>
+                <div class="framework-card" data-framework="svelte">
+                    <div class="framework-icon">🟠</div>
+                    <div class="framework-name">Svelte</div>
+                </div>
+                <div class="framework-card" data-framework="go">
+                    <div class="framework-icon">🔵</div>
+                    <div class="framework-name">Go</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="wizard-step" id="step2">
+        <div class="card">
+            <h2>Application Details</h2>
+            
+            <div class="form-group">
+                <label for="app_name">Application Name *</label>
+                <input type="text" id="app_name" name="app_name" required pattern="[a-z0-9_]+" placeholder="my_app">
+                <div class="hint">Lowercase letters, numbers, and underscores only</div>
+            </div>
+            
+            <div class="form-group">
+                <label for="app_description">Description</label>
+                <input type="text" id="app_description" name="app_description" placeholder="My Application">
+            </div>
+            
+            <div class="form-group">
+                <label for="git_repo">Git Repository URL</label>
+                <input type="text" id="git_repo" name="git_repo" placeholder="https://github.com/user/repo.git">
+                <div class="hint">Private repos will use the GitHub token from Settings</div>
+            </div>
+            
+            <div class="checkbox-group">
+                <input type="checkbox" id="deploy_now" name="deploy_now" checked>
+                <label for="deploy_now">
+                    <strong>Deploy immediately after creation</strong>
+                    <div class="hint" style="margin: 0;">Clone repo, create systemd service, configure environment, and push secrets to GitHub</div>
+                </label>
+            </div>
+            
+            <div class="form-group">
+                <label>Target Servers</label>
+                <p><strong>Both servers will be used for redundancy:</strong></p>
+                <ul style="margin-left: 1.5rem; color: #8899a6;">
+                    {% for server in app_servers %}
+                    <li>{{ server.name }} ({{ server.ip }})</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            
+            <div class="checkbox-group">
+                <input type="checkbox" id="staging_env" name="staging_env">
+                <label for="staging_env">
+                    <strong>Create staging environment</strong>
+                    <div class="hint" style="margin: 0;">Will create separate staging database and deployment workflow</div>
+                </label>
+            </div>
+        </div>
+    </div>
+    
+    <div class="wizard-step" id="step3">
+        <div class="card">
+            <h2>Database Configuration</h2>
+            
+            <div class="checkbox-group">
+                <input type="checkbox" id="create_db" name="create_db" checked>
+                <label for="create_db">
+                    <strong>Create PostgreSQL database</strong>
+                </label>
+            </div>
+            
+            <div id="db-options">
+                <div class="form-group">
+                    <label for="db_name">Database Name</label>
+                    <input type="text" id="db_name" name="db_name" placeholder="my_app_db">
+                    <div class="hint">Leave empty to use app name</div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="db_pool_size">Connection Pool Size</label>
+                    <input type="number" id="db_pool_size" name="db_pool_size" value="20" min="5" max="100">
+                </div>
+                
+                <div class="checkbox-group">
+                    <input type="checkbox" id="create_redis" name="create_redis">
+                    <label for="create_redis">
+                        <strong>Allocate Redis database</strong>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="wizard-step" id="step4">
+        <div class="card">
+            <h2>Summary</h2>
+            <div id="summary"></div>
+        </div>
+        
+        <div class="card">
+            <h2>GitHub Actions Workflow</h2>
+            <p>Add this file to <code>.github/workflows/deploy.yml</code> in your repository <strong>before</strong> deploying:</p>
+            
+            <div class="workflow-actions">
+                <button type="button" class="btn btn-secondary" onclick="copyWorkflow()">Copy Workflow</button>
+                <button type="button" class="btn btn-secondary" onclick="downloadWorkflow()">Download deploy.yml</button>
+            </div>
+            
+            <div class="generated-output">
+                <pre id="workflow-output">Loading workflow...</pre>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>Required GitHub Secrets</h2>
+            <p>Add these secrets to your GitHub repository settings:</p>
+            
+            <div class="table-container">
+                <table class="server-table">
+                    <thead>
+                        <tr><th>Secret Name</th><th>Value</th><th>Auto-Pushed</th></tr>
+                    </thead>
+                    <tbody id="secrets-output"></tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>Deploy Commands</h2>
+            <p>Manual deploy commands after setup:</p>
+            <div id="deploy-commands"></div>
+        </div>
+    </div>
+    
+    <div class="wizard-actions">
+        <button type="button" class="btn btn-secondary" id="prev-btn" style="display: none;" onclick="prevStep()">← Previous</button>
+        <button type="button" class="btn" id="next-btn" onclick="nextStep()">Next →</button>
+        <button type="submit" class="btn" id="create-btn" style="display: none;">Create Application</button>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentStep = 1;
+const totalSteps = 4;
+let generatedWorkflow = '';
+
+function updateProgress() {
+    for (let i = 1; i <= totalSteps; i++) {
+        const indicator = document.getElementById('step' + i + '-indicator');
+        indicator.classList.remove('active', 'completed');
+        if (i < currentStep) {
+            indicator.classList.add('completed');
+        } else if (i === currentStep) {
+            indicator.classList.add('active');
+        }
+    }
+    
+    document.querySelectorAll('.wizard-step').forEach((step, idx) => {
+        step.classList.toggle('active', idx + 1 === currentStep);
+    });
+    
+    document.getElementById('prev-btn').style.display = currentStep > 1 ? 'inline-block' : 'none';
+    document.getElementById('next-btn').style.display = currentStep < totalSteps ? 'inline-block' : 'none';
+    document.getElementById('create-btn').style.display = currentStep === totalSteps ? 'inline-block' : 'none';
+}
+
+function nextStep() {
+    if (currentStep === 1 && !document.getElementById('framework-input').value) {
+        alert('Please select a framework');
+        return;
+    }
+    
+    if (currentStep === 2) {
+        const appName = document.getElementById('app_name').value;
+        if (!appName) {
+            alert('Please enter an application name');
+            return;
+        }
+        if (!document.getElementById('db_name').value) {
+            document.getElementById('db_name').value = appName;
+        }
+    }
+    
+    if (currentStep < totalSteps) {
+        currentStep++;
+        updateProgress();
+        
+        if (currentStep === totalSteps) {
+            generateOutput();
+        }
+    }
+}
+
+function prevStep() {
+    if (currentStep > 1) {
+        currentStep--;
+        updateProgress();
+    }
+}
+
+document.querySelectorAll('.framework-card').forEach(card => {
+    card.addEventListener('click', () => {
+        document.querySelectorAll('.framework-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        document.getElementById('framework-input').value = card.dataset.framework;
+    });
+});
+
+document.getElementById('create_db').addEventListener('change', (e) => {
+    document.getElementById('db-options').style.display = e.target.checked ? 'block' : 'none';
+});
+
+async function generateOutput() {
+    const framework = document.getElementById('framework-input').value;
+    const appName = document.getElementById('app_name').value;
+    const appDesc = document.getElementById('app_description').value || appName;
+    const gitRepo = document.getElementById('git_repo').value;
+    const deployNow = document.getElementById('deploy_now').checked;
+    const staging = document.getElementById('staging_env').checked;
+    const createDb = document.getElementById('create_db').checked;
+    const dbName = document.getElementById('db_name').value || appName;
+    const createRedis = document.getElementById('create_redis').checked;
+    
+    let summaryHtml = '<table class="server-table">' +
+        '<tr><th>Application</th><td><strong>' + appName + '</strong></td></tr>' +
+        '<tr><th>Framework</th><td>' + framework + '</td></tr>' +
+        '<tr><th>Description</th><td>' + appDesc + '</td></tr>' +
+        '<tr><th>Git Repo</th><td>' + (gitRepo || 'Not specified') + '</td></tr>' +
+        '<tr><th>Deploy Immediately</th><td>' + (deployNow ? 'Yes' : 'No') + '</td></tr>' +
+        '<tr><th>Target Servers</th><td>re-db, re-node-02 (both for redundancy)</td></tr>' +
+        '<tr><th>Staging</th><td>' + (staging ? 'Yes' : 'No') + '</td></tr>' +
+        '<tr><th>Database</th><td>' + (createDb ? dbName : 'None') + '</td></tr>' +
+        '<tr><th>Redis</th><td>' + (createRedis ? 'Yes' : 'No') + '</td></tr>' +
+    '</table>';
+    document.getElementById('summary').innerHTML = summaryHtml;
+    
+    try {
+        const response = await fetch('/api/generate-workflow', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                framework: framework,
+                app_name: appName,
+                staging_env: staging,
+                create_db: createDb,
+                db_name: dbName
+            })
+        });
+        const data = await response.json();
+        generatedWorkflow = data.workflow;
+        document.getElementById('workflow-output').textContent = generatedWorkflow;
+        document.getElementById('workflow-input').value = generatedWorkflow;
+    } catch (e) {
+        document.getElementById('workflow-output').textContent = 'Error generating workflow: ' + e.message;
+    }
+    
+    let secretsHtml = '<tr><td><code>DEPLOY_HOST</code></td><td>100.102.220.16</td><td><span class="status-badge status-healthy">Yes</span></td></tr>' +
+        '<tr><td><code>DEPLOY_USER</code></td><td>admin</td><td><span class="status-badge status-healthy">Yes</span></td></tr>' +
+        '<tr><td><code>DEPLOY_PASSWORD</code></td><td>DbAdmin2026!</td><td><span class="status-badge status-healthy">Yes</span></td></tr>';
+    if (createDb) {
+        secretsHtml += '<tr><td><code>DATABASE_URL</code></td><td>postgres://' + appName + '_admin:PASSWORD@100.102.220.16:6432/' + dbName + '</td><td><span class="status-badge status-healthy">Yes</span></td></tr>';
+    }
+    if (createRedis) {
+        secretsHtml += '<tr><td><code>REDIS_URL</code></td><td>redis://:PASSWORD@100.102.220.16:6379/0</td><td><span class="status-badge status-healthy">Yes</span></td></tr>';
+    }
+    document.getElementById('secrets-output').innerHTML = secretsHtml;
+    
+    const deployHtml = '<pre class="code-block"># Manual deploy to both servers\nssh root@100.92.26.38 "cd /opt/apps/' + appName + ' && git pull && systemctl restart ' + appName + '"\nssh root@100.101.39.22 "cd /opt/apps/' + appName + ' && git pull && systemctl restart ' + appName + '"</pre>';
+    document.getElementById('deploy-commands').innerHTML = deployHtml;
+}
+
+function copyWorkflow() {
+    navigator.clipboard.writeText(generatedWorkflow).then(() => {
+        alert('Workflow copied to clipboard!');
+    });
+}
+
+function downloadWorkflow() {
+    const blob = new Blob([generatedWorkflow], {type: 'text/yaml'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'deploy.yml';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+</script>
+{% endblock %}

@@ -2,33 +2,54 @@
 
 ## Quick Reference
 
-### Server IPs (Tailscale)
+### Server Classification
 
-| Server | IP | Role | Specs |
-|--------|-----|------|-------|
-| re-node-01 | 100.126.103.51 | DB Server | 8 vCPU, 32GB RAM, 640GB NVMe |
-| re-node-03 | 100.114.117.46 | DB Server | 8 vCPU, 32GB RAM, 640GB NVMe |
-| re-node-04 | 100.115.75.119 | DB Server | 8 vCPU, 32GB RAM, 640GB NVMe |
-| router-01 | 100.102.220.16 | Router/Monitoring | 2 vCPU, 8GB RAM, 160GB SSD |
-| router-02 | 100.116.175.9 | Router | 2 vCPU, 8GB RAM, 160GB SSD |
-| re-db | 100.92.26.38 | App Server | 12 vCPU, 48GB RAM, 720GB NVMe |
-| re-node-02 | 100.101.39.22 | App Server | 12 vCPU, 48GB RAM, 720GB NVMe |
+| Type | Server | IP (Tailscale) | Public IP | Role | Specs |
+|------|--------|----------------|-----------|------|-------|
+| **Database** | re-node-01 | 100.126.103.51 | 104.225.216.26 | PostgreSQL + Redis | 8 vCPU, 32GB RAM, 640GB NVMe |
+| **Database** | re-node-03 | 100.114.117.46 | 172.93.54.145 | PostgreSQL + Redis | 8 vCPU, 32GB RAM, 640GB NVMe |
+| **Database** | re-node-04 | 100.115.75.119 | 172.93.54.122 | PostgreSQL | 8 vCPU, 32GB RAM, 640GB NVMe |
+| **App** | re-db | 100.92.26.38 | 208.87.128.115 | App Server | 12 vCPU, 48GB RAM, 720GB NVMe |
+| **App** | re-node-02 | 100.101.39.22 | 23.29.118.8 | App Server (ATL pending) | 12 vCPU, 48GB RAM, 720GB NVMe |
+| **Router** | router-01 | 100.102.220.16 | 172.93.54.112 | HAProxy/PgBouncer/Monitoring | 2 vCPU, 8GB RAM, 160GB SSD |
+| **Router** | router-02 | 100.116.175.9 | 23.29.118.6 | HAProxy/PgBouncer | 2 vCPU, 8GB RAM, 160GB SSD |
 
 ### Connection Endpoints
 
-| Service | Endpoint | Port |
-|---------|----------|------|
-| PostgreSQL Write | router-01 | 5000 |
-| PostgreSQL Read | router-01 | 5001 |
-| PostgreSQL Write (Secondary) | router-02 | 5000 |
-| PostgreSQL Read (Secondary) | router-02 | 5001 |
-| Redis Master | re-node-01 | 6379 |
-| Redis Replica | re-node-03 | 6379 |
-| Prometheus | router-01 | 9090 |
-| Grafana | router-01 | 3000 |
-| HAProxy Stats | router-01/02 | 8404 |
+| Service | Endpoint | Port | Notes |
+|---------|----------|------|-------|
+| PostgreSQL Write | router-01 | 5000 | Via HAProxy |
+| PostgreSQL Read | router-01 | 5001 | Load balanced replicas |
+| PostgreSQL (Pooled) | router-01 | 6432 | Via PgBouncer |
+| Redis Write | router-01 | 6379 | Master via HAProxy |
+| Redis Read | router-01 | 6380 | Replica via HAProxy |
+| Prometheus | router-01 | 9090 | Metrics |
+| Grafana | router-01 | 3000 | Dashboards |
+| Alertmanager | router-01 | 9093 | Alerts |
+| HAProxy Stats | router-01/02 | 8404 | admin / jFNeZ2bhfrTjTK7aKApD |
+| Dashboard | router-01 | 8080 | admin / DbAdmin2026! |
+
+### Current Cluster State
+
+**PostgreSQL Leader**: Check via `patronictl list` or dashboard
+**Redis Master**: Check via `redis-cli INFO replication` or dashboard
 
 ## Common Operations
+
+### Dashboard Access
+
+```
+URL: http://100.102.220.16:8080
+Username: admin
+Password: DbAdmin2026!
+```
+
+Features:
+- PostgreSQL/Redis status
+- Disk space for all servers
+- Database management
+- Application deployment wizard
+- Documentation viewer
 
 ### SSH Access
 
@@ -86,7 +107,7 @@ ssh re-node-01 'sudo systemctl restart patroni'
 
 ```bash
 # Check HAProxy stats
-curl -u admin:admin http://100.102.220.16:8404/stats
+curl -u admin:jFNeZ2bhfrTjTK7aKApD http://100.102.220.16:8404/stats
 
 # Check PostgreSQL backends
 echo "show stat" | nc 100.102.220.16:8404 | grep postgres
@@ -97,14 +118,14 @@ echo "show stat" | nc 100.102.220.16:8404 | grep postgres
 #### Check Redis Status
 
 ```bash
-# Check Redis master
-redis-cli -h 100.126.103.51 -p 6379 ping
+# Check Redis via HAProxy (master)
+redis-cli -h 100.102.220.16 -p 6379 -a CcPUa3nvcxHtyNYjztbDyfCCuhgix78novmBDNGk ping
 
 # Check replication info
-redis-cli -h 100.126.103.51 -p 6379 INFO replication
+redis-cli -h 100.102.220.16 -p 6379 -a CcPUa3nvcxHtyNYjztbDyfCCuhgix78novmBDNGk INFO replication
 ```
 
-#### Manual Failover (if Sentinel configured)
+#### Manual Failover (via Sentinel)
 
 ```bash
 # Check Sentinel status
@@ -119,7 +140,15 @@ redis-cli -p 26379 SENTINEL failover quantyra_redis
 #### Check Prometheus Targets
 
 ```bash
-curl http://100.102.220.16:9090/api/v1/targets | jq '.data.activeTargets[] | {job: .labels.job, health: .health}'
+curl -s http://100.102.220.16:9090/api/v1/targets | jq '.data.activeTargets[] | {job: .labels.job, instance: .labels.instance, health: .health}'
+```
+
+#### Check Disk Space (via Prometheus)
+
+```bash
+# Query disk space for all servers
+curl -s --get "http://100.102.220.16:9090/api/v1/query" \
+  --data-urlencode "query=node_filesystem_avail_bytes{mountpoint='/',fstype='ext4'}" | jq
 ```
 
 #### Check Alertmanager Alerts
@@ -144,22 +173,12 @@ curl -X POST http://100.102.220.16:9090/-/reload
 
 # Differential backup
 /usr/local/bin/postgres_backup.sh diff
-
-# Incremental backup
-/usr/local/bin/postgres_backup.sh incr
 ```
 
 #### Manual Redis Backup
 
 ```bash
 /usr/local/bin/redis_backup.sh
-```
-
-#### Sync to S3
-
-```bash
-export S3_BUCKET="your-backup-bucket"
-/usr/local/bin/sync_to_s3.sh /backup
 ```
 
 ## Troubleshooting
@@ -169,24 +188,21 @@ export S3_BUCKET="your-backup-bucket"
 #### High Connection Count
 
 ```bash
-# Check current connections
-psql -h 100.102.220.16 -p 5000 -U postgres -c "SELECT count(*), state FROM pg_stat_activity GROUP BY state;"
+# Check current connections via HAProxy
+psql -h 100.102.220.16 -p 5000 -U patroni_superuser -d postgres -c "SELECT count(*), state FROM pg_stat_activity GROUP BY state;"
 
 # Kill idle connections
-psql -h 100.102.220.16 -p 5000 -U postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state = 'idle' AND query_start < now() - interval '10 minutes';"
+psql -h 100.102.220.16 -p 5000 -U patroni_superuser -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state = 'idle' AND query_start < now() - interval '10 minutes';"
 ```
 
 #### Replication Lag
 
 ```bash
-# Check lag on replicas
-for node in 100.126.103.51 100.114.117.46 100.115.75.119; do
-  echo "=== $node ==="
-  psql -h $node -U postgres -c "SELECT client_addr, state, sent_lsn, write_lsn, flush_lsn, replay_lsn FROM pg_stat_replication;"
-done
+# Check lag on primary
+psql -h 100.102.220.16 -p 5000 -U patroni_superuser -d postgres -c "SELECT client_addr, state, sent_lsn, replay_lsn FROM pg_stat_replication;"
 
 # Check replay on specific replica
-psql -h 100.114.117.46 -U postgres -c "SELECT now() - pg_last_xact_replay_timestamp() AS replication_delay;"
+ssh re-node-03 "sudo -u postgres psql -c \"SELECT now() - pg_last_xact_replay_timestamp() AS replication_delay;\""
 ```
 
 #### Patroni Not Starting
@@ -196,12 +212,9 @@ psql -h 100.114.117.46 -U postgres -c "SELECT now() - pg_last_xact_replay_timest
 journalctl -u patroni -f
 
 # Check etcd connectivity
-etcdctl --endpoints=http://100.102.220.16:2379 cluster-health
+etcdctl --endpoints=http://100.102.220.16:2379,http://100.116.175.9:2379,http://100.115.75.119:2379 cluster-health
 
-# Check PostgreSQL status
-systemctl status postgresql
-
-# If needed, reinitialize
+# Reinitialize if needed
 patronictl reinit quantyra_pg <node_name>
 ```
 
@@ -211,26 +224,10 @@ patronictl reinit quantyra_pg <node_name>
 
 ```bash
 # Check memory usage
-redis-cli -h 100.126.103.51 INFO memory | grep used_memory_human
+redis-cli -h 100.102.220.16 -p 6379 -a CcPUa3nvcxHtyNYjztbDyfCCuhgix78novmBDNGk INFO memory | grep used_memory_human
 
 # Check big keys
-redis-cli -h 100.126.103.51 --bigkeys
-
-# Flush if needed (CAUTION!)
-redis-cli -h 100.126.103.51 FLUSHALL
-```
-
-#### Connection Issues
-
-```bash
-# Check if Redis is listening
-netstat -tlnp | grep 6379
-
-# Check Redis config
-redis-cli -h 100.126.103.51 CONFIG GET bind
-
-# Check max connections
-redis-cli -h 100.126.103.51 CONFIG GET maxclients
+redis-cli -h 100.102.220.16 -p 6379 -a CcPUa3nvcxHtyNYjztbDyfCCuhgix78novmBDNGk --bigkeys
 ```
 
 ### HAProxy Issues
@@ -239,75 +236,36 @@ redis-cli -h 100.126.103.51 CONFIG GET maxclients
 
 ```bash
 # Check backend status
-echo "show stat" | nc 100.102.220.16:8404 | grep -E "pxname|postgres"
-
-# Check specific server
-echo "show stat" | nc 100.102.220.16:8404 | grep re-node-01
+echo "show stat" | nc 100.102.220.16:8404 | grep -E "pxname|postgres|redis"
 
 # Enable/disable server
 echo "set server postgres_write/re-node-01 state ready" | nc 100.102.220.16:8404
 echo "set server postgres_write/re-node-01 state maint" | nc 100.102.220.16:8404
 ```
 
-### Monitoring Issues
+### Dashboard Issues
 
-#### Prometheus Not Scraping
+#### Dashboard Not Loading
 
 ```bash
-# Check target status
-curl http://100.102.220.16:9090/api/v1/targets | jq '.data.activeTargets[] | select(.health != "up")'
+# Check service status
+ssh router-01 "systemctl status dashboard"
 
-# Test exporter directly
+# Restart dashboard
+ssh router-01 "systemctl restart dashboard"
+
+# Check logs
+ssh router-01 "journalctl -u dashboard -f"
+```
+
+#### Disk Space Not Showing
+
+```bash
+# Check Prometheus is accessible
+curl http://100.102.220.16:9090/api/v1/query?query=up
+
+# Check node_exporter on a server
 curl http://100.126.103.51:9100/metrics | head
-
-# Check Prometheus logs
-journalctl -u prometheus -f
-```
-
-#### Grafana Dashboard Issues
-
-```bash
-# Restart Grafana
-systemctl restart grafana-server
-
-# Check Grafana logs
-journalctl -u grafana-server -f
-
-# Reset admin password
-grafana-cli admin reset-admin-password <new_password>
-```
-
-### Network Issues
-
-#### Tailscale Connectivity
-
-```bash
-# Check Tailscale status
-tailscale status
-
-# Ping all nodes
-for ip in 100.126.103.51 100.114.117.46 100.115.75.119 100.102.220.16 100.116.175.9; do
-  ping -c 2 $ip
-done
-
-# Restart Tailscale
-systemctl restart tailscaled
-```
-
-#### Firewall Issues
-
-```bash
-# Check UFW status
-ufw status verbose
-
-# Check specific port
-ufw status | grep 5432
-
-# Allow port temporarily
-ufw allow from 100.64.0.0/10 to any port 5432
-
-# Reload firewall
-ufw reload
 ```
 
 ## Emergency Procedures
@@ -324,71 +282,83 @@ ufw reload
 
 2. Check etcd:
    ```bash
-   etcdctl --endpoints=http://100.102.220.16:2379 cluster-health
+   etcdctl --endpoints=http://100.102.220.16:2379,http://100.116.175.9:2379,http://100.115.75.119:2379 cluster-health
    ```
 
-3. If etcd is down, restart it:
+3. If etcd is down, restart it on all nodes:
    ```bash
-   ssh 100.102.220.16 'systemctl restart etcd'
+   ssh router-01 'systemctl restart etcd'
+   ssh router-02 'systemctl restart etcd'
+   ssh re-node-04 'systemctl restart etcd'
    ```
 
-4. Restart Patroni on all nodes:
+4. Restart Patroni on all DB nodes:
    ```bash
    for node in 100.126.103.51 100.114.117.46 100.115.75.119; do
      ssh $node 'systemctl restart patroni'
    done
    ```
 
-5. Verify cluster:
-   ```bash
-   patronictl list
-   ```
-
 ### Complete Redis Outage
 
 1. Check Redis on both nodes:
    ```bash
-   redis-cli -h 100.126.103.51 ping
-   redis-cli -h 100.114.117.46 ping
+   redis-cli -h 100.126.103.51 -a CcPUa3nvcxHtyNYjztbDyfCCuhgix78novmBDNGk ping
+   redis-cli -h 100.114.117.46 -a CcPUa3nvcxHtyNYjztbDyfCCuhgix78novmBDNGk ping
    ```
 
 2. Restart Redis:
    ```bash
-   ssh 100.126.103.51 'systemctl restart redis'
-   ssh 100.114.117.46 'systemctl restart redis'
+   ssh re-node-01 'systemctl restart redis'
+   ssh re-node-03 'systemctl restart redis'
    ```
 
-3. Verify replication:
+3. Verify via HAProxy:
    ```bash
-   redis-cli -h 100.126.103.51 INFO replication
+   redis-cli -h 100.102.220.16 -p 6379 -a CcPUa3nvcxHtyNYjztbDyfCCuhgix78novmBDNGk INFO replication
    ```
 
 ### Router Outage
 
 1. Check router-01:
    ```bash
-   ssh 100.102.220.16 'systemctl status haproxy etcd prometheus grafana-server'
+   ssh 100.102.220.16 'systemctl status haproxy etcd prometheus grafana-server dashboard'
    ```
 
-2. If router-01 is down, traffic should failover to router-02
+2. If router-01 is down, traffic fails over to router-02
 
 3. Restart services on router-01:
    ```bash
-   ssh 100.102.220.16
+   ssh router-01
    systemctl restart haproxy
    systemctl restart etcd
    systemctl restart prometheus
    systemctl restart grafana-server
+   systemctl restart dashboard
    ```
 
-4. Verify HAProxy:
-   ```bash
-   curl -u admin:admin http://100.102.220.16:8404/stats
-   ```
+## Application Deployment
+
+### Via Dashboard
+
+1. Navigate to http://100.102.220.16:8080/apps/create
+2. Select framework
+3. Enter application details
+4. Configure database (optional)
+5. Click "Create Application"
+6. Copy GitHub Actions workflow to repository
+7. Add secrets to GitHub
+
+### Manual Deployment
+
+```bash
+# Deploy to both app servers
+ssh root@100.92.26.38 "cd /opt/apps/APP_NAME && git pull && systemctl restart APP_NAME"
+ssh root@100.101.39.22 "cd /opt/apps/APP_NAME && git pull && systemctl restart APP_NAME"
+```
 
 ## Contacts
 
-- **Primary Admin**: [Your Name] - [email]
-- **On-call**: [On-call rotation]
+- **Primary Admin**: jonathan@xotec.io
 - **Slack Channel**: #infrastructure-alerts
-- **PagerDuty**: [Link to PagerDuty]
+- **Dashboard**: http://100.102.220.16:8080

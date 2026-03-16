@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} Status - Quantyra Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>{{ app_name }}</h1>
+    <div class="quick-actions">
+        <a href="/apps/{{ app_name }}/deploy" class="btn">Deploy</a>
+        <a href="/apps/{{ app_name }}/domains" class="btn btn-secondary">Domains</a>
+        <a href="/apps/{{ app_name }}/secrets" class="btn btn-secondary">Secrets</a>
+        <a href="/apps" class="btn btn-secondary">← Back to Apps</a>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Application Info</h2>
+    <div class="table-container">
+        <table class="server-table">
+            <tr><th>Framework</th><td>{{ app.framework }}</td></tr>
+            <tr><th>Repository</th><td>{{ app.git_repo or 'Not configured' }}</td></tr>
+            <tr><th>Database</th><td>{{ app.database or 'None' }}</td></tr>
+            <tr><th>Staging</th><td>{{ 'Yes' if app.staging_env else 'No' }}</td></tr>
+            {% if app.port %}<tr><th>Port</th><td><code>{{ app.port }}</code></td></tr>{% endif %}
+            <tr><th>Created</th><td>{{ app.created_at[:10] if app.created_at else '-' }}</td></tr>
+        </table>
+    </div>
+</div>
+
+{% for server in app_servers %}
+<div class="card">
+    <h2>{{ server.name }} <code>{{ server.ip }}</code></h2>
+    
+    <div class="status-row">
+        <div class="status-item">
+            <span class="status-label">App Status:</span>
+            {% if server_status[server.name].app_active %}
+            <span class="status-badge status-healthy">Active</span>
+            {% else %}
+            <span class="status-badge status-error">Inactive</span>
+            <span class="hint">(HTTP {{ server_status[server.name].app_http_code }})</span>
+            {% endif %}
+        </div>
+        <div class="status-item">
+            <span class="status-label">Repo Cloned:</span>
+            {% if server_status[server.name].cloned %}
+            <span class="status-badge status-healthy">Yes</span>
+            {% else %}
+            <span class="status-badge status-warning">No</span>
+            {% endif %}
+        </div>
+        <div class="status-item">
+            <span class="status-label">Nginx:</span>
+            {% if server_status[server.name].nginx_status == 'active' %}
+            <span class="status-badge status-healthy">Running</span>
+            {% else %}
+            <span class="status-badge status-error">{{ server_status[server.name].nginx_status }}</span>
+            {% endif %}
+        </div>
+        {% if app.framework == 'laravel' %}
+        <div class="status-item">
+            <span class="status-label">PHP-FPM:</span>
+            {% if server_status[server.name].phpfpm_status == 'active' %}
+            <span class="status-badge status-healthy">Running</span>
+            {% else %}
+            <span class="status-badge status-error">{{ server_status[server.name].phpfpm_status }}</span>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+    
+    <div style="margin: 15px 0; display: flex; gap: 10px; flex-wrap: wrap;">
+        <button class="btn" onclick="restartApp('{{ server.name }}', '{{ server.ip }}')">Restart App</button>
+        <button class="btn btn-secondary" onclick="reloadNginx('{{ server.ip }}')">Reload Nginx</button>
+        {% if app.framework == 'laravel' %}
+        <button class="btn btn-secondary" onclick="reloadPhpFpm('{{ server.ip }}')">Reload PHP-FPM</button>
+        {% endif %}
+        <button class="btn btn-secondary" onclick="clearCache('{{ server.ip }}', '{{ app_name }}')">Clear Cache</button>
+    </div>
+    
+    <h3>Commands</h3>
+    
+    {% if app.framework == 'laravel' %}
+    <div class="command-box">
+        <div class="command-header">
+            <span>Restart App (nginx + PHP-FPM)</span>
+            <button class="btn btn-sm btn-secondary" onclick="copyCommand('restart-{{ server.name }}')">Copy</button>
+        </div>
+        <pre id="restart-{{ server.name }}" class="code-block">ssh root@{{ server.ip }} "systemctl reload nginx && systemctl reload php8.5-fpm"</pre>
+    </div>
+    
+    <div class="command-box">
+        <div class="command-header">
+            <span>Clear Laravel Cache</span>
+            <button class="btn btn-sm btn-secondary" onclick="copyCommand('cache-{{ server.name }}')">Copy</button>
+        </div>
+        <pre id="cache-{{ server.name }}" class="code-block">ssh root@{{ server.ip }} "cd /opt/apps/{{ app_name }} && php artisan cache:clear && php artisan config:clear && php artisan view:clear"</pre>
+    </div>
+    
+    <div class="command-box">
+        <div class="command-header">
+            <span>Run Migrations</span>
+            <button class="btn btn-sm btn-secondary" onclick="copyCommand('migrate-{{ server.name }}')">Copy</button>
+        </div>
+        <pre id="migrate-{{ server.name }}" class="code-block">ssh root@{{ server.ip }} "cd /opt/apps/{{ app_name }} && php artisan migrate --force"</pre>
+    </div>
+    {% else %}
+    <div class="command-box">
+        <div class="command-header">
+            <span>Restart App</span>
+            <button class="btn btn-sm btn-secondary" onclick="copyCommand('restart-{{ server.name }}')">Copy</button>
+        </div>
+        <pre id="restart-{{ server.name }}" class="code-block">ssh root@{{ server.ip }} "systemctl reload nginx"</pre>
+    </div>
+    {% endif %}
+    
+    <div class="command-box">
+        <div class="command-header">
+            <span>View Nginx Logs</span>
+            <button class="btn btn-sm btn-secondary" onclick="copyCommand('nginx-logs-{{ server.name }}')">Copy</button>
+        </div>
+        <pre id="nginx-logs-{{ server.name }}" class="code-block">ssh root@{{ server.ip }} "tail -f /var/log/nginx/error.log"</pre>
+    </div>
+    
+    {% if app.framework == 'laravel' %}
+    <div class="command-box">
+        <div class="command-header">
+            <span>View Laravel Logs</span>
+            <button class="btn btn-sm btn-secondary" onclick="copyCommand('laravel-logs-{{ server.name }}')">Copy</button>
+        </div>
+        <pre id="laravel-logs-{{ server.name }}" class="code-block">ssh root@{{ server.ip }} "tail -f /opt/apps/{{ app_name }}/storage/logs/laravel.log"</pre>
+    </div>
+    {% endif %}
+    
+    <div class="command-box">
+        <div class="command-header">
+            <span>Test App Locally</span>
+            <button class="btn btn-sm btn-secondary" onclick="copyCommand('test-{{ server.name }}')">Copy</button>
+        </div>
+        <pre id="test-{{ server.name }}" class="code-block">curl -I http://localhost:{{ app.port or 8100 }}</pre>
+    </div>
+</div>
+{% endfor %}
+
+{% if app.database %}
+<div class="card">
+    <h2>Database Connection</h2>
+    <div class="table-container">
+        <table class="server-table">
+            <tr><th>Host</th><td><code>{{ pg_host }}:{{ pg_port }}</code> (via PgBouncer)</td></tr>
+            <tr><th>Database</th><td><code>{{ app.database }}</code></td></tr>
+            {% if app.staging_env %}
+            <tr><th>Staging DB</th><td><code>{{ app.database }}_staging</code></td></tr>
+            {% endif %}
+        </table>
+    </div>
+    
+    <h3 style="margin-top: 1rem;">Connection String</h3>
+    {% if app.db_password %}
+    <div class="command-box">
+        <div class="command-header">
+            <span>Production</span>
+            <button class="btn btn-sm btn-secondary" onclick="copyCommand('db-prod')">Copy</button>
+        </div>
+        <pre id="db-prod" class="code-block">postgres://{{ app.db_user }}:{{ app.db_password }}@{{ pg_host }}:6432/{{ app.database }}</pre>
+    </div>
+    
+    {% if app.staging_env %}
+    <div class="command-box">
+        <div class="command-header">
+            <span>Staging</span>
+            <button class="btn btn-sm btn-secondary" onclick="copyCommand('db-staging')">Copy</button>
+        </div>
+        <pre id="db-staging" class="code-block">postgres://{{ app.db_user }}:{{ app.db_password }}@{{ pg_host }}:6432/{{ app.database }}_staging</pre>
+    </div>
+    {% endif %}
+    {% else %}
+    <p class="empty-state">No database password stored</p>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if app.deploy_workflow %}
+<div class="card">
+    <h2>GitHub Actions Workflow</h2>
+    <p>Copy this to <code>.github/workflows/deploy.yml</code> in your repository:</p>
+    <div class="command-box">
+        <div class="command-header">
+            <span>deploy.yml</span>
+            <button class="btn btn-sm btn-secondary" onclick="copyCommand('workflow')">Copy</button>
+        </div>
+        <pre id="workflow" class="code-block">{{ app.deploy_workflow }}</pre>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function copyCommand(id) {
+    const text = document.getElementById(id).textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        event.target.textContent = 'Copied!';
+        setTimeout(() => event.target.textContent = 'Copy', 2000);
+    });
+}
+
+function restartApp(serverName, serverIp) {
+    if (!confirm('Restart app on ' + serverName + '?')) return;
+    
+    fetch('/api/apps/{{ app_name }}/restart', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({server: serverIp})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('App restarted on ' + serverName);
+            location.reload();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    });
+}
+
+function reloadNginx(serverIp) {
+    if (!confirm('Reload nginx on server?')) return;
+    
+    fetch('/api/apps/{{ app_name }}/reload-nginx', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({server: serverIp})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('Nginx reloaded');
+        } else {
+            alert('Error: ' + data.error);
+        }
+    });
+}
+
+function reloadPhpFpm(serverIp) {
+    if (!confirm('Reload PHP-FPM on server?')) return;
+    
+    fetch('/api/apps/{{ app_name }}/reload-phpfpm', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({server: serverIp})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('PHP-FPM reloaded');
+        } else {
+            alert('Error: ' + data.error);
+        }
+    });
+}
+
+function clearCache(serverIp, appName) {
+    if (!confirm('Clear cache on server?')) return;
+    
+    fetch('/api/apps/' + appName + '/clear-cache', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({server: serverIp})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('Cache cleared: ' + data.output);
+        } else {
+            alert('Error: ' + data.error);
+        }
+    });
+}
+</script>
+{% endblock %}

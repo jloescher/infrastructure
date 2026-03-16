@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}Quantyra Infrastructure Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard-grid">
+    <div class="card status-card">
+        <h2>PostgreSQL</h2>
+        <div class="status-indicator {{ pg_status.status }}">
+            <span class="status-dot"></span>
+            <span>{{ pg_status.status|title }}</span>
+        </div>
+        <p>Role: {{ pg_status.role|title }}</p>
+        <p><a href="/databases" class="link">{{ pg_databases|length }} databases</a></p>
+    </div>
+    
+    <div class="card status-card">
+        <h2>Redis</h2>
+        <div class="status-indicator {{ redis_info.status }}">
+            <span class="status-dot"></span>
+            <span>{{ redis_info.status|title }}</span>
+        </div>
+        <p>Role: {{ redis_info.role|title }}</p>
+        <p>Clients: {{ redis_info.connected_clients }}</p>
+        <p>Memory: {{ redis_info.used_memory_human }}</p>
+    </div>
+    
+    <div class="card status-card">
+        <h2>Alerts</h2>
+        {% if alerts %}
+            <div class="status-indicator error">
+                <span class="status-dot"></span>
+                <span>{{ alerts|length }} Firing</span>
+            </div>
+            <ul class="alert-list">
+                {% for alert in alerts[:5] %}
+                <li class="alert-item">{{ alert.labels.alertname }}</li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <div class="status-indicator healthy">
+                <span class="status-dot"></span>
+                <span>All Clear</span>
+            </div>
+        {% endif %}
+    </div>
+    
+    <div class="card">
+        <h2>Disk Space</h2>
+        <div id="disk-space-loading">Loading...</div>
+        <div id="disk-space-content" style="display: none;">
+            <table class="server-table" id="disk-table">
+                <thead>
+                    <tr><th>Server</th><th>Used</th><th>Available</th><th>%</th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div class="card">
+        <h2>Routers</h2>
+        <table class="server-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Tailscale IP</th>
+                    <th>Public IP</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for router in routers %}
+                <tr>
+                    <td>{{ router.name }}</td>
+                    <td><code>{{ router.ip }}</code></td>
+                    <td><code>{{ router.public_ip }}</code></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <div class="card">
+        <h2>Database Servers</h2>
+        <table class="server-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Role</th>
+                    <th>Tailscale IP</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for server in db_servers %}
+                <tr>
+                    <td>{{ server.name }}</td>
+                    <td>{{ server.role }}</td>
+                    <td><code>{{ server.ip }}</code></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h2>App Servers</h2>
+    <table class="server-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Role</th>
+                <th>Tailscale IP</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for server in app_servers %}
+            <tr>
+                <td>{{ server.name }}</td>
+                <td>{{ server.role }}</td>
+                <td><code>{{ server.ip }}</code></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="quick-actions" style="margin-top: 1rem;">
+        <a href="/apps/create" class="btn">Create Application</a>
+        <a href="/apps/deploy" class="btn btn-secondary">Deploy App</a>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Quick Actions</h2>
+    <div class="quick-actions">
+        <a href="/apps/create" class="btn">Create Application</a>
+        <a href="/databases/add" class="btn">Add Database</a>
+        <a href="{{ grafana_url }}" target="_blank" class="btn btn-secondary">Open Grafana</a>
+        <a href="{{ prometheus_url }}/alerts" target="_blank" class="btn btn-secondary">View Alerts</a>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function() {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/api/disk-space', true);
+    xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4) {
+            if (xhr.status === 200) {
+                try {
+                    var data = JSON.parse(xhr.responseText);
+                    if (data.error) throw new Error(data.error);
+                    document.getElementById('disk-space-loading').style.display = 'none';
+                    document.getElementById('disk-space-content').style.display = 'block';
+                    
+                    var tbody = document.querySelector('#disk-table tbody');
+                    for (var server in data) {
+                        var info = data[server];
+                        if (info.error) continue;
+                        var pct = parseInt(info.percent);
+                        var pctClass = pct > 80 ? 'style="color: #e74c3c"' : pct > 60 ? 'style="color: #f39c12"' : '';
+                        tbody.innerHTML += '<tr><td>' + server + '</td><td>' + info.used + '</td><td>' + info.available + '</td><td ' + pctClass + '>' + info.percent + '</td></tr>';
+                    }
+                } catch(e) {
+                    document.getElementById('disk-space-loading').textContent = 'Error parsing data';
+                }
+            } else {
+                document.getElementById('disk-space-loading').textContent = 'Unable to load disk space';
+            }
+        }
+    };
+    xhr.send();
+})();
+</script>
+{% endblock %}

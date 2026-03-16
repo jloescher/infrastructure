@@ -1,119 +1,73 @@
 global:
-  resolve_timeout: 5m
-  slack_api_url: "${SLACK_WEBHOOK_URL}"
+  smtp_smarthost: 'smtp.gmail.com:587'
+  smtp_from: 'jonathan@xotec.io'
+  smtp_auth_username: 'jonathan@xotec.io'
+  smtp_auth_password: 'jvbsxqhufeayrmjz'
+  smtp_require_tls: true
+
+  slack_api_url: 'https://hooks.slack.com/services/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'
+
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
 
 route:
-  group_by: ['alertname', 'cluster', 'service']
+  receiver: 'default-receiver'
   group_wait: 30s
   group_interval: 5m
   repeat_interval: 4h
-  receiver: 'default-receiver'
+  group_by: ['alertname', 'severity']
+
   routes:
-    # Critical alerts - immediate notification
     - match:
         severity: critical
       receiver: 'critical-alerts'
-      group_wait: 10s
-      repeat_interval: 1h
-
-    # Database alerts
+      continue: true
+    
     - match:
-        job: postgres_exporter
-      receiver: 'database-team'
-
-    # Infrastructure alerts
-    - match:
-        job: node_exporter
-      receiver: 'infrastructure-team'
-
-    # HAProxy alerts
-    - match:
-        job: haproxy_exporter
-      receiver: 'infrastructure-team'
+        severity: warning
+      receiver: 'warning-alerts'
 
 receivers:
   - name: 'default-receiver'
     slack_configs:
-      - channel: '#infrastructure-alerts'
+      - channel: '#alerts'
         send_resolved: true
-        title: '{{ .Status | toUpper }}: {{ .CommonAnnotations.summary }}'
-        text: >-
-          {{ range .Alerts }}
-          *Alert:* {{ .Labels.alertname }}
-          *Instance:* {{ .Labels.instance }}
-          *Severity:* {{ .Labels.severity }}
-          *Description:* {{ .Annotations.description }}
-          *Details:*
-          {{ range .Labels.SortedPairs }} • *{{ .Name }}:* {{ .Value }}
-          {{ end }}
-          {{ end }}
+        title: '{{ .Status | toUpper }}: {{ .CommonLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+    email_configs:
+      - to: 'jonathan@xotec.io'
+        send_resolved: true
 
   - name: 'critical-alerts'
     slack_configs:
-      - channel: '#critical-alerts'
+      - channel: '#alerts'
         send_resolved: true
-        title: ':rotating_light: CRITICAL: {{ .CommonAnnotations.summary }}'
-        text: >-
+        color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+        title: '🚨 CRITICAL: {{ .CommonLabels.alertname }}'
+        text: |-
           {{ range .Alerts }}
           *Alert:* {{ .Labels.alertname }}
+          *Summary:* {{ .Annotations.summary }}
           *Instance:* {{ .Labels.instance }}
-          *Description:* {{ .Annotations.description }}
-          *Time:* {{ .StartsAt }}
+          *Details:* {{ .Annotations.description }}
           {{ end }}
-    pagerduty_configs:
-      - service_key: "${PAGERDUTY_SERVICE_KEY}"
-        severity: critical
-        description: '{{ .CommonAnnotations.summary }}'
-        details:
-          firing: '{{ template "pagerduty.default.instances" .Alerts.Firing }}'
-          resolved: '{{ template "pagerduty.default.instances" .Alerts.Resolved }}'
-          num_firing: '{{ .Alerts.Firing | len }}'
-          num_resolved: '{{ .Alerts.Resolved | len }}'
+    email_configs:
+      - to: 'jonathan@xotec.io'
+        send_resolved: true
+        headers:
+          Subject: '[CRITICAL] {{ .CommonLabels.alertname }}'
 
-  - name: 'database-team'
+  - name: 'warning-alerts'
     slack_configs:
-      - channel: '#database-alerts'
+      - channel: '#alerts'
         send_resolved: true
-        title: ':database: {{ .Status | toUpper }}: {{ .CommonAnnotations.summary }}'
-        text: >-
-          {{ range .Alerts }}
-          *Alert:* {{ .Labels.alertname }}
-          *Instance:* {{ .Labels.instance }}
-          *Severity:* {{ .Labels.severity }}
-          *Description:* {{ .Annotations.description }}
-          {{ end }}
-
-  - name: 'infrastructure-team'
-    slack_configs:
-      - channel: '#infrastructure-alerts'
-        send_resolved: true
-        title: ':server: {{ .Status | toUpper }}: {{ .CommonAnnotations.summary }}'
-        text: >-
-          {{ range .Alerts }}
-          *Alert:* {{ .Labels.alertname }}
-          *Instance:* {{ .Labels.instance }}
-          *Severity:* {{ .Labels.severity }}
-          *Description:* {{ .Annotations.description }}
-          {{ end }}
+        color: 'warning'
+        title: '⚠️ WARNING: {{ .CommonLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
 
 inhibit_rules:
-  # If a node is down, inhibit all other alerts for that instance
   - source_match:
-      alertname: 'NodeDown'
-    target_match_re:
-      alertname: '.*'
-    equal: ['instance']
-
-  # If PostgreSQL is down, inhibit connection-related alerts
-  - source_match:
-      alertname: 'PostgreSQLDown'
-    target_match_re:
-      alertname: 'PostgreSQL.*'
-    equal: ['instance']
-
-  # If HAProxy is down, inhibit backend alerts
-  - source_match:
-      alertname: 'HAProxyDown'
-    target_match_re:
-      alertname: 'HAProxy.*'
-    equal: ['instance']
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'instance']

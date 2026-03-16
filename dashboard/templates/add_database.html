@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Add Database - Quantyra Dashboard{% endblock %}
+
+{% block content %}
+<h1>Add Database</h1>
+
+<div class="card">
+    <form method="POST">
+        <div class="form-group">
+            <label for="db_name">Database Name *</label>
+            <input type="text" id="db_name" name="db_name" required pattern="[a-z0-9_]+" placeholder="product_name">
+            <div class="hint">Lowercase letters, numbers, and underscores only</div>
+        </div>
+        
+        <div class="form-group">
+            <label for="description">Description</label>
+            <input type="text" id="description" name="description" placeholder="Product Description">
+        </div>
+        
+        <div class="section">
+            <h3>Admin User</h3>
+            <div class="form-group">
+                <label for="admin_user">Admin Username *</label>
+                <input type="text" id="admin_user" name="admin_user" required placeholder="product_admin">
+            </div>
+            
+            <div class="form-group">
+                <label for="admin_password">Admin Password *</label>
+                <input type="password" id="admin_password" name="admin_password" required>
+                <div class="hint">Strong password for database admin</div>
+            </div>
+            
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" name="superuser" checked> Grant SUPERUSER privileges
+                </label>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h3>App User (Optional)</h3>
+            <div class="form-group">
+                <label for="app_user">App Username</label>
+                <input type="text" id="app_user" name="app_user" placeholder="product_app">
+                <div class="hint">Limited privileges user for application</div>
+            </div>
+            
+            <div class="form-group">
+                <label for="app_password">App Password</label>
+                <input type="password" id="app_password" name="app_password">
+            </div>
+        </div>
+        
+        <div class="section">
+            <h3>Connection Pooling</h3>
+            <div class="form-group">
+                <label for="pool_size">Pool Size</label>
+                <input type="number" id="pool_size" name="pool_size" value="20" min="5" max="100">
+                <div class="hint">Number of connections per router</div>
+            </div>
+        </div>
+        
+        <button type="submit" class="btn">Create Database</button>
+        <a href="/databases" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}

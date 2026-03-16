@@ -1,0 +1,111 @@
+---
+# Stage 1: Quick fixes - SSH hardening and backup directories
+
+- name: Fix SSH hardening on router-02
+  hosts: router-02
+  become: yes
+  tasks:
+    - name: Check current SSH config
+      command: grep "^PermitRootLogin" /etc/ssh/sshd_config
+      register: ssh_config
+      changed_when: false
+
+    - name: Fix PermitRootLogin
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^PermitRootLogin\s+yes'
+        line: 'PermitRootLogin prohibit-password'
+        backup: yes
+      when: "'PermitRootLogin yes' in ssh_config.stdout"
+      notify: Restart SSH
+
+    - name: Ensure password authentication is disabled
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PasswordAuthentication'
+        line: 'PasswordAuthentication no'
+      notify: Restart SSH
+
+  handlers:
+    - name: Restart SSH
+      systemd:
+        name: ssh
+        state: restarted
+
+- name: Create backup directories on DB servers
+  hosts: db_servers
+  become: yes
+  tasks:
+    - name: Create backup directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      loop:
+        - /backup
+        - /backup/pgbackrest
+        - /backup/redis
+        - /backup/configs
+
+- name: Deploy backup scripts to DB servers
+  hosts: db_servers
+  become: yes
+  tasks:
+    - name: Copy PostgreSQL backup script
+      copy:
+        src: "{{ playbook_dir }}/../../backups/scripts/postgres_backup.sh"
+        dest: /usr/local/bin/postgres_backup.sh
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Copy Redis backup script
+      copy:
+        src: "{{ playbook_dir }}/../../backups/scripts/redis_backup.sh"
+        dest: /usr/local/bin/redis_backup.sh
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Copy S3 sync script
+      copy:
+        src: "{{ playbook_dir }}/../../backups/scripts/sync_to_s3.sh"
+        dest: /usr/local/bin/sync_to_s3.sh
+        owner: root
+        group: root
+        mode: '0755'
+
+- name: Setup backup cron jobs
+  hosts: db_servers
+  become: yes
+  tasks:
+    - name: Add PostgreSQL backup cron (daily diff)
+      cron:
+        name: "postgresql-backup-diff"
+        minute: "0"
+        hour: "2"
+        job: "/usr/local/bin/postgres_backup.sh diff >> /var/log/backup.log 2>&1"
+        user: root
+
+    - name: Add PostgreSQL backup cron (weekly full)
+      cron:
+        name: "postgresql-backup-full"
+        minute: "0"
+        hour: "2"
+        weekday: "0"
+        job: "/usr/local/bin/postgres_backup.sh full >> /var/log/backup.log 2>&1"
+        user: root
+
+- name: Setup Redis backup cron jobs
+  hosts: redis_cluster
+  become: yes
+  tasks:
+    - name: Add Redis backup cron
+      cron:
+        name: "redis-backup"
+        minute: "0"
+        hour: "3"
+        job: "/usr/local/bin/redis_backup.sh >> /var/log/backup.log 2>&1"
+        user: root

@@ -76,7 +76,7 @@ groups:
           description: "{{ $value }}% of max connections used on {{ $labels.instance }}"
 
       - alert: PostgreSQLReplicationLag
-        expr: pg_replication_lag_seconds > 30
+        expr: pg_replication_lag_seconds > 30 and pg_replication_is_replica == 1 and rate(pg_stat_database_xact_commit{datname="postgres"}[5m]) > 0
         for: 5m
         labels:
           severity: warning
@@ -85,7 +85,7 @@ groups:
           description: "Replication lag is {{ $value }} seconds"
 
       - alert: PostgreSQLReplicationLagCritical
-        expr: pg_replication_lag_seconds > 300
+        expr: pg_replication_lag_seconds > 300 and pg_replication_is_replica == 1 and rate(pg_stat_database_xact_commit{datname="postgres"}[5m]) > 0
         for: 5m
         labels:
           severity: critical

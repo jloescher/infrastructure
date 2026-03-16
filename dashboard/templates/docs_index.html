@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Documentation - Quantyra Dashboard{% endblock %}
+
+{% block content %}
+<h1>Documentation</h1>
+
+<div class="card">
+    <h2>Available Documents</h2>
+    <div class="docs-grid">
+        {% for doc in docs %}
+        <a href="/docs/{{ doc.file[:-3] }}" class="doc-card">
+            <span class="doc-icon">📄</span>
+            <span class="doc-name">{{ doc.name }}</span>
+        </a>
+        {% else %}
+        <p class="empty-state">No documentation available</p>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

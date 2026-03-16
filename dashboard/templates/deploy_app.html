@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Deploy {{ app_name }} - Quantyra Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Deploy: {{ app_name }}</h1>
+    <a href="/apps" class="btn btn-secondary">← Back to Apps</a>
+</div>
+
+<div class="card">
+    <h2>Application Info</h2>
+    <table class="server-table">
+        <tr><th>Framework</th><td>{{ app.framework }}</td></tr>
+        <tr><th>Repository</th><td>{{ app.git_repo or 'Not configured' }}</td></tr>
+        <tr><th>Database</th><td>{{ app.database or 'None' }}</td></tr>
+        <tr><th>Created</th><td>{{ app.created_at[:10] if app.created_at else '-' }}</td></tr>
+    </table>
+</div>
+
+<div class="card">
+    <h2>Select Servers</h2>
+    <form method="POST">
+        <div class="table-container">
+            <table class="server-table">
+                <thead>
+                    <tr>
+                        <th><input type="checkbox" id="select-all" checked></th>
+                        <th>Server</th>
+                        <th>IP</th>
+                        <th>Repo Status</th>
+                        <th>Service Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for server in app_servers %}
+                    <tr>
+                        <td><input type="checkbox" name="servers" value="{{ server.name }}" class="server-checkbox" checked></td>
+                        <td><strong>{{ server.name }}</strong></td>
+                        <td><code>{{ server.ip }}</code></td>
+                        <td>
+                            {% if server_status[server.name].cloned %}
+                            <span class="status-badge status-healthy">Cloned</span>
+                            {% else %}
+                            <span class="status-badge status-warning">Not Cloned</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if server_status[server.name].service_status == 'active' %}
+                            <span class="status-badge status-healthy">Active</span>
+                            {% elif server_status[server.name].service_status == 'failed' %}
+                            <span class="status-badge status-error">Failed</span>
+                            {% else %}
+                            <span class="status-badge status-warning">Inactive</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <h3 style="margin-top: 1.5rem;">Options</h3>
+        
+        <div class="checkbox-group">
+            <input type="checkbox" id="force_reclone" name="force_reclone">
+            <label for="force_reclone">
+                <strong>Force re-clone repository</strong>
+                <div class="hint" style="margin: 0;">Delete existing directory and clone fresh</div>
+            </label>
+        </div>
+        
+        <div class="checkbox-group">
+            <input type="checkbox" id="restart_service" name="restart_service" checked>
+            <label for="restart_service">
+                <strong>Restart service after deploy</strong>
+                <div class="hint" style="margin: 0;">Restart systemd service on selected servers</div>
+            </label>
+        </div>
+        
+        <div class="quick-actions" style="margin-top: 1.5rem;">
+            <button type="submit" class="btn">Deploy to Selected Servers</button>
+            <a href="/apps" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.getElementById('select-all').addEventListener('change', function() {
+    document.querySelectorAll('.server-checkbox').forEach(cb => cb.checked = this.checked);
+});
+</script>
+{% endblock %}

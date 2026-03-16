@@ -1,0 +1,57 @@
+---
+# Create databases and users on PostgreSQL cluster
+# Run on primary node only
+# Usage: ansible-playbook playbooks/create-databases.yml
+
+- name: Create databases and users
+  hosts: db_servers
+  become: yes
+  become_user: postgres
+  vars_files:
+    - ../inventory/group_vars/databases.yml
+  
+  tasks:
+    - name: Check if this is the primary
+      shell: psql -c "SELECT pg_is_in_recovery();" -t
+      register: is_replica
+      changed_when: false
+
+    - name: Skip if replica
+      debug:
+        msg: "Skipping - this is a replica"
+      when: is_replica.stdout.strip() == 't'
+
+    - name: Create databases
+      block:
+        - name: Create databases
+          postgresql_db:
+            name: "{{ item.value.name }}"
+            owner: "{{ item.value.owner }}"
+            encoding: UTF8
+            lc_collate: en_US.UTF-8
+            lc_ctype: en_US.UTF-8
+            template: template0
+            state: present
+          loop: "{{ databases | dict2items }}"
+          when: is_replica.stdout.strip() == 'f'
+
+        - name: Create database users
+          postgresql_user:
+            name: "{{ item.1.name }}"
+            password: "{{ item.1.password_hash }}"
+            encrypted: yes
+            role_attr_flags: "{{ item.1.roles | join(',') }}"
+            state: present
+          loop: "{{ databases | dict2items | subelements('value.users') }}"
+          when: is_replica.stdout.strip() == 'f'
+
+        - name: Grant privileges to users
+          postgresql_privs:
+            database: "{{ item.0.value.name }}"
+            roles: "{{ item.1.name }}"
+            type: database
+            privs: ALL
+            state: present
+          loop: "{{ databases | dict2items | subelements('value.users') }}"
+          when: is_replica.stdout.strip() == 'f'
+      when: is_replica.stdout.strip() == 'f'

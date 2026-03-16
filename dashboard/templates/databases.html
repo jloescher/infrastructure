@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Databases - Quantyra Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Databases</h1>
+    <a href="/databases/add" class="btn">+ Add Database</a>
+</div>
+
+<div class="card">
+    <h2>Configured Databases</h2>
+    <div class="table-container">
+        <table class="server-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th>Owner</th>
+                    <th>Password</th>
+                    <th>Users</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for db_key, db in databases.items() %}
+                <tr>
+                    <td><strong>{{ db.name }}</strong></td>
+                    <td class="truncate">{{ db.description or '-' }}</td>
+                    <td>{{ db.owner }}</td>
+                    <td><code>{{ db.password or '-' }}</code></td>
+                    <td class="truncate">{{ db.users | map(attribute='name') | join(', ') }}</td>
+                    <td>
+                        <a href="/databases/{{ db_key }}/connection" class="btn btn-secondary btn-sm">Connection</a>
+                        <form action="/databases/{{ db_key }}/delete" method="POST" style="display:inline;" onsubmit="return confirm('Delete database {{ db.name }} and all users?');">
+                            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="empty-state">No databases configured</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h2>PostgreSQL Databases (Live)</h2>
+    <div class="db-list">
+        {% for db in pg_databases %}
+        <span class="db-badge">{{ db }}</span>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Settings - Quantyra Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Settings</h1>
+</div>
+
+<div class="card">
+    <h2>GitHub Integration</h2>
+    <p>Configure GitHub token for accessing private repositories during application deployment.</p>
+    
+    <form method="POST" action="/settings/github-token">
+        <div class="form-group">
+            <label for="github_token">GitHub Personal Access Token</label>
+            <input type="password" id="github_token" name="github_token" placeholder="ghp_xxxxxxxxxxxx" {% if github_token_set %}value="****************"{% endif %}>
+            <div class="hint">Token with <code>repo</code> scope for private repo access. Stored securely on the server.</div>
+        </div>
+        
+        <div class="form-group">
+            <button type="submit" class="btn">Save GitHub Token</button>
+            {% if github_token_set %}
+            <span style="color: #27ae60; margin-left: 1rem;">Token configured</span>
+            {% endif %}
+        </div>
+    </form>
+    
+    <h3 style="margin-top: 2rem;">How to Create a GitHub Token</h3>
+    <ol>
+        <li>Go to <a href="https://github.com/settings/tokens" target="_blank" class="link">GitHub Settings → Developer settings → Personal access tokens</a></li>
+        <li>Click "Generate new token (classic)"</li>
+        <li>Select the <code>repo</code> scope</li>
+        <li>Copy the token and paste it above</li>
+    </ol>
+</div>
+
+<div class="card">
+    <h2>Environment Variables</h2>
+    <p>Default environment variables configured for all applications:</p>
+    
+    <div class="table-container">
+        <table class="server-table">
+            <thead>
+                <tr><th>Variable</th><th>Value</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>PG_HOST</code></td><td>{{ pg_host }}</td></tr>
+                <tr><td><code>PG_PORT</code></td><td>{{ pg_port }}</td></tr>
+                <tr><td><code>REDIS_HOST</code></td><td>{{ redis_host }}</td></tr>
+                <tr><td><code>REDIS_PORT</code></td><td>{{ redis_port }}</td></tr>
+                <tr><td><code>PROMETHEUS_URL</code></td><td>{{ prometheus_url }}</td></tr>
+                <tr><td><code>GRAFANA_URL</code></td><td>{{ grafana_url }}</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Deployment Servers</h2>
+    <p>Application servers configured for deployment:</p>
+    
+    <div class="table-container">
+        <table class="server-table">
+            <thead>
+                <tr><th>Server</th><th>Tailscale IP</th><th>Public IP</th><th>Role</th></tr>
+            </thead>
+            <tbody>
+                {% for server in app_servers %}
+                <tr>
+                    <td><strong>{{ server.name }}</strong></td>
+                    <td><code>{{ server.ip }}</code></td>
+                    <td><code>{{ server.public_ip }}</code></td>
+                    <td>{{ server.role }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

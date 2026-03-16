@@ -1,13 +1,13 @@
 ---
 # Application server configuration (discovered from live systems)
 
-# Docker (needs to be installed)
+# Docker (not installed - applications run as systemd services)
 docker_enabled: false
 docker_compose_version: "2.24.0"
-docker_install_required: true
+docker_install_required: false
 
 # Application deployment
-app_deploy_user: root
+app_deploy_user: deploy
 app_deploy_dir: /opt/apps
 app_log_dir: /var/log/apps
 
@@ -29,15 +29,9 @@ redis_port: 6379
 # Environment
 node_env: production
 
-# Web server ports (currently exposed)
+# Web server ports
 web_http_port: 80
 web_https_port: 443
-app_port: 8001
-prometheus_port: 9090
-
-# Background workers
-worker_processes: 4
-worker_memory_limit: "2GB"
 
 # Log rotation
 logrotate_enabled: true
@@ -51,23 +45,57 @@ app_backup_retention_days: 30
 
 # Current server status
 app_servers:
-  - name: re-db
+  re-db:
     tailscale_ip: 100.92.26.38
     public_ip: 208.87.128.115
     ipv6: 2602:ff16:3:0:1:446:0:1
-    ports:
-      - 80
-      - 443
-      - 8001
-      - 9090
-    docker_installed: false
-    uptime_days: 1
-  - name: re-node-02
+    uptime_days: 47
+    services:
+      quantyra:
+        app_blue:
+          service: quantyra-app-blue.service
+          port: 8001
+          status: running
+        app_green:
+          service: quantyra-app-green.service
+          port: 8002
+          status: standby
+        scheduler:
+          service: quantyra-scheduler.service
+          status: running
+        asynqmon:
+          service: quantyra-asynqmon.service
+          port: 9090
+          status: running
+        workers:
+          - service: quantyra-worker-ingest.service
+            mode: ingest
+            concurrency: 8
+          - service: quantyra-worker-maintenance.service
+            mode: maintenance
+            concurrency: 4
+          - service: quantyra-worker-media.service
+            mode: media
+            concurrency: 6
+          - service: quantyra-worker-mls-api.service
+            mode: mls-api
+            concurrency: 1
+      caddy:
+        service: caddy.service
+        ports: [80, 443]
+        status: running
+    domains:
+      - quantyra.io
+      - lzrcdn.com
+      - media.lzrcdn.com
+    app_dir: /opt/quantyra-datalayer
+    secrets_file: /opt/quantyra-datalayer/secrets.env
+
+  re-node-02:
     tailscale_ip: 100.101.39.22
     public_ip: 23.29.118.8
     ipv6: 2602:ff16:3:1299::1
-    ports:
-      - 80
-      - 443
-    docker_installed: false
     uptime_days: 63
+    services: {}
+    status: idle
+    note: "No application services running. Ready for deployment."
