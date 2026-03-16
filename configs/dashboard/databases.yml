@@ -1,18 +1,4 @@
 databases:
-  rentalfixer:
-    app: rentalfixer
-    description: Rental Fixer
-    name: rentalfixer
-    owner: rentalfixer_admin
-    password: Rf2026PxK9mNzQwv
-    pgbouncer_max_clients: 200
-    pgbouncer_pool_size: 20
-    users:
-    - name: rentalfixer_admin
-      password: Rf2026PxK9mNzQwv
-      password_hash: SCRAM-SHA-256$4096:j0fcYaq87SFKpzGWycvm6w==$GZ1lVmJPRqpmDK6pWNYOqXLuc/hUjdH7fZmef5PDCbE=:eV6jv6MPsHbH3uy3B6J58Dv5nSMvUab5Ac64AtCVu8U=
-      roles:
-      - CREATEDB
   xotec_re:
     description: XOTEC Real Estate Platform
     name: xotec_re
