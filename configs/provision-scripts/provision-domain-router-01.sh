@@ -1,12 +1,12 @@
 #!/bin/bash
 set -e
 
+APP_SERVER_1="100.92.26.38"
+APP_SERVER_2="100.89.130.19"
+
 # Handle --rebuild flag for rebuilding config without provisioning
 if [ "$1" == "--rebuild" ]; then
     echo "Rebuilding HAProxy config..."
-    
-    APP_SERVER_1="100.92.26.38"
-    APP_SERVER_2="100.89.130.19"
     
     http_cfg="/etc/haproxy/domains/web_http.cfg"
     https_cfg="/etc/haproxy/domains/web_https.cfg"
@@ -32,18 +32,27 @@ frontend web_http
 
 EOF
 
-    # Build HTTPS frontend
+    # Build HTTPS frontend with security headers
     cat > "$https_cfg" << EOF
 # HTTPS frontend with all certificates
 frontend web_https
     bind :443 ssl${certs} alpn h2,http/1.1
     mode http
 
+    # Client IP forwarding from Cloudflare
     http-request set-header X-Real-IP %[req.hdr(CF-Connecting-IP)] if { req.hdr(CF-Connecting-IP) -m found }
     http-request set-header X-Real-IP %[src] unless { req.hdr(CF-Connecting-IP) -m found }
     http-request set-header X-Forwarded-For %[req.hdr(CF-Connecting-IP)] if { req.hdr(CF-Connecting-IP) -m found }
     http-request set-header X-Forwarded-For %[src] unless { req.hdr(CF-Connecting-IP) -m found }
     http-request set-header X-Forwarded-Proto https
+
+    # Security headers
+    http-response set-header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    http-response set-header X-Content-Type-Options "nosniff"
+    http-response set-header X-Frame-Options "SAMEORIGIN"
+    http-response set-header X-XSS-Protection "1; mode=block"
+    http-response set-header Referrer-Policy "strict-origin-when-cross-origin"
+    http-response set-header Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
 
 EOF
 
@@ -156,9 +165,6 @@ if [ -z "$DOMAIN" ] || [ -z "$APP_NAME" ] || [ -z "$APP_PORT" ]; then
     exit 1
 fi
 
-APP_SERVER_1="100.92.26.38"
-APP_SERVER_2="100.89.130.19"
-
 echo "Provisioning domain: $DOMAIN for app: $APP_NAME on port: $APP_PORT"
 [ -n "$WWW_DOMAIN" ] && echo "WWW redirect: $WWW_DOMAIN -> $DOMAIN"
 [ -n "$IS_STAGING" ] && echo "Staging environment: branch=$GIT_BRANCH"
@@ -231,18 +237,27 @@ frontend web_http
 
 EOF
 
-    # Build HTTPS frontend
+    # Build HTTPS frontend with security headers
     cat > "$https_cfg" << EOF
 # HTTPS frontend with all certificates
 frontend web_https
     bind :443 ssl${certs} alpn h2,http/1.1
     mode http
 
+    # Client IP forwarding from Cloudflare
     http-request set-header X-Real-IP %[req.hdr(CF-Connecting-IP)] if { req.hdr(CF-Connecting-IP) -m found }
     http-request set-header X-Real-IP %[src] unless { req.hdr(CF-Connecting-IP) -m found }
     http-request set-header X-Forwarded-For %[req.hdr(CF-Connecting-IP)] if { req.hdr(CF-Connecting-IP) -m found }
     http-request set-header X-Forwarded-For %[src] unless { req.hdr(CF-Connecting-IP) -m found }
     http-request set-header X-Forwarded-Proto https
+
+    # Security headers
+    http-response set-header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    http-response set-header X-Content-Type-Options "nosniff"
+    http-response set-header X-Frame-Options "SAMEORIGIN"
+    http-response set-header X-XSS-Protection "1; mode=block"
+    http-response set-header Referrer-Policy "strict-origin-when-cross-origin"
+    http-response set-header Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
 
 EOF
 
