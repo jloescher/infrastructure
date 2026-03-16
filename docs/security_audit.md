@@ -123,35 +123,24 @@ Both ports restricted to Tailscale network only via UFW:
 
 ---
 
-### 5. HIGH: Grafana Exposed with Weak Default
+### 5. ~~HIGH: Grafana Exposed with Weak Default~~ ✅ FIXED
 
-**Severity:** HIGH
+**Severity:** ~~HIGH~~ RESOLVED
 **Server:** router-01
 
 **Finding:**
-Grafana (port 3000) is accessible from the internet. Admin password is stored in plaintext in config.
+~~Grafana (port 3000) was accessible from the internet. Admin password stored in plaintext in config.~~
 
-**Current Config:**
-```
-admin_user = admin
-admin_password = nyb4faf3hye6zwn_UQT
-```
+**Resolution (2026-03-16):**
+- Port 3000 restricted to Tailscale network only via UFW
+- Configured comprehensive dashboards for all monitoring exporters:
+  - Node Exporter (System Metrics) - CPU, Memory, Disk, Network
+  - Nginx Metrics - Connections, Requests, Performance
+  - PHP-FPM Metrics - Processes, Connections, Queue
+  - PostgreSQL & HAProxy - Cluster status, connections, replication
+  - Redis - Memory, connections, operations
 
-**Risk:**
-- Unauthorized access to monitoring data
-- Infrastructure visibility to attackers
-- Credential in config file
-
-**Remediation:**
-```bash
-# Restrict Grafana to Tailscale network
-ufw delete allow 3000
-ufw allow from 100.64.0.0/10 to any port 3000
-
-# Use environment variable for password
-# grafana.ini
-admin_password = $__env{GRAFANA_ADMIN_PASSWORD}
-```
+**Access:** `http://100.102.220.16:3000` (Tailscale only)
 
 ---
 

@@ -1,0 +1,96 @@
+{
+  "id": null,
+  "uid": "nginx-quantyra",
+  "title": "Quantyra - Nginx Metrics",
+  "tags": ["nginx", "quantyra"],
+  "timezone": "browser",
+  "schemaVersion": 16,
+  "version": 0,
+  "refresh": "30s",
+  "panels": [
+    {
+      "title": "Active Connections",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "targets": [
+        {
+          "expr": "nginx_connections_active",
+          "legendFormat": "{{instance}}",
+          "refId": "A",
+          "datasource": "Prometheus"
+        }
+      ]
+    },
+    {
+      "title": "Requests/sec",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "targets": [
+        {
+          "expr": "rate(nginx_requests_total[1m])",
+          "legendFormat": "{{instance}}",
+          "refId": "A",
+          "datasource": "Prometheus"
+        }
+      ]
+    },
+    {
+      "title": "Accepts/sec",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "targets": [
+        {
+          "expr": "rate(nginx_accepts[1m])",
+          "legendFormat": "{{instance}}",
+          "refId": "A",
+          "datasource": "Prometheus"
+        }
+      ]
+    },
+    {
+      "title": "Reading/Writing",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "targets": [
+        {
+          "expr": "nginx_connections_reading",
+          "legendFormat": "{{instance}} Reading",
+          "refId": "A",
+          "datasource": "Prometheus"
+        },
+        {
+          "expr": "nginx_connections_writing",
+          "legendFormat": "{{instance}} Writing",
+          "refId": "B",
+          "datasource": "Prometheus"
+        }
+      ]
+    },
+    {
+      "title": "Connections Over Time",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 4},
+      "targets": [
+        {
+          "expr": "nginx_connections_active",
+          "legendFormat": "{{instance}} Active",
+          "refId": "A",
+          "datasource": "Prometheus"
+        }
+      ]
+    },
+    {
+      "title": "Request Rate",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 4},
+      "targets": [
+        {
+          "expr": "rate(nginx_requests_total[5m])",
+          "legendFormat": "{{instance}}",
+          "refId": "A",
+          "datasource": "Prometheus"
+        }
+      ]
+    }
+  ]
+}
