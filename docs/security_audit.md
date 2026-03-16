@@ -31,7 +31,7 @@ This report details security findings and performance optimization opportunities
 | router-01 (100.102.220.16) | HAProxy, Prometheus, Grafana | Ubuntu 24.04.4 | 6.8.0-85 | ✅ Active |
 | router-02 (100.116.175.9) | HAProxy | Ubuntu 24.04.4 | 6.8.0-85 | ✅ Active |
 | re-db (100.92.26.38) | App Server | Ubuntu 24.04.3 | 6.8.0-90 | ✅ Active |
-| re-node-02 (100.89.130.19) | App Server | Ubuntu 24.04.4 | 6.8.0-106 | ❌ Inactive |
+| re-node-02 (100.89.130.19) | App Server | Ubuntu 24.04.4 | 6.8.0-106 | ❌ UFW Inactive |
 | re-node-01 (100.126.103.51) | PostgreSQL, Redis, Patroni | Ubuntu 24.04.4 | 6.8.0-106 | ✅ Active |
 | re-node-03 (100.114.117.46) | PostgreSQL, Redis, Patroni | Ubuntu 24.04.4 | 6.8.0-106 | ✅ Active |
 | re-node-04 (100.115.75.119) | PostgreSQL, Patroni | Ubuntu 24.04.4 | 6.8.0-106 | ✅ Active |
@@ -40,13 +40,13 @@ This report details security findings and performance optimization opportunities
 
 ## Security Findings
 
-### 1. CRITICAL: Firewall Not Active on re-node-02
+### 1. CRITICAL: UFW Firewall Not Enabled on re-node-02
 
 **Severity:** CRITICAL
-**Server:** re-node-02 (100.89.130.19)
+**Server:** re-node-02 (100.89.130.19) - Server is UP, but firewall is OFF
 
 **Finding:**
-UFW firewall is not active on re-node-02. This exposes the application server directly to the internet without any filtering.
+UFW firewall service is not enabled/active on re-node-02. The server itself is running, but all ports are exposed directly to the internet without any filtering.
 
 **Risk:**
 - Direct access to application ports (8100, 8101)
