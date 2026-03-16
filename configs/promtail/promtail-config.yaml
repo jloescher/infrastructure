@@ -1,0 +1,91 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /var/lib/promtail/positions.yaml
+
+clients:
+  - url: http://100.102.220.16:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: syslog
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: syslog
+          host: __HOST__
+          __path__: /var/log/syslog
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\w+\s+\d+\s+\d+:\d+:\d+)\s+(?P<hostname>\S+)\s+(?P<program>\S+?)(?:\[(?P<pid>\d+)\])?:\s+(?P<message>.*)$'
+
+  - job_name: auth
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: auth
+          host: __HOST__
+          __path__: /var/log/auth.log
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\w+\s+\d+\s+\d+:\d+:\d+)\s+(?P<hostname>\S+)\s+(?P<program>\S+?)(?:\[(?P<pid>\d+)\])?:\s+(?P<message>.*)$'
+
+  - job_name: nginx
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: nginx
+          host: __HOST__
+          __path__: /var/log/nginx/*.log
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<remote_addr>[\d\.]+) - (?P<remote_user>\S+) \[(?P<time_local>[^\]]+)\] "(?P<request>[^"]+)" (?P<status>\d+) (?P<body_bytes_sent>\d+) "(?P<http_referer>[^"]*)" "(?P<http_user_agent>[^"]*)"'
+
+  - job_name: php-fpm
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: php-fpm
+          host: __HOST__
+          __path__: /var/log/php8.5-fpm/*.log
+
+  - job_name: postgresql
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: postgresql
+          host: __HOST__
+          __path__: /var/log/postgresql/*.log
+
+  - job_name: redis
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: redis
+          host: __HOST__
+          __path__: /var/log/redis/redis-server.log
+
+  - job_name: haproxy
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: haproxy
+          host: __HOST__
+          __path__: /var/log/haproxy.log
+
+  - job_name: patroni
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: patroni
+          host: __HOST__
+          __path__: /var/log/patroni.log

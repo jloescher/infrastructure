@@ -14,8 +14,8 @@
       "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
       "targets": [
         {
-          "expr": "nginx_connections_active",
-          "legendFormat": "{{instance}}",
+          "expr": "sum by (node) (nginx_connections_active)",
+          "legendFormat": "{{node}}",
           "refId": "A",
           "datasource": "Prometheus"
         }
@@ -27,8 +27,8 @@
       "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
       "targets": [
         {
-          "expr": "rate(nginx_requests_total[1m])",
-          "legendFormat": "{{instance}}",
+          "expr": "sum by (node) (rate(nginx_requests_total[1m]))",
+          "legendFormat": "{{node}}",
           "refId": "A",
           "datasource": "Prometheus"
         }
@@ -40,8 +40,8 @@
       "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
       "targets": [
         {
-          "expr": "rate(nginx_accepts[1m])",
-          "legendFormat": "{{instance}}",
+          "expr": "sum by (node) (rate(nginx_accepts[1m]))",
+          "legendFormat": "{{node}}",
           "refId": "A",
           "datasource": "Prometheus"
         }
@@ -53,14 +53,14 @@
       "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
       "targets": [
         {
-          "expr": "nginx_connections_reading",
-          "legendFormat": "{{instance}} Reading",
+          "expr": "sum by (node) (nginx_connections_reading)",
+          "legendFormat": "{{node}} Reading",
           "refId": "A",
           "datasource": "Prometheus"
         },
         {
-          "expr": "nginx_connections_writing",
-          "legendFormat": "{{instance}} Writing",
+          "expr": "sum by (node) (nginx_connections_writing)",
+          "legendFormat": "{{node}} Writing",
           "refId": "B",
           "datasource": "Prometheus"
         }
@@ -72,8 +72,8 @@
       "gridPos": {"h": 6, "w": 12, "x": 0, "y": 4},
       "targets": [
         {
-          "expr": "nginx_connections_active",
-          "legendFormat": "{{instance}} Active",
+          "expr": "sum by (node) (nginx_connections_active)",
+          "legendFormat": "{{node}} Active",
           "refId": "A",
           "datasource": "Prometheus"
         }
@@ -85,8 +85,8 @@
       "gridPos": {"h": 6, "w": 12, "x": 12, "y": 4},
       "targets": [
         {
-          "expr": "rate(nginx_requests_total[5m])",
-          "legendFormat": "{{instance}}",
+          "expr": "sum by (node) (rate(nginx_requests_total[5m]))",
+          "legendFormat": "{{node}}",
           "refId": "A",
           "datasource": "Prometheus"
         }

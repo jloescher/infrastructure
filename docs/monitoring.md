@@ -9,6 +9,8 @@ The monitoring stack includes:
 - **Prometheus**: Metrics collection and alerting
 - **Grafana**: Visualization and dashboards
 - **Alertmanager**: Alert routing and notifications
+- **Loki**: Centralized log aggregation
+- **Promtail**: Log collection agent
 - **Node Exporter**: System metrics
 - **Postgres Exporter**: PostgreSQL metrics
 - **Redis Exporter**: Redis metrics
@@ -20,9 +22,10 @@ The monitoring stack includes:
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
-| Prometheus | http://100.102.220.16:9090 | None |
-| Grafana | http://100.102.220.16:3000 | admin / admin |
-| Alertmanager | http://100.102.220.16:9093 | None |
+| Prometheus | http://100.102.220.16:9090 | None (Tailscale only) |
+| Grafana | http://100.102.220.16:3000 | admin / nyb4faf3hye6zwn_UQT |
+| Alertmanager | http://100.102.220.16:9093 | None (Tailscale only) |
+| Loki | http://100.102.220.16:3100 | None (Tailscale only) |
 | HAProxy Stats | http://100.102.220.16:8404 | admin / jFNeZ2bhfrTjTK7aKApD |
 
 ## Prometheus Configuration
@@ -30,6 +33,8 @@ The monitoring stack includes:
 ### Scrape Targets
 
 Located at `/etc/prometheus/prometheus.yml`:
+
+**Note:** All scrape targets include `node` and `role` labels for easier identification.
 
 ```yaml
 global:
@@ -40,75 +45,86 @@ global:
     environment: 'production'
 
 scrape_configs:
-  # Prometheus self-monitoring
-  - job_name: 'prometheus'
-    static_configs:
-      - targets: ['localhost:9090']
-
-  # Node Exporter - All servers
+  # Node Exporter - All servers (with node labels)
   - job_name: 'node_exporter'
     static_configs:
-      - targets:
-          - '100.126.103.51:9100'  # re-node-01
-          - '100.114.117.46:9100'  # re-node-03
-          - '100.115.75.119:9100'  # re-node-04
-          - '100.102.220.16:9100'  # router-01
-          - '100.116.175.9:9100'   # router-02
-          - '100.92.26.38:9100'    # re-db
-          - '100.89.130.19:9100'   # re-node-02
+      - targets: ['100.126.103.51:9100']
+        labels: {node: 're-node-01', role: 'database'}
+      - targets: ['100.114.117.46:9100']
+        labels: {node: 're-node-03', role: 'database'}
+      - targets: ['100.115.75.119:9100']
+        labels: {node: 're-node-04', role: 'database'}
+      - targets: ['100.102.220.16:9100']
+        labels: {node: 'router-01', role: 'router'}
+      - targets: ['100.116.175.9:9100']
+        labels: {node: 'router-02', role: 'router'}
+      - targets: ['100.92.26.38:9100']
+        labels: {node: 're-db', role: 'app'}
+      - targets: ['100.89.130.19:9100']
+        labels: {node: 're-node-02', role: 'app'}
 
-  # PostgreSQL Exporter
+  # PostgreSQL Exporter (with node labels)
   - job_name: 'postgres_exporter'
     static_configs:
-      - targets:
-          - '100.126.103.51:9187'
-          - '100.114.117.46:9187'
-          - '100.115.75.119:9187'
+      - targets: ['100.126.103.51:9187']
+        labels: {node: 're-node-01'}
+      - targets: ['100.114.117.46:9187']
+        labels: {node: 're-node-03'}
+      - targets: ['100.115.75.119:9187']
+        labels: {node: 're-node-04'}
 
-  # Redis Exporter
+  # Redis Exporter (with node labels)
   - job_name: 'redis_exporter'
     static_configs:
-      - targets:
-          - '100.126.103.51:9121'
-          - '100.114.117.46:9121'
+      - targets: ['100.126.103.51:9121']
+        labels: {node: 're-node-01'}
+      - targets: ['100.114.117.46:9121']
+        labels: {node: 're-node-03'}
 
-  # HAProxy Exporter
+  # HAProxy Exporter (with node labels)
   - job_name: 'haproxy_exporter'
     static_configs:
-      - targets:
-          - '100.102.220.16:9101'
-          - '100.116.175.9:9101'
+      - targets: ['100.102.220.16:9101']
+        labels: {node: 'router-01'}
+      - targets: ['100.116.175.9:9101']
+        labels: {node: 'router-02'}
 
-  # Patroni
+  # Patroni (with node labels)
   - job_name: 'patroni'
     metrics_path: '/metrics'
     static_configs:
-      - targets:
-          - '100.126.103.51:8008'
-          - '100.114.117.46:8008'
-          - '100.115.75.119:8008'
+      - targets: ['100.126.103.51:8008']
+        labels: {node: 're-node-01'}
+      - targets: ['100.114.117.46:8008']
+        labels: {node: 're-node-03'}
+      - targets: ['100.115.75.119:8008']
+        labels: {node: 're-node-04'}
 
-  # etcd
+  # etcd (with node labels)
   - job_name: 'etcd'
     static_configs:
-      - targets:
-          - "100.102.220.16:2379"
-          - "100.116.175.9:2379"
-          - "100.115.75.119:2379"
+      - targets: ['100.102.220.16:2379']
+        labels: {node: 'router-01'}
+      - targets: ['100.116.175.9:2379']
+        labels: {node: 'router-02'}
+      - targets: ['100.115.75.119:2379']
+        labels: {node: 're-node-04'}
 
-  # Nginx Exporter
+  # Nginx Exporter (with node labels)
   - job_name: 'nginx_exporter'
     static_configs:
-      - targets:
-          - '100.92.26.38:9113'
-          - '100.89.130.19:9113'
+      - targets: ['100.92.26.38:9113']
+        labels: {node: 're-db'}
+      - targets: ['100.89.130.19:9113']
+        labels: {node: 're-node-02'}
 
-  # PHP-FPM Exporter
+  # PHP-FPM Exporter (with node labels)
   - job_name: 'php_fpm_exporter'
     static_configs:
-      - targets:
-          - '100.92.26.38:9253'
-          - '100.89.130.19:9253'
+      - targets: ['100.92.26.38:9253']
+        labels: {node: 're-db'}
+      - targets: ['100.89.130.19:9253']
+        labels: {node: 're-node-02'}
 ```
 
 ## Exporter Configuration
@@ -313,29 +329,109 @@ receivers:
         send_resolved: true
 ```
 
+## Centralized Logging (Loki)
+
+### Architecture
+
+```
+All Servers → Promtail → Loki (router-01) → Grafana
+```
+
+Loki is a log aggregation system designed to store and query logs from all servers.
+
+### Components
+
+| Component | Location | Port | Purpose |
+|-----------|----------|------|---------|
+| Loki | router-01 | 3100 | Log storage and query |
+| Promtail | All servers | 9080 | Log collection agent |
+
+### Configuration
+
+**Loki config:** `/etc/loki/loki-config.yaml`
+
+```yaml
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+
+common:
+  path_prefix: /var/lib/loki
+  storage:
+    filesystem:
+      chunks_directory: /var/lib/loki/chunks
+      rules_directory: /var/lib/loki/rules
+  replication_factor: 1
+
+schema_config:
+  configs:
+    - from: 2020-10-24
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  retention_period: 744h  # 31 days
+```
+
+**Promtail config:** `/etc/promtail/promtail-config.yaml`
+
+Each server has a customized Promtail config collecting relevant logs:
+
+| Server | Logs Collected |
+|--------|----------------|
+| router-01/02 | syslog, auth, haproxy |
+| re-db, re-node-02 | syslog, auth, nginx, php-fpm |
+| re-node-01/03/04 | syslog, auth, postgresql, patroni, redis |
+
+### Querying Logs in Grafana
+
+1. Navigate to **Explore** in Grafana
+2. Select **Loki** datasource
+3. Use LogQL queries:
+
+```logql
+# All syslog logs
+{job="syslog"}
+
+# Logs from specific host
+{host="re-db"}
+
+# Nginx logs
+{job="nginx"}
+
+# Search for errors
+{job="syslog"} |= "error"
+
+# Filter by pattern
+{job="auth"} |= "Failed"
+```
+
+### Retention
+
+- **Log retention**: 31 days (744h)
+- **Storage**: `/var/lib/loki/` on router-01
+
 ## Grafana Dashboards
-
-### Recommended Dashboards
-
-Import by ID from grafana.com:
-
-| Dashboard | ID | Description |
-|-----------|-----|-------------|
-| Node Exporter Full | 1860 | System metrics |
-| PostgreSQL | 9628 | Database metrics |
-| Redis | 11835 | Redis metrics |
-| HAProxy | 367 | Load balancer metrics |
-| Nginx | 12708 | Web server metrics |
-| PHP-FPM | 9912 | PHP metrics |
 
 ### Custom Dashboards
 
-Create dashboards for:
-- Application-specific metrics
-- Business KPIs
-- Custom alerts
+Pre-configured dashboards for the infrastructure:
 
-## Grafana Datasources
+| Dashboard | UID | Description |
+|-----------|-----|-------------|
+| Node Exporter | node-exporter-quantyra | System metrics (CPU, Memory, Disk, Network) |
+| PostgreSQL & HAProxy | postgres-haproxy-quantyra | Database cluster status and connections |
+| Redis | redis-quantyra | Redis memory, connections, operations |
+| Nginx | nginx-quantyra | Web server connections and requests |
+| PHP-FPM | phpfpm-quantyra | PHP process pool metrics |
+| Loki Logs | loki-logs-quantyra | Centralized log viewing and analysis |
+
+### Grafana Datasources
 
 Pre-configured datasources:
 
@@ -345,7 +441,15 @@ datasources:
     type: prometheus
     url: http://localhost:9090
     isDefault: true
+  - name: Loki
+    type: loki
+    url: http://localhost:3100
 ```
+
+### Using Labels
+
+All dashboards use `node` labels instead of IP addresses for cleaner display:
+- Query example: `sum by (node) (node_cpu_seconds_total)`
 
 ## Maintenance
 

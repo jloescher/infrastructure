@@ -14,8 +14,8 @@
       "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
       "targets": [
         {
-          "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)",
-          "legendFormat": "{{instance}}",
+          "expr": "100 - (avg by (node) (rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)",
+          "legendFormat": "{{node}}",
           "refId": "A",
           "datasource": "Prometheus"
         }
@@ -42,8 +42,8 @@
       "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
       "targets": [
         {
-          "expr": "100 - (100 * (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))",
-          "legendFormat": "{{instance}}",
+          "expr": "100 - (100 * avg by (node) (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))",
+          "legendFormat": "{{node}}",
           "refId": "A",
           "datasource": "Prometheus"
         }
@@ -70,8 +70,8 @@
       "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
       "targets": [
         {
-          "expr": "100 - ((node_filesystem_avail_bytes{mountpoint=\"/\",fstype!=\"tmpfs\"} * 100) / node_filesystem_size_bytes{mountpoint=\"/\",fstype!=\"tmpfs\"})",
-          "legendFormat": "{{instance}}",
+          "expr": "100 - avg by (node) ((node_filesystem_avail_bytes{mountpoint=\"/\",fstype!=\"tmpfs\"} * 100) / node_filesystem_size_bytes{mountpoint=\"/\",fstype!=\"tmpfs\"})",
+          "legendFormat": "{{node}}",
           "refId": "A",
           "datasource": "Prometheus"
         }
@@ -98,8 +98,8 @@
       "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
       "targets": [
         {
-          "expr": "node_load1",
-          "legendFormat": "{{instance}}",
+          "expr": "avg by (node) (node_load1)",
+          "legendFormat": "{{node}}",
           "refId": "A",
           "datasource": "Prometheus"
         }
@@ -111,8 +111,8 @@
       "gridPos": {"h": 6, "w": 12, "x": 0, "y": 4},
       "targets": [
         {
-          "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
-          "legendFormat": "{{instance}}",
+          "expr": "100 - (avg by (node) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+          "legendFormat": "{{node}}",
           "refId": "A",
           "datasource": "Prometheus"
         }
@@ -124,8 +124,8 @@
       "gridPos": {"h": 6, "w": 12, "x": 12, "y": 4},
       "targets": [
         {
-          "expr": "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes",
-          "legendFormat": "{{instance}} Used",
+          "expr": "avg by (node) (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes)",
+          "legendFormat": "{{node}} Used",
           "refId": "A",
           "datasource": "Prometheus"
         }

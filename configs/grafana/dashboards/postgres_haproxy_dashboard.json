@@ -21,13 +21,13 @@
       },
       "targets": [
         {
-          "expr": "count(patroni_role{cluster=\"quantyra_pg\"} == 1)",
+          "expr": "sum(patroni_primary{scope=\"quantyra_pg\"})",
           "legendFormat": "Leader",
           "refId": "A",
           "datasource": "Prometheus"
         },
         {
-          "expr": "count(patroni_role{cluster=\"quantyra_pg\"} == 0)",
+          "expr": "sum(patroni_replica{scope=\"quantyra_pg\"})",
           "legendFormat": "Replicas",
           "refId": "B",
           "datasource": "Prometheus"
@@ -104,7 +104,7 @@
       },
       "targets": [
         {
-          "expr": "sum(haproxy_backend_active_servers{backend=~\"postgres.*\"})",
+          "expr": "sum(haproxy_backend_active_servers{backend=~\"pg_.*\"})",
           "legendFormat": "Active Backends",
           "refId": "A",
           "datasource": "Prometheus"
@@ -123,13 +123,13 @@
       "targets": [
         {
           "expr": "rate(pg_stat_database_xact_commit{datname!=\"template0\"}[5m])",
-          "legendFormat": "{{instance}} - {{datname}}",
+          "legendFormat": "{{node}} - {{datname}}",
           "refId": "A",
           "datasource": "Prometheus"
         },
         {
           "expr": "rate(pg_stat_database_xact_rollback{datname!=\"template0\"}[5m])",
-          "legendFormat": "{{instance}} - {{datname}} (rollback)",
+          "legendFormat": "{{node}} - {{datname}} (rollback)",
           "refId": "B",
           "datasource": "Prometheus"
         }
@@ -146,8 +146,8 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(pg_stat_database_xact_commit[1m])) by (instance)",
-          "legendFormat": "{{instance}}",
+          "expr": "sum(rate(pg_stat_database_xact_commit[1m])) by (node)",
+          "legendFormat": "{{node}}",
           "refId": "A",
           "datasource": "Prometheus"
         }
@@ -164,13 +164,13 @@
       },
       "targets": [
         {
-          "expr": "rate(haproxy_frontend_connections_total{frontend=\"postgres_write\"}[5m])",
+          "expr": "sum(rate(haproxy_frontend_connections_total{frontend=\"pg_rw\"}[5m]))",
           "legendFormat": "Write (5000)",
           "refId": "A",
           "datasource": "Prometheus"
         },
         {
-          "expr": "rate(haproxy_frontend_connections_total{frontend=\"postgres_read\"}[5m])",
+          "expr": "sum(rate(haproxy_frontend_connections_total{frontend=\"pg_ro\"}[5m]))",
           "legendFormat": "Read (5001)",
           "refId": "B",
           "datasource": "Prometheus"
@@ -189,7 +189,7 @@
       "targets": [
         {
           "expr": "rate(pg_stat_database_blks_hit{datname!=\"template0\"}[5m]) / (rate(pg_stat_database_blks_hit{datname!=\"template0\"}[5m]) + rate(pg_stat_database_blks_read{datname!=\"template0\"}[5m])) * 100",
-          "legendFormat": "{{instance}} - {{datname}}",
+          "legendFormat": "{{node}} - {{datname}}",
           "refId": "A",
           "datasource": "Prometheus"
         }
@@ -206,8 +206,8 @@
       },
       "targets": [
         {
-          "expr": "100 - (avg by(instance) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
-          "legendFormat": "{{instance}}",
+          "expr": "100 - (avg by (node) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+          "legendFormat": "{{node}}",
           "refId": "A",
           "datasource": "Prometheus"
         }
@@ -224,8 +224,8 @@
       },
       "targets": [
         {
-          "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
-          "legendFormat": "{{instance}}",
+          "expr": "avg by (node) ((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100)",
+          "legendFormat": "{{node}}",
           "refId": "A",
           "datasource": "Prometheus"
         }
@@ -242,14 +242,14 @@
       },
       "targets": [
         {
-          "expr": "rate(node_disk_read_bytes_total[5m])",
-          "legendFormat": "{{instance}} - {{device}} Read",
+          "expr": "sum by (node) (rate(node_disk_read_bytes_total[5m]))",
+          "legendFormat": "{{node}} - {{device}} Read",
           "refId": "A",
           "datasource": "Prometheus"
         },
         {
-          "expr": "rate(node_disk_written_bytes_total[5m])",
-          "legendFormat": "{{instance}} - {{device}} Write",
+          "expr": "sum by (node) (rate(node_disk_written_bytes_total[5m]))",
+          "legendFormat": "{{node}} - {{device}} Write",
           "refId": "B",
           "datasource": "Prometheus"
         }
@@ -266,8 +266,8 @@
       },
       "targets": [
         {
-          "expr": "(node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"}) * 100",
-          "legendFormat": "{{instance}} - {{mountpoint}}",
+          "expr": "avg by (node) ((node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"}) * 100)",
+          "legendFormat": "{{node}} - {{mountpoint}}",
           "refId": "A",
           "datasource": "Prometheus"
         }

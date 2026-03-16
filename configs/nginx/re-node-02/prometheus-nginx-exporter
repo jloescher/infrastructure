@@ -1,0 +1,1 @@
+ARGS="--web.listen-address=100.89.130.19:9113 --nginx.scrape-uri=http://127.0.0.1:9114/stub_status"

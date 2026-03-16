@@ -2,13 +2,13 @@ groups:
   - name: node_alerts
     rules:
       - alert: HighCPUUsage
-        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        expr: 100 - (avg by(node) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "High CPU usage on {{ $labels.instance }}"
-          description: "CPU usage is {{ $value }}% on {{ $labels.instance }}"
+          summary: "High CPU usage on {{ $labels.node }}"
+          description: "CPU usage is {{ $value }}% on {{ $labels.node }}"
 
       - alert: HighMemoryUsage
         expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
@@ -16,25 +16,25 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "High memory usage on {{ $labels.instance }}"
-          description: "Memory usage is {{ $value }}% on {{ $labels.instance }}"
+          summary: "High memory usage on {{ $labels.node }}"
+          description: "Memory usage is {{ $value }}% on {{ $labels.node }}"
 
       - alert: DiskSpaceLow
-        expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) * 100 < 15
+        expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) * 100 < 20
         for: 5m
         labels:
-          severity: critical
+          severity: warning
         annotations:
-          summary: "Low disk space on {{ $labels.instance }}"
+          summary: "Low disk space on {{ $labels.node }}"
           description: "Disk {{ $labels.mountpoint }} has only {{ $value }}% free space"
 
       - alert: DiskSpaceCritical
-        expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) * 100 < 5
+        expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) * 100 < 10
         for: 1m
         labels:
           severity: critical
         annotations:
-          summary: "Critical disk space on {{ $labels.instance }}"
+          summary: "Critical disk space on {{ $labels.node }}"
           description: "Disk {{ $labels.mountpoint }} has only {{ $value }}% free space - immediate action required"
 
       - alert: HighDiskIO
@@ -43,7 +43,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "High disk I/O on {{ $labels.instance }}"
+          summary: "High disk I/O on {{ $labels.node }}"
           description: "Disk {{ $labels.device }} has high I/O wait time"
 
       - alert: NodeDown
@@ -52,8 +52,17 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "Node {{ $labels.instance }} is down"
-          description: "{{ $labels.instance }} has been unreachable for more than 1 minute"
+          summary: "Node {{ $labels.node }} is down"
+          description: "{{ $labels.node }} has been unreachable for more than 1 minute"
+
+      - alert: NodeExporterDown
+        expr: up{job="node_exporter"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Node exporter down on {{ $labels.instance }}"
+          description: "Monitoring agent not responding on {{ $labels.instance }}"
 
   - name: postgresql_alerts
     rules:
@@ -63,8 +72,8 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "PostgreSQL is down on {{ $labels.instance }}"
-          description: "PostgreSQL instance {{ $labels.instance }} is not responding"
+          summary: "PostgreSQL is down on {{ $labels.node }}"
+          description: "PostgreSQL instance {{ $labels.node }} is not responding"
 
       - alert: PostgreSQLTooManyConnections
         expr: (pg_stat_activity_count / pg_settings_max_connections) * 100 > 80
@@ -72,8 +81,8 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Too many PostgreSQL connections on {{ $labels.instance }}"
-          description: "{{ $value }}% of max connections used on {{ $labels.instance }}"
+          summary: "Too many PostgreSQL connections on {{ $labels.node }}"
+          description: "{{ $value }}% of max connections used on {{ $labels.node }}"
 
       - alert: PostgreSQLReplicationLag
         expr: pg_replication_lag_seconds > 30 and pg_replication_is_replica == 1 and rate(pg_stat_database_xact_commit{datname="postgres"}[5m]) > 0
@@ -81,7 +90,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "PostgreSQL replication lag on {{ $labels.instance }}"
+          summary: "PostgreSQL replication lag on {{ $labels.node }}"
           description: "Replication lag is {{ $value }} seconds"
 
       - alert: PostgreSQLReplicationLagCritical
@@ -90,7 +99,7 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "Critical PostgreSQL replication lag on {{ $labels.instance }}"
+          summary: "Critical PostgreSQL replication lag on {{ $labels.node }}"
           description: "Replication lag is {{ $value }} seconds - immediate attention required"
 
       - alert: PostgreSQLDeadlocks
@@ -99,17 +108,8 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "PostgreSQL deadlocks detected on {{ $labels.instance }}"
+          summary: "PostgreSQL deadlocks detected on {{ $labels.node }}"
           description: "{{ $value }} deadlocks per second detected"
-
-      - alert: PostgreSQLSlowQueries
-        expr: rate(pg_stat_activity_duration_seconds{state="active"}[5m]) > 10
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "Slow PostgreSQL queries on {{ $labels.instance }}"
-          description: "Queries taking longer than 10 seconds detected"
 
       - alert: PatroniClusterDegraded
         expr: patroni_health == 0
@@ -117,8 +117,17 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "Patroni cluster degraded on {{ $labels.instance }}"
-          description: "Patroni member {{ $labels.instance }} is not healthy"
+          summary: "Patroni cluster degraded on {{ $labels.node }}"
+          description: "Patroni member {{ $labels.node }} is not healthy"
+
+      - alert: PatroniLeaderMissing
+        expr: count(patroni_role == 1) == 0 or count(patroni_role == 1) > 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Patroni leader issue"
+          description: "No leader or multiple leaders detected in Patroni cluster"
 
   - name: redis_alerts
     rules:
@@ -128,8 +137,8 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "Redis is down on {{ $labels.instance }}"
-          description: "Redis instance {{ $labels.instance }} is not responding"
+          summary: "Redis is down on {{ $labels.node }}"
+          description: "Redis instance {{ $labels.node }} is not responding"
 
       - alert: RedisMemoryHigh
         expr: (redis_memory_used_bytes / redis_memory_max_bytes) * 100 > 85
@@ -137,8 +146,17 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Redis memory usage high on {{ $labels.instance }}"
-          description: "Memory usage is {{ $value }}% on {{ $labels.instance }}"
+          summary: "Redis memory usage high on {{ $labels.node }}"
+          description: "Memory usage is {{ $value }}% on {{ $labels.node }}"
+
+      - alert: RedisMemoryCritical
+        expr: (redis_memory_used_bytes / redis_memory_max_bytes) * 100 > 95
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis memory critical on {{ $labels.node }}"
+          description: "Memory usage is {{ $value }}% - eviction may be failing"
 
       - alert: RedisConnectionsHigh
         expr: (redis_connected_clients / redis_config_maxclients) * 100 > 80
@@ -146,7 +164,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Redis connections high on {{ $labels.instance }}"
+          summary: "Redis connections high on {{ $labels.node }}"
           description: "{{ $value }}% of max connections used"
 
       - alert: RedisReplicationBroken
@@ -155,8 +173,17 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "Redis replication broken on {{ $labels.instance }}"
+          summary: "Redis replication broken on {{ $labels.node }}"
           description: "Number of connected replicas has decreased"
+
+      - alert: RedisRejectedConnections
+        expr: increase(redis_rejected_connections_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis rejecting connections on {{ $labels.node }}"
+          description: "Connections rejected due to maxclients limit"
 
   - name: haproxy_alerts
     rules:
@@ -166,8 +193,8 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "HAProxy is down on {{ $labels.instance }}"
-          description: "HAProxy instance {{ $labels.instance }} is not responding"
+          summary: "HAProxy is down on {{ $labels.node }}"
+          description: "HAProxy instance {{ $labels.node }} is not responding"
 
       - alert: HAProxyBackendDown
         expr: haproxy_backend_active_servers == 0
@@ -196,6 +223,73 @@ groups:
           summary: "High connection rate on HAProxy frontend {{ $labels.frontend }}"
           description: "Connection rate is {{ $value }} per second"
 
+      - alert: HAProxySessionLimit
+        expr: (haproxy_frontend_current_sessions / haproxy_frontend_max_sessions) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HAProxy session limit approaching on {{ $labels.frontend }}"
+          description: "{{ $value }}% of max sessions used"
+
+  - name: phpfpm_alerts
+    rules:
+      - alert: PHPFPMPoolExhausted
+        expr: phpfpm_processes_total{state="idle"} < 2
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PHP-FPM pool nearly exhausted on {{ $labels.node }}"
+          description: "Only {{ $value }} idle processes remaining"
+
+      - alert: PHPFPMPoolBusy
+        expr: (phpfpm_processes_total{state="active"} / phpfpm_processes_total) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PHP-FPM pool busy on {{ $labels.node }}"
+          description: "{{ $value }}% of processes are active"
+
+      - alert: PHPFPMSlowRequests
+        expr: rate(phpfpm_slow_requests_total[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PHP-FPM slow requests on {{ $labels.node }}"
+          description: "{{ $value }} slow requests per second"
+
+      - alert: PHPFPMDOWN
+        expr: phpfpm_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PHP-FPM not responding on {{ $labels.node }}"
+          description: "PHP-FPM pool is down or unreachable"
+
+  - name: nginx_alerts
+    rules:
+      - alert: NginxDown
+        expr: nginx_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Nginx is down on {{ $labels.node }}"
+          description: "Nginx instance {{ $labels.node }} is not responding"
+
+      - alert: NginxHighErrorRate
+        expr: rate(nginx_http_requests_total{status=~"5.."}[5m]) / rate(nginx_http_requests_total[5m]) * 100 > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Nginx high error rate on {{ $labels.node }}"
+          description: "{{ $value }}% of requests returning 5xx errors"
+
   - name: etcd_alerts
     rules:
       - alert: EtcdDown
@@ -204,8 +298,8 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "etcd is down"
-          description: "etcd instance {{ $labels.instance }} is not responding"
+          summary: "etcd is down on {{ $labels.node }}"
+          description: "etcd instance {{ $labels.node }} is not responding"
 
       - alert: EtcdHighFsyncDuration
         expr: histogram_quantile(0.99, rate(etcd_disk_wal_fsync_duration_seconds_bucket[5m])) > 0.5
@@ -213,7 +307,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "High etcd fsync duration"
+          summary: "High etcd fsync duration on {{ $labels.node }}"
           description: "etcd WAL fsync duration is {{ $value }}s"
 
       - alert: EtcdDBSizeHigh
@@ -222,25 +316,5 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "etcd database size high"
+          summary: "etcd database size high on {{ $labels.node }}"
           description: "etcd DB size is {{ $value }}% of quota"
-
-  - name: backup_alerts
-    rules:
-      - alert: BackupNotRun
-        expr: time() - pgbackrest_backup_timestamp_seconds > 86400 * 2
-        for: 1h
-        labels:
-          severity: warning
-        annotations:
-          summary: "PostgreSQL backup not run recently"
-          description: "Last backup was more than 2 days ago"
-
-      - alert: BackupFailed
-        expr: pgbackrest_backup_status == 0
-        for: 5m
-        labels:
-          severity: critical
-        annotations:
-          summary: "PostgreSQL backup failed"
-          description: "Backup operation failed on {{ $labels.instance }}"

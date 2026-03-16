@@ -1,0 +1,25 @@
+[Unit]
+Description=etcd
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=etcd
+Group=etcd
+Type=notify
+ExecStart=/usr/local/bin/etcd \
+  --name=router2-etcd \
+  --data-dir=/var/lib/etcd \
+  --listen-client-urls=http://100.116.175.9:2379,http://127.0.0.1:2379 \
+  --advertise-client-urls=http://100.116.175.9:2379 \
+  --listen-peer-urls=http://100.116.175.9:2380 \
+  --initial-advertise-peer-urls=http://100.116.175.9:2380 \
+  --initial-cluster=router1-etcd=http://100.102.220.16:2380,router2-etcd=http://100.116.175.9:2380,renode04-etcd=http://100.115.75.119:2380 \
+  --initial-cluster-state=new \
+  --initial-cluster-token=quantyra-etcd-cluster
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

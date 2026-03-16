@@ -1,0 +1,55 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /var/lib/promtail/positions.yaml
+
+clients:
+  - url: http://100.102.220.16:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: syslog
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: syslog
+          host: re-node-03
+          __path__: /var/log/syslog
+
+  - job_name: auth
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: auth
+          host: re-node-03
+          __path__: /var/log/auth.log
+
+  - job_name: postgresql
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: postgresql
+          host: re-node-03
+          __path__: /var/log/postgresql/*.log
+
+  - job_name: patroni
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: patroni
+          host: re-node-03
+          __path__: /var/log/patroni.log
+
+  - job_name: redis
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: redis
+          host: re-node-03
+          __path__: /var/log/redis/redis-server.log

@@ -21,57 +21,73 @@ scrape_configs:
 
   - job_name: 'node_exporter'
     static_configs:
-      - targets:
-          - '100.126.103.51:9100'
-          - '100.114.117.46:9100'
-          - '100.115.75.119:9100'
-          - '100.102.220.16:9100'
-          - '100.116.175.9:9100'
-          - '100.92.26.38:9100'
-          - '100.89.130.19:9100'
+      - targets: ['100.126.103.51:9100']
+        labels: {node: 're-node-01', role: 'database'}
+      - targets: ['100.114.117.46:9100']
+        labels: {node: 're-node-03', role: 'database'}
+      - targets: ['100.115.75.119:9100']
+        labels: {node: 're-node-04', role: 'database'}
+      - targets: ['100.102.220.16:9100']
+        labels: {node: 'router-01', role: 'router'}
+      - targets: ['100.116.175.9:9100']
+        labels: {node: 'router-02', role: 'router'}
+      - targets: ['100.92.26.38:9100']
+        labels: {node: 're-db', role: 'app'}
+      - targets: ['100.89.130.19:9100']
+        labels: {node: 're-node-02', role: 'app'}
 
   - job_name: 'postgres_exporter'
     static_configs:
-      - targets:
-          - '100.126.103.51:9187'
-          - '100.114.117.46:9187'
-          - '100.115.75.119:9187'
+      - targets: ['100.126.103.51:9187']
+        labels: {node: 're-node-01'}
+      - targets: ['100.114.117.46:9187']
+        labels: {node: 're-node-03'}
+      - targets: ['100.115.75.119:9187']
+        labels: {node: 're-node-04'}
 
   - job_name: 'redis_exporter'
     static_configs:
-      - targets:
-          - '100.126.103.51:9121'
-          - '100.114.117.46:9121'
+      - targets: ['100.126.103.51:9121']
+        labels: {node: 're-node-01'}
+      - targets: ['100.114.117.46:9121']
+        labels: {node: 're-node-03'}
 
   - job_name: 'haproxy_exporter'
     static_configs:
-      - targets:
-          - '100.102.220.16:9101'
-          - '100.116.175.9:9101'
+      - targets: ['100.102.220.16:9101']
+        labels: {node: 'router-01'}
+      - targets: ['100.116.175.9:9101']
+        labels: {node: 'router-02'}
 
   - job_name: 'patroni'
     metrics_path: '/metrics'
     static_configs:
-      - targets:
-          - '100.126.103.51:8008'
-          - '100.114.117.46:8008'
-          - '100.115.75.119:8008'
+      - targets: ['100.126.103.51:8008']
+        labels: {node: 're-node-01'}
+      - targets: ['100.114.117.46:8008']
+        labels: {node: 're-node-03'}
+      - targets: ['100.115.75.119:8008']
+        labels: {node: 're-node-04'}
 
   - job_name: 'etcd'
     static_configs:
-      - targets:
-          - "100.102.220.16:2379"
-          - "100.116.175.9:2379"
-          - "100.115.75.119:2379"
+      - targets: ['100.102.220.16:2379']
+        labels: {node: 'router-01'}
+      - targets: ['100.116.175.9:2379']
+        labels: {node: 'router-02'}
+      - targets: ['100.115.75.119:2379']
+        labels: {node: 're-node-04'}
 
   - job_name: 'nginx_exporter'
     static_configs:
-      - targets:
-          - '100.92.26.38:9113'
-          - '100.89.130.19:9113'
+      - targets: ['100.92.26.38:9113']
+        labels: {node: 're-db'}
+      - targets: ['100.89.130.19:9113']
+        labels: {node: 're-node-02'}
 
   - job_name: 'php_fpm_exporter'
     static_configs:
-      - targets:
-          - '100.92.26.38:9253'
-          - '100.89.130.19:9253'
+      - targets: ['100.92.26.38:9253']
+        labels: {node: 're-db'}
+      - targets: ['100.89.130.19:9253']
+        labels: {node: 're-node-02'}

@@ -20,8 +20,8 @@
       },
       "targets": [
         {
-          "expr": "redis_up",
-          "legendFormat": "{{instance}}",
+          "expr": "sum by (node) (redis_up)",
+          "legendFormat": "{{node}}",
           "refId": "A",
           "datasource": "Prometheus"
         }
@@ -38,8 +38,8 @@
       },
       "targets": [
         {
-          "expr": "redis_connected_clients",
-          "legendFormat": "{{instance}}",
+          "expr": "sum by (node) (redis_connected_clients)",
+          "legendFormat": "{{node}}",
           "refId": "A",
           "datasource": "Prometheus"
         }
@@ -56,8 +56,8 @@
       },
       "targets": [
         {
-          "expr": "(redis_memory_used_bytes / redis_memory_max_bytes) * 100",
-          "legendFormat": "{{instance}}",
+          "expr": "avg by (node) (redis_memory_used_bytes / redis_memory_max_bytes) * 100",
+          "legendFormat": "{{node}}",
           "refId": "A",
           "datasource": "Prometheus"
         }
@@ -98,8 +98,8 @@
       },
       "targets": [
         {
-          "expr": "redis_connected_slaves",
-          "legendFormat": "{{instance}}",
+          "expr": "max by (node) (redis_connected_slaves)",
+          "legendFormat": "{{node}}",
           "refId": "A",
           "datasource": "Prometheus"
         }
@@ -116,14 +116,14 @@
       },
       "targets": [
         {
-          "expr": "redis_memory_used_bytes",
-          "legendFormat": "{{instance}} Used",
+          "expr": "sum by (node) (redis_memory_used_bytes)",
+          "legendFormat": "{{node}} Used",
           "refId": "A",
           "datasource": "Prometheus"
         },
         {
-          "expr": "redis_memory_max_bytes",
-          "legendFormat": "{{instance}} Max",
+          "expr": "sum by (node) (redis_memory_max_bytes)",
+          "legendFormat": "{{node}} Max",
           "refId": "B",
           "datasource": "Prometheus"
         }
@@ -140,8 +140,8 @@
       },
       "targets": [
         {
-          "expr": "rate(redis_commands_processed_total[5m])",
-          "legendFormat": "{{instance}}",
+          "expr": "sum by (node) (rate(redis_commands_processed_total[5m]))",
+          "legendFormat": "{{node}}",
           "refId": "A",
           "datasource": "Prometheus"
         }
@@ -159,7 +159,7 @@
       "targets": [
         {
           "expr": "sum(redis_db_keys) by (instance, db)",
-          "legendFormat": "{{instance}} - {{db}}",
+          "legendFormat": "{{node}} - {{db}}",
           "refId": "A",
           "datasource": "Prometheus"
         }
@@ -176,14 +176,14 @@
       },
       "targets": [
         {
-          "expr": "rate(redis_keyspace_hits_total[5m])",
-          "legendFormat": "{{instance}} Hits",
+          "expr": "sum by (node) (rate(redis_keyspace_hits_total[5m]))",
+          "legendFormat": "{{node}} Hits",
           "refId": "A",
           "datasource": "Prometheus"
         },
         {
-          "expr": "rate(redis_keyspace_misses_total[5m])",
-          "legendFormat": "{{instance}} Misses",
+          "expr": "sum by (node) (rate(redis_keyspace_misses_total[5m]))",
+          "legendFormat": "{{node}} Misses",
           "refId": "B",
           "datasource": "Prometheus"
         }
@@ -200,8 +200,8 @@
       },
       "targets": [
         {
-          "expr": "redis_connected_slaves",
-          "legendFormat": "{{instance}}",
+          "expr": "max by (node) (redis_connected_slaves)",
+          "legendFormat": "{{node}}",
           "refId": "A",
           "datasource": "Prometheus"
         }
@@ -218,8 +218,8 @@
       },
       "targets": [
         {
-          "expr": "rate(redis_expired_keys_total[5m])",
-          "legendFormat": "{{instance}}",
+          "expr": "sum by (node) (rate(redis_expired_keys_total[5m]))",
+          "legendFormat": "{{node}}",
           "refId": "A",
           "datasource": "Prometheus"
         }

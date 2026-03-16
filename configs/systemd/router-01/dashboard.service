@@ -1,0 +1,24 @@
+[Unit]
+Description=Quantyra Infrastructure Dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/dashboard
+ExecStart=/usr/bin/python3 /opt/dashboard/app.py
+Restart=on-failure
+RestartSec=5
+Environment=PG_HOST=100.102.220.16
+Environment=PG_PORT=5000
+Environment=PG_USER=patroni_superuser
+Environment=PG_PASSWORD=2e7vBpaaVK4vTJzrKebC
+Environment=REDIS_HOST=100.102.220.16
+Environment=REDIS_PORT=6379
+Environment=REDIS_PASSWORD=CcPUa3nvcxHtyNYjztbDyfCCuhgix78novmBDNGk
+Environment=PROMETHEUS_URL=http://100.102.220.16:9090
+Environment=GRAFANA_URL=http://100.102.220.16:3000
+Environment=ALERTMANAGER_URL=http://100.102.220.16:9093
+
+[Install]
+WantedBy=multi-user.target
