@@ -2525,9 +2525,9 @@ def save_github_token():
     return redirect(url_for("settings"))
 
 
-@app.route("/apps/<app_name>/secrets")
+@app.route("/apps/<app_name>/github-secrets")
 @requires_auth
-def app_secrets(app_name):
+def app_github_secrets(app_name):
     applications = load_applications()
     if app_name not in applications:
         flash("Application not found", "error")
@@ -2552,9 +2552,9 @@ def app_secrets(app_name):
         has_github_token=bool(GITHUB_TOKEN))
 
 
-@app.route("/apps/<app_name>/secrets/add", methods=["POST"])
+@app.route("/apps/<app_name>/github-secrets/add", methods=["POST"])
 @requires_auth
-def add_app_secret(app_name):
+def add_app_github_secret(app_name):
     applications = load_applications()
     if app_name not in applications:
         flash("Application not found", "error")
@@ -2566,22 +2566,22 @@ def add_app_secret(app_name):
     
     if not owner or not repo:
         flash("No valid GitHub repository configured", "error")
-        return redirect(url_for("app_secrets", app_name=app_name))
+        return redirect(url_for("app_github_secrets", app_name=app_name))
     
     if not GITHUB_TOKEN:
         flash("GitHub token not configured. Please add it in Settings.", "error")
-        return redirect(url_for("app_secrets", app_name=app_name))
+        return redirect(url_for("app_github_secrets", app_name=app_name))
     
     secret_name = request.form.get("secret_name", "").strip().upper()
     secret_value = request.form.get("secret_value", "").strip()
     
     if not secret_name or not secret_value:
         flash("Secret name and value are required", "error")
-        return redirect(url_for("app_secrets", app_name=app_name))
+        return redirect(url_for("app_github_secrets", app_name=app_name))
     
     if not re.match(r'^[A-Z_][A-Z0-9_]*$', secret_name):
         flash("Secret name must use uppercase letters, numbers, and underscores only", "error")
-        return redirect(url_for("app_secrets", app_name=app_name))
+        return redirect(url_for("app_github_secrets", app_name=app_name))
     
     success, error = set_github_secret(owner, repo, GITHUB_TOKEN, secret_name, secret_value)
     if success:
@@ -2589,12 +2589,12 @@ def add_app_secret(app_name):
     else:
         flash(f"Failed to add secret: {error}", "error")
     
-    return redirect(url_for("app_secrets", app_name=app_name))
+    return redirect(url_for("app_github_secrets", app_name=app_name))
 
 
-@app.route("/apps/<app_name>/secrets/<secret_name>/delete", methods=["POST"])
+@app.route("/apps/<app_name>/github-secrets/<secret_name>/delete", methods=["POST"])
 @requires_auth
-def delete_app_secret(app_name, secret_name):
+def delete_app_github_secret(app_name, secret_name):
     applications = load_applications()
     if app_name not in applications:
         flash("Application not found", "error")
@@ -2606,11 +2606,11 @@ def delete_app_secret(app_name, secret_name):
     
     if not owner or not repo:
         flash("No valid GitHub repository configured", "error")
-        return redirect(url_for("app_secrets", app_name=app_name))
+        return redirect(url_for("app_github_secrets", app_name=app_name))
     
     if not GITHUB_TOKEN:
         flash("GitHub token not configured", "error")
-        return redirect(url_for("app_secrets", app_name=app_name))
+        return redirect(url_for("app_github_secrets", app_name=app_name))
     
     success, error = delete_github_secret(owner, repo, GITHUB_TOKEN, secret_name)
     if success:
@@ -2729,6 +2729,215 @@ def api_disk_space():
         return jsonify({"error": str(e)})
     
     return jsonify(disk_info)
+
+
+from secrets_module import (
+    load_app_secrets, save_app_secrets, set_app_secret, delete_app_secret as delete_app_secret_module,
+    get_app_secret, list_app_secrets, load_global_secrets, save_global_secrets,
+    set_global_secret, get_global_secret, generate_env_file_content,
+    export_secrets_for_deployment
+)
+
+
+def delete_app_secret(app_name, key):
+    return delete_app_secret_module(app_name, key)
+
+
+@app.route("/secrets")
+@requires_auth
+def secrets_management():
+    applications = load_applications()
+    app_secrets_summary = {}
+    for app_name in applications.keys():
+        secrets = list_app_secrets(app_name)
+        app_secrets_summary[app_name] = len(secrets)
+    
+    global_secrets = load_global_secrets()
+    
+    return render_template("secrets.html",
+        applications=applications,
+        app_secrets_summary=app_secrets_summary,
+        global_secrets=global_secrets)
+
+
+@app.route("/secrets/global")
+@requires_auth
+def global_secrets():
+    secrets = load_global_secrets()
+    secrets_list = [
+        {"key": k, "description": v.get("description", ""), "updated_at": v.get("updated_at", "")}
+        for k, v in secrets.items()
+    ]
+    return render_template("secrets_global.html", secrets=secrets_list)
+
+
+@app.route("/secrets/global/add", methods=["GET", "POST"])
+@requires_auth
+def add_global_secret():
+    if request.method == "POST":
+        key = request.form.get("key", "").strip().upper()
+        value = request.form.get("value", "")
+        description = request.form.get("description", "").strip()
+        
+        if not key or not value:
+            flash("Key and value are required", "error")
+            return redirect(url_for("add_global_secret"))
+        
+        if not key.replace("_", "").isalnum():
+            flash("Key must be alphanumeric with underscores only", "error")
+            return redirect(url_for("add_global_secret"))
+        
+        result = set_global_secret(key, value, description)
+        if result["success"]:
+            flash(f"Secret '{key}' saved successfully", "success")
+            return redirect(url_for("global_secrets"))
+        else:
+            flash(f"Failed to save secret: {result.get('error', 'Unknown error')}", "error")
+    
+    return render_template("secret_form.html", secret_type="global", app_name=None)
+
+
+@app.route("/secrets/global/<key>/delete", methods=["POST"])
+@requires_auth
+def delete_global_secret(key):
+    secrets = load_global_secrets()
+    if key in secrets:
+        del secrets[key]
+        result = save_global_secrets(secrets)
+        if result["success"]:
+            flash(f"Secret '{key}' deleted", "success")
+        else:
+            flash(f"Failed to delete secret: {result.get('error', 'Unknown error')}", "error")
+    else:
+        flash("Secret not found", "error")
+    return redirect(url_for("global_secrets"))
+
+
+@app.route("/apps/<app_name>/secrets")
+@requires_auth
+def app_secrets(app_name):
+    applications = load_applications()
+    if app_name not in applications:
+        flash("Application not found", "error")
+        return redirect(url_for("apps"))
+    
+    secrets = list_app_secrets(app_name)
+    app = applications[app_name]
+    
+    return render_template("app_secrets.html",
+        app_name=app_name,
+        app=app,
+        secrets=secrets)
+
+
+@app.route("/apps/<app_name>/secrets/add", methods=["GET", "POST"])
+@requires_auth
+def add_app_secret(app_name):
+    applications = load_applications()
+    if app_name not in applications:
+        flash("Application not found", "error")
+        return redirect(url_for("apps"))
+    
+    if request.method == "POST":
+        key = request.form.get("key", "").strip().upper()
+        value = request.form.get("value", "")
+        description = request.form.get("description", "").strip()
+        
+        if not key or not value:
+            flash("Key and value are required", "error")
+            return redirect(url_for("add_app_secret", app_name=app_name))
+        
+        if not key.replace("_", "").isalnum():
+            flash("Key must be alphanumeric with underscores only", "error")
+            return redirect(url_for("add_app_secret", app_name=app_name))
+        
+        result = set_app_secret(app_name, key, value, description)
+        if result["success"]:
+            flash(f"Secret '{key}' saved for {app_name}", "success")
+            return redirect(url_for("app_secrets", app_name=app_name))
+        else:
+            flash(f"Failed to save secret: {result.get('error', 'Unknown error')}", "error")
+    
+    return render_template("secret_form.html", secret_type="app", app_name=app_name)
+
+
+@app.route("/apps/<app_name>/secrets/<key>/delete", methods=["POST"])
+@requires_auth
+def delete_app_secret_route(app_name, key):
+    result = delete_app_secret(app_name, key)
+    if result["success"]:
+        flash(f"Secret '{key}' deleted", "success")
+    else:
+        flash(f"Failed to delete secret: {result.get('error', 'Unknown error')}", "error")
+    return redirect(url_for("app_secrets", app_name=app_name))
+
+
+@app.route("/apps/<app_name>/secrets/<key>/reveal")
+@requires_auth
+def reveal_app_secret(app_name, key):
+    value = get_app_secret(app_name, key)
+    if value is not None:
+        return jsonify({"success": True, "value": value})
+    return jsonify({"success": False, "error": "Secret not found"})
+
+
+@app.route("/apps/<app_name>/secrets/export")
+@requires_auth
+def export_app_secrets(app_name):
+    applications = load_applications()
+    if app_name not in applications:
+        flash("Application not found", "error")
+        return redirect(url_for("apps"))
+    
+    app = applications[app_name]
+    framework = app.get("framework", "laravel")
+    
+    additional_vars = {}
+    if framework == "laravel":
+        db_name = app.get("database")
+        if db_name:
+            databases = load_databases()
+            if db_name in databases:
+                db = databases[db_name]
+                db_admin = db.get("owner", f"{app_name}_admin")
+                for user in db.get("users", []):
+                    if user.get("name") == db_admin:
+                        additional_vars.update({
+                            "DB_HOST": PG_HOST,
+                            "DB_PORT": str(PG_PORT),
+                            "DB_DATABASE": db_name,
+                            "DB_USERNAME": db_admin,
+                            "DB_PASSWORD": user.get("password", ""),
+                        })
+                        break
+        
+        if app.get("redis_enabled"):
+            additional_vars.update({
+                "REDIS_HOST": REDIS_HOST,
+                "REDIS_PORT": str(REDIS_PORT),
+                "REDIS_PASSWORD": REDIS_PASSWORD,
+            })
+    
+    env_content = generate_env_file_content(app_name, "production", additional_vars)
+    
+    return render_template("secrets_export.html",
+        app_name=app_name,
+        app=app,
+        env_content=env_content)
+
+
+@app.route("/api/secrets/<app_name>", methods=["GET"])
+@requires_auth
+def api_get_secrets(app_name):
+    secrets = export_secrets_for_deployment(app_name)
+    return jsonify({"success": True, "secrets": secrets})
+
+
+@app.route("/api/secrets/<app_name>/env", methods=["GET"])
+@requires_auth
+def api_get_env_file(app_name):
+    env_content = generate_env_file_content(app_name)
+    return env_content, 200, {"Content-Type": "text/plain"}
 
 
 if __name__ == "__main__":

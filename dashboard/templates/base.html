@@ -13,6 +13,7 @@
             <a href="/" class="{% if request.path == '/' %}active{% endif %}">Dashboard</a>
             <a href="/databases" class="{% if '/databases' in request.path %}active{% endif %}">Databases</a>
             <a href="/servers" class="{% if request.path == '/servers' %}active{% endif %}">Servers</a>
+            <a href="/secrets" class="{% if '/secrets' in request.path %}active{% endif %}">Secrets</a>
             <a href="/apps" class="{% if '/apps' in request.path %}active{% endif %}">Applications</a>
             <a href="/docs" class="{% if '/docs' in request.path %}active{% endif %}">Docs</a>
             <a href="/settings" class="{% if request.path == '/settings' %}active{% endif %}">Settings</a>

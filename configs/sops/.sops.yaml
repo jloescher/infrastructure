@@ -1,0 +1,9 @@
+creation_rules:
+  - path_regex: secrets/.*\.yaml$
+    age: age15jfqelqy3pplqa2xnhdqrfuzrqptzz9kdkkn6urxss8wagy0dp5s9rujv8
+  - path_regex: secrets/.*\.yml$
+    age: age15jfqelqy3pplqa2xnhdqrfuzrqptzz9kdkkn6urxss8wagy0dp5s9rujv8
+  - path_regex: config/applications\.yaml$
+    age: age15jfqelqy3pplqa2xnhdqrfuzrqptzz9kdkkn6urxss8wagy0dp5s9rujv8
+  - path_regex: config/databases\.yaml$
+    age: age15jfqelqy3pplqa2xnhdqrfuzrqptzz9kdkkn6urxss8wagy0dp5s9rujv8
