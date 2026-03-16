@@ -31,7 +31,7 @@ This report details security findings and performance optimization opportunities
 | router-01 (100.102.220.16) | HAProxy, Prometheus, Grafana | Ubuntu 24.04.4 | 6.8.0-85 | ✅ Active |
 | router-02 (100.116.175.9) | HAProxy | Ubuntu 24.04.4 | 6.8.0-85 | ✅ Active |
 | re-db (100.92.26.38) | App Server | Ubuntu 24.04.3 | 6.8.0-90 | ✅ Active |
-| re-node-02 (100.89.130.19) | App Server | Ubuntu 24.04.4 | 6.8.0-106 | ❌ UFW Inactive |
+| re-node-02 (100.89.130.19) | App Server | Ubuntu 24.04.4 | 6.8.0-106 | ✅ Active |
 | re-node-01 (100.126.103.51) | PostgreSQL, Redis, Patroni | Ubuntu 24.04.4 | 6.8.0-106 | ✅ Active |
 | re-node-03 (100.114.117.46) | PostgreSQL, Redis, Patroni | Ubuntu 24.04.4 | 6.8.0-106 | ✅ Active |
 | re-node-04 (100.115.75.119) | PostgreSQL, Patroni | Ubuntu 24.04.4 | 6.8.0-106 | ✅ Active |
@@ -40,32 +40,20 @@ This report details security findings and performance optimization opportunities
 
 ## Security Findings
 
-### 1. CRITICAL: UFW Firewall Not Enabled on re-node-02
+### 1. ~~CRITICAL: UFW Firewall Not Enabled on re-node-02~~ ✅ FIXED
 
-**Severity:** CRITICAL
-**Server:** re-node-02 (100.89.130.19) - Server is UP, but firewall is OFF
+**Severity:** ~~CRITICAL~~ RESOLVED
+**Server:** re-node-02 (100.89.130.19) - Server is UP, but firewall is not active
 
 **Finding:**
-UFW firewall service is not enabled/active on re-node-02. The server itself is running, but all ports are exposed directly to the internet without any filtering.
+~~UFW firewall service is not enabled/active on re-node-02. The server itself is running, but all ports were exposed directly to the internet without any filtering.~~
 
-**Risk:**
-- Direct access to application ports (8100, 8101)
-- Exposure of monitoring endpoints (9100, 9113, 9253)
-- No rate limiting or connection filtering
-
-**Remediation:**
-```bash
-# On re-node-02
-ufw default deny incoming
-ufw default allow outgoing
-ufw allow from 100.64.0.0/10 to any port 22  # SSH from Tailscale
-ufw allow from 100.102.220.16 to any port 8100  # HAProxy router-01
-ufw allow from 100.116.175.9 to any port 8100  # HAProxy router-02
-ufw allow from 100.102.220.16 to any port 8101
-ufw allow from 100.116.175.9 to any port 8101
-ufw allow from 100.64.0.0/10 to any port 9100  # node_exporter
-ufw enable
-```
+**Resolution (2026-03-16):**
+UFW installed and configured with:
+- Default deny incoming, allow outgoing
+- SSH (22) from Tailscale network (100.64.0.0/10)
+- App ports (8100, 8101) from HAProxy routers only
+- Monitoring ports (9100, 9113, 9253) from Prometheus server only
 
 ---
 
