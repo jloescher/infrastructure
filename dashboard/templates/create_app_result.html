@@ -65,118 +65,109 @@
 </div>
 {% endif %}
 
-{% if results.systemd_results %}
 <div class="card">
-    <h2>Systemd Service Status</h2>
-    <div class="table-container">
-        <table class="server-table">
-            <thead>
-                <tr><th>Server</th><th>Status</th><th>Service</th></tr>
-            </thead>
-            <tbody>
-                {% for r in results.systemd_results %}
-                <tr>
-                    <td>{{ r.server }}</td>
-                    <td><span class="status-badge {% if r.status == 'created' %}status-healthy{% else %}status-error{% endif %}">{{ r.status }}</span></td>
-                    <td><code>{{ app_name }}.service</code></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <h2>Deploy Application</h2>
+    <p>Your application is ready to deploy. Click below to run the initial deployment to all servers.</p>
+    
+    <div id="deploy-status" style="margin-top: 1rem;"></div>
+    
+    <div style="margin-top: 1rem;">
+        <button id="deploy-btn" class="btn" onclick="deployApp()">Deploy Now</button>
+        <a href="/apps/{{ app_name }}/status" class="btn btn-secondary">View Status</a>
     </div>
     
-    <h3 style="margin-top: 1rem;">Manage Service</h3>
-    <pre class="code-block"># Start service
-ssh root@SERVER_IP "systemctl start {{ app_name }}"
-
-# Check status
-ssh root@SERVER_IP "systemctl status {{ app_name }}"
-
-# View logs
-ssh root@SERVER_IP "journalctl -u {{ app_name }} -f"</pre>
-</div>
-{% endif %}
-
-{% if results.secrets_result %}
-<div class="card">
-    <h2>GitHub Secrets</h2>
-    {% if results.secrets_result.success %}
-    <div class="alert alert-success">
-        <strong>Secrets pushed to GitHub:</strong>
-        <ul>
-            {% for secret in results.secrets_result.pushed %}
-            <li>{{ secret }}</li>
-            {% endfor %}
-        </ul>
-    </div>
-    {% else %}
-    <div class="alert alert-error">
-        <strong>Failed to push secrets:</strong>
-        {% if results.secrets_result.error %}
-        <p>{{ results.secrets_result.error }}</p>
-        {% endif %}
-        {% if results.secrets_result.failed %}
-        <ul>
-            {% for f in results.secrets_result.failed %}
-            <li>{{ f.name }}: {{ f.error }}</li>
-            {% endfor %}
-        </ul>
-        {% endif %}
-    </div>
-    {% endif %}
-    <p><a href="/apps/{{ app_name }}/secrets" class="link">Manage additional secrets →</a></p>
-</div>
-{% endif %}
-
-<div class="card">
-    <h2>GitHub Actions Workflow</h2>
-    <p>Add this file to <code>.github/workflows/deploy.yml</code>:</p>
-    
-    <div class="generated-output">
-        <button id="copy-btn" class="btn btn-secondary" onclick="copyWorkflow()">Copy Workflow</button>
-        <pre id="workflow-yaml">{{ workflow }}</pre>
-    </div>
+    <h3 style="margin-top: 1.5rem;">Manual Deployment</h3>
+    <p>Or deploy manually via SSH:</p>
+    <pre class="code-block"># Deploy to all servers
+ssh root@100.92.26.38 "/opt/scripts/deploy-app.sh {{ app_name }}"
+ssh root@100.89.130.19 "/opt/scripts/deploy-app.sh {{ app_name }}"</pre>
 </div>
 
 <div class="card">
-    <h2>Next Steps</h2>
-    <ol>
-        <li>Copy the GitHub Actions workflow to your repository</li>
-        <li>Add the required secrets to your GitHub repository</li>
-        <li>Push to main branch to trigger deployment</li>
-    </ol>
+    <h2>Deployment Model: PULL</h2>
+    <p>This application uses <strong>pull-based deployment</strong>:</p>
+    <ul>
+        <li>Servers pull code directly from GitHub</li>
+        <li>No SSH credentials stored in GitHub</li>
+        <li>Secrets stored encrypted in dashboard (SOPS)</li>
+        <li>Deploy via dashboard or webhook</li>
+    </ul>
     
-    <h3>Required GitHub Secrets</h3>
-    <table class="server-table">
-        <thead>
-            <tr><th>Secret Name</th><th>Value</th></tr>
-        </thead>
-        <tbody>
-            <tr><td><code>DEPLOY_HOST</code></td><td>100.102.220.16</td></tr>
-            <tr><td><code>DEPLOY_USER</code></td><td>admin</td></tr>
-            <tr><td><code>DEPLOY_PASSWORD</code></td><td>DbAdmin2026!</td></tr>
-            {% if create_db %}
-            <tr><td><code>DATABASE_URL</code></td><td>postgres://{{ results.db_admin }}:{{ results.db_password }}@100.102.220.16:6432/{{ db_name }}</td></tr>
-            {% endif %}
-        </tbody>
-    </table>
+    <h3>Webhook URL (optional)</h3>
+    <p>Configure a GitHub webhook to trigger automatic deployments:</p>
+    <pre class="code-block">POST http://100.102.220.16:8080/api/apps/{{ app_name }}/deploy
+Content-Type: application/json
+Authorization: Basic YWRtaW46RGJBZG1pbjIwMjYh
+
+{"branch": "main"}</pre>
+</div>
+
+<div class="card">
+    <h2>Application Secrets</h2>
+    <p>Secrets are stored encrypted and injected during deployment:</p>
+    <p><a href="/apps/{{ app_name }}/secrets" class="link">Manage application secrets →</a></p>
 </div>
 
 <div class="quick-actions" style="margin-top: 1.5rem;">
     <a href="/apps" class="btn">View Applications</a>
-    <a href="/databases" class="btn btn-secondary">View Databases</a>
+    <a href="/apps/{{ app_name }}/domains" class="btn btn-secondary">Configure Domains</a>
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
-function copyWorkflow() {
-    const text = document.getElementById('workflow-yaml').textContent;
-    navigator.clipboard.writeText(text).then(() => {
-        const btn = document.getElementById('copy-btn');
-        btn.textContent = 'Copied!';
-        setTimeout(() => btn.textContent = 'Copy Workflow', 2000);
-    });
+async function deployApp() {
+    const btn = document.getElementById('deploy-btn');
+    const status = document.getElementById('deploy-status');
+    
+    btn.disabled = true;
+    btn.textContent = 'Deploying...';
+    status.innerHTML = '<div class="alert">Running deployment on all servers...</div>';
+    
+    try {
+        const response = await fetch('/api/apps/{{ app_name }}/deploy', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Basic ' + btoa('admin:DbAdmin2026!')
+            },
+            body: JSON.stringify({branch: 'main'})
+        });
+        
+        const data = await response.json();
+        
+        if (data.success_flag) {
+            status.innerHTML = '<div class="alert alert-success"><strong>Deployment successful!</strong><br>' +
+                'Servers: ' + data.success.join(', ') + '</div>';
+            btn.textContent = 'Deployed ✓';
+        } else {
+            let errorHtml = '<div class="alert alert-error"><strong>Deployment completed with errors:</strong><ul>';
+            for (const err of data.errors) {
+                errorHtml += '<li>' + err + '</li>';
+            }
+            errorHtml += '</ul></div>';
+            status.innerHTML = errorHtml;
+            btn.disabled = false;
+            btn.textContent = 'Retry Deploy';
+        }
+        
+        if (data.servers) {
+            let details = '<details style="margin-top: 1rem;"><summary>Deployment Details</summary>';
+            for (const [server, result] of Object.entries(data.servers)) {
+                details += '<h4>' + server + '</h4>';
+                details += '<pre style="background: #0f1419; padding: 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.75rem;">';
+                details += result.output || result.error || 'No output';
+                details += '</pre>';
+            }
+            details += '</details>';
+            status.innerHTML += details;
+        }
+        
+    } catch (err) {
+        status.innerHTML = '<div class="alert alert-error">Deployment failed: ' + err.message + '</div>';
+        btn.disabled = false;
+        btn.textContent = 'Retry Deploy';
+    }
 }
 </script>
 {% endblock %}

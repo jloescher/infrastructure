@@ -1198,66 +1198,6 @@ def create_app():
                     results["created"].append(f"Repo directory exists on {r['server']}")
                 else:
                     results["errors"].append(f"{r['server']}: {r['message']}")
-            
-            db_config = None
-            redis_config = None
-            if create_db and results.get("db_password"):
-                db_config = {
-                    "host": PG_HOST,
-                    "port": str(PG_PORT),
-                    "database": db_name,
-                    "username": f"{app_name}_admin",
-                    "password": results["db_password"]
-                }
-            if create_redis:
-                redis_config = {
-                    "host": REDIS_HOST,
-                    "port": str(REDIS_PORT),
-                    "password": REDIS_PASSWORD
-                }
-            
-            results["setup_results"] = run_framework_setup(app_name, framework, APP_SERVERS, db_config, redis_config, app_url=f"https://{app_name}.xotec.io")
-            for r in results["setup_results"]:
-                if r["status"] in ["composer_installed", "npm_installed", "built", "venv_created"]:
-                    results["created"].append(f"Setup on {r['server']}: {r.get('output', r['status'])}")
-                else:
-                    results["errors"].append(f"Setup on {r['server']}: {r.get('message', 'Unknown error')}")
-            
-            results["server_results"] = []
-            for server in APP_SERVERS:
-                if framework == "laravel":
-                    app_result = setup_laravel_app(app_name, server["ip"], port)
-                    if app_result["success"]:
-                        results["server_results"].append({"server": server["name"], "status": "configured", "port": port})
-                        results["created"].append(f"nginx + PHP-FPM on {server['name']}:{port}")
-                    else:
-                        results["server_results"].append({"server": server["name"], "status": "error", "message": app_result.get("error", "Unknown error")})
-                        results["errors"].append(f"App setup on {server['name']}: {app_result.get('error', 'Unknown error')}")
-                else:
-                    db_url = None
-                    redis_url = None
-                    if create_db and results.get("db_password"):
-                        db_url = f"postgres://{results['db_admin']}:{results['db_password']}@{PG_HOST}:6432/{db_name}"
-                    if create_redis:
-                        redis_url = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/0"
-                    
-                    env_vars = {
-                        "APP_NAME": app_name,
-                        "APP_ENV": "production",
-                        "NODE_ENV": "production"
-                    }
-                    if db_url:
-                        env_vars["DATABASE_URL"] = db_url
-                    if redis_url:
-                        env_vars["REDIS_URL"] = redis_url
-                    
-                    svc_result = create_systemd_service(app_name, framework, server["ip"], db_url, redis_url, env_vars)
-                    if svc_result["success"]:
-                        results["server_results"].append({"server": server["name"], "status": "created"})
-                        results["created"].append(f"Systemd service on {server['name']}")
-                    else:
-                        results["server_results"].append({"server": server["name"], "status": "error", "message": svc_result.get("stderr", "Unknown error")})
-                        results["errors"].append(f"Systemd service on {server['name']}: {svc_result.get('stderr', 'Unknown error')}")
         
         applications[app_name] = {
             "name": app_name,
@@ -1281,17 +1221,8 @@ def create_app():
         applications[app_name]["deploy_workflow"] = workflow
         save_applications(applications)
         
-        if git_repo and deploy_now and GITHUB_TOKEN:
-            db_pwd = results.get("db_password") if create_db else None
-            redis_url = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/0" if create_redis else None
-            secrets_result = push_app_secrets_to_github(app_name, applications[app_name], db_pwd, redis_url)
-            results["secrets_result"] = secrets_result
-            if secrets_result["success"]:
-                results["created"].append(f"GitHub secrets: {', '.join(secrets_result['pushed'])}")
-            else:
-                results["errors"].append(f"GitHub secrets: {secrets_result.get('error', 'Unknown error')}")
-        
-        workflow = generate_github_workflow(framework, app_name, target_servers, staging_env, create_db, db_name)
+        results["pull_deploy"] = True
+        results["deploy_endpoint"] = f"/api/apps/{app_name}/deploy"
         
         return render_template("create_app_result.html", results=results, 
             app_name=app_name, framework=framework, git_repo=git_repo,
@@ -1452,6 +1383,38 @@ def delete_staging(app_name):
     
     flash(f"Staging environment for '{app_name}' deleted", "success")
     return redirect(url_for("app_status", app_name=app_name))
+
+
+@app.route("/api/apps/<app_name>/deploy", methods=["POST"])
+@requires_auth
+def api_pull_deploy(app_name):
+    applications = load_applications()
+    
+    if app_name not in applications:
+        return jsonify({"success": False, "error": "Application not found"}), 404
+    
+    app = applications[app_name]
+    branch = request.json.get("branch", "main") if request.is_json else "main"
+    
+    results = {"servers": {}, "errors": [], "success": []}
+    
+    for server in APP_SERVERS:
+        deploy_cmd = f"/opt/scripts/deploy-app.sh {app_name} {branch} 2>&1"
+        result = ssh_command(server["ip"], deploy_cmd, timeout=300)
+        
+        results["servers"][server["name"]] = {
+            "success": result["success"],
+            "output": result["stdout"][-2000:] if result["stdout"] else "",
+            "error": result["stderr"][-500:] if result.get("stderr") else None
+        }
+        
+        if result["success"]:
+            results["success"].append(server["name"])
+        else:
+            results["errors"].append(f"{server['name']}: {result.get('stderr', 'Unknown error')[-200:]}")
+    
+    results["success_flag"] = len(results["errors"]) == 0
+    return jsonify(results)
 
 
 @app.route("/apps/<app_name>/deploy", methods=["GET", "POST"])
