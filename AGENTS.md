@@ -131,10 +131,39 @@ ssh root@100.92.26.38 "systemctl status nginx php8.5-fpm"
 ssh root@100.101.39.22 "systemctl status nginx php8.5-fpm"
 ```
 
+### Docker Compose Deployment
+
+Deploy the dashboard on any machine connected to Tailscale:
+
+```bash
+cd docker
+cp .env.example .env
+# Edit .env with credentials
+./scripts/deploy.sh start
+```
+
+**Services:**
+- Dashboard: http://localhost:8080
+- Prometheus: http://localhost:9090
+- Grafana: http://localhost:3000
+- Alertmanager: http://localhost:9093
+
+**Commands:**
+- `./scripts/deploy.sh start` - Start services
+- `./scripts/deploy.sh stop` - Stop services
+- `./scripts/deploy.sh logs` - View logs
+- `./scripts/deploy.sh backup` - Backup data
+
+**Requirements:**
+- Docker and Docker Compose installed
+- Connected to Tailscale network
+- Valid credentials in `.env`
+
 ## Documentation
 
 - `/docs/plan.md` - Current tasks, priorities, and future improvements
 - `/docs/architecture.md` - Complete infrastructure architecture and traffic flow
+- `/docs/docker_compose_plan.md` - Docker deployment for NAS and Tailscale
 - `/docs/dashboard.md` - Dashboard features and API
 - `/docs/domain_provisioning.md` - Domain provisioning system
 - `/docs/haproxy_ha_dns.md` - HAProxy configuration and load balancing
@@ -143,6 +172,7 @@ ssh root@100.101.39.22 "systemctl status nginx php8.5-fpm"
 - `/docs/framework_builds.md` - Build process for each framework
 - `/docs/staging_production.md` - Staging and production deployment
 - `/docs/session_2026-03-15.md` - Session summary with all changes
+- `/docker/README.md` - Docker Compose quick start guide
 
 ## Important Notes
 
