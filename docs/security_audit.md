@@ -206,21 +206,33 @@ Enabled `server_tokens off;` in `/etc/nginx/nginx.conf` on both app servers.
 
 ---
 
-### 9. MEDIUM: No Redis Memory Limit
+### 9. ~~MEDIUM: No Redis Memory Limit~~ ✅ ALREADY CONFIGURED
 
-**Severity:** MEDIUM
+**Severity:** ~~MEDIUM~~ RESOLVED
 **Servers:** re-node-01, re-node-03
 
 **Finding:**
-Redis has no `maxmemory` limit configured. This could lead to OOM conditions.
+~~Redis had no `maxmemory` limit configured. This could lead to OOM conditions.~~
 
-**Remediation:**
-```bash
-# Set maxmemory (adjust based on available RAM)
-redis-cli CONFIG SET maxmemory 4gb
-redis-cli CONFIG SET maxmemory-policy allkeys-lru
-redis-cli CONFIG REWRITE
-```
+**Status:**
+Redis is already configured with memory limits:
+
+**re-node-01:**
+- `maxmemory`: 4GB
+- `maxmemory-policy`: allkeys-lru
+- Current usage: ~79MB
+
+**re-node-03:**
+- `maxmemory`: 4GB
+- `maxmemory-policy`: allkeys-lru
+- Current usage: ~79MB
+
+**Additional Security:**
+Dangerous commands are disabled via `rename-command`:
+- `CONFIG` - Disabled
+- `FLUSHDB` - Disabled
+- `FLUSHALL` - Disabled
+- `KEYS` - Disabled
 
 ---
 
