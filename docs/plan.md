@@ -14,6 +14,8 @@ This document tracks current tasks, priorities, and future improvements for the 
 | PostgreSQL Cluster | ✅ Working | 3-node Patroni cluster |
 | Redis Cluster | ✅ Working | Master-replica with Sentinel |
 | Monitoring | ✅ Working | Prometheus, Grafana, Alertmanager |
+| Docker Compose | 🚧 In Progress | Ready for testing |
+| Config Sync | ✅ Complete | 89 config files in repo |
 
 ---
 
@@ -175,6 +177,37 @@ Automate backups for HAProxy configs and registry.
 **Retention:**
 - Keep hourly backups for 24 hours
 - Keep daily backups for 7 days
+
+### 8. Docker Compose Deployment (In Progress)
+
+Deploy dashboard as Docker Compose stack for NAS or any machine on Tailscale.
+
+**Files Created:**
+- `docker/docker-compose.yml` - Main compose file
+- `docker/dashboard/Dockerfile` - Dashboard container
+- `docker/.env.example` - Environment template
+- `docker/scripts/deploy.sh` - Deployment script
+- `docs/docker_compose_plan.md` - Detailed plan
+
+**Quick Start:**
+```bash
+cd docker
+cp .env.example .env
+# Edit .env with credentials
+./scripts/deploy.sh start
+```
+
+**Services:**
+- Dashboard (port 8080)
+- Prometheus (port 9090)
+- Grafana (port 3000)
+- Alertmanager (port 9093)
+
+**Next Steps:**
+1. Test locally with Docker
+2. Deploy to Synology NAS
+3. Verify Tailscale connectivity
+4. Set up auto-start on boot
 
 ---
 
