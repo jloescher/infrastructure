@@ -258,35 +258,43 @@ bind :443 ssl crt /etc/haproxy/certs/rentalfixer.app.pem alpn h2,http/1.1 ssl-mi
 
 ## Performance Optimization Opportunities
 
-### 1. PostgreSQL Configuration
+### 1. PostgreSQL Configuration ✅ OPTIMIZED
 
-**Current Settings:**
+**Applied Optimizations (2026-03-16):**
+
+| Setting | Before | After | Status |
+|---------|--------|-------|--------|
+| shared_buffers | 8GB | 8GB | ✅ Unchanged (optimal for 32GB RAM) |
+| work_mem | 64MB | 128MB | ✅ Applied |
+| max_connections | 300 | 200 | ⏳ Pending rolling restart |
+| huge_pages_status | off | on | ✅ Kernel huge pages configured |
+| effective_io_concurrency | 200 | 200 | ✅ Already optimal for SSD |
+| random_page_cost | 1.1 | 1.1 | ✅ Already optimal for SSD |
+| checkpoint_completion_target | 0.9 | 0.9 | ✅ Already optimal |
+
+**Huge Pages Configuration:**
+- Kernel huge pages: 4256 pages (~8.5GB)
+- Each page: 2MB
+- Config: `/etc/sysctl.d/99-hugepages.conf`
+- PostgreSQL `huge_pages = try` (uses them when available)
+
+**Pending: max_connections Rolling Restart**
+
+The DCS configuration has been updated to `max_connections = 200`, but applying it requires a rolling restart. During the next maintenance window:
+
+```bash
+# On each replica, then primary (with switchover)
+patronictl -c /etc/patroni.yml restart quantyra_pg <node> --force
+```
+
+**Current Verified Settings:**
 ```
 shared_buffers = 8GB
-work_mem = 64MB
+work_mem = 128MB
+huge_pages_status = on
 effective_cache_size = 24GB
-max_connections = 300
-```
-
-**Optimizations:**
-
-| Setting | Current | Recommended | Notes |
-|---------|---------|-------------|-------|
-| shared_buffers | 8GB | 8-12GB | 25% of RAM for DB servers |
-| work_mem | 64MB | 128-256MB | For complex queries |
-| max_connections | 300 | 200 | With pgBouncer pooling |
-| random_page_cost | 1.1 | 1.1 | ✅ Good for SSD |
-| checkpoint_completion_target | 0.9 | 0.9 | ✅ Already optimal |
-| effective_io_concurrency | ? | 200 | For SSDs |
-
-**Additional Recommendations:**
-```sql
--- Enable huge pages (already configured as 'try')
--- Verify huge pages are active
-SHOW huge_pages_status;  -- Currently 'off', needs investigation
-
--- Consider connection pooling tuning
--- pgBouncer is already configured with transaction mode
+effective_io_concurrency = 200
+random_page_cost = 1.1
 ```
 
 ---
