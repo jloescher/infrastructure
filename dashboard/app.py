@@ -2940,5 +2940,23 @@ def api_get_env_file(app_name):
     return env_content, 200, {"Content-Type": "text/plain"}
 
 
+@app.route("/api/secrets/<app_name>", methods=["POST"])
+@requires_auth
+def api_set_secret(app_name):
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "error": "No data provided"}), 400
+    
+    key = data.get("key", "").strip().upper()
+    value = data.get("value", "")
+    description = data.get("description", "")
+    
+    if not key or not value:
+        return jsonify({"success": False, "error": "Key and value required"}), 400
+    
+    result = set_app_secret(app_name, key, value, description)
+    return jsonify(result)
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080, debug=True)

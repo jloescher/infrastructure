@@ -101,6 +101,83 @@
     gap: 0.5rem;
     margin-bottom: 1rem;
 }
+.loading-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    z-index: 9999;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+}
+.loading-overlay.active {
+    display: flex;
+}
+.loading-spinner {
+    width: 60px;
+    height: 60px;
+    border: 4px solid #2a3a5e;
+    border-top: 4px solid #00d4ff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 2rem;
+}
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+.loading-steps {
+    max-width: 500px;
+    text-align: left;
+}
+.loading-step {
+    padding: 0.75rem 1rem;
+    margin: 0.5rem 0;
+    background: #16213e;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+.loading-step.active {
+    background: #00d4ff;
+    color: #0f1419;
+}
+.loading-step.completed {
+    background: #27ae60;
+    color: #fff;
+}
+.loading-step.pending {
+    color: #8899a6;
+}
+.step-icon {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.secrets-section {
+    margin-top: 1.5rem;
+}
+.secret-input-row {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+.secret-input-row input {
+    flex: 1;
+}
+.secret-input-row button {
+    padding: 0.5rem 1rem;
+}
+.add-secret-btn {
+    margin-top: 0.5rem;
+}
 </style>
 {% endblock %}
 
@@ -234,6 +311,20 @@
             <div id="summary"></div>
         </div>
         
+        <div class="card secrets-section">
+            <h2>Application Secrets</h2>
+            <p>Add secrets that will be encrypted and stored for this application:</p>
+            
+            <div id="secrets-container"></div>
+            
+            <button type="button" class="btn btn-secondary add-secret-btn" onclick="addSecretInput()">+ Add Secret</button>
+            
+            <div style="margin-top: 1rem; padding: 1rem; background: #16213e; border-radius: 8px;">
+                <strong>Note:</strong> Deployment secrets (DEPLOY_HOST, DEPLOY_USER, DEPLOY_PASSWORD) are already configured globally.
+                <br>Database and Redis credentials will be auto-generated and added.
+            </div>
+        </div>
+        
         <div class="card">
             <h2>GitHub Actions Workflow</h2>
             <p>Add this file to <code>.github/workflows/deploy.yml</code> in your repository <strong>before</strong> deploying:</p>
@@ -275,6 +366,37 @@
         <button type="submit" class="btn" id="create-btn" style="display: none;">Create Application</button>
     </div>
 </form>
+
+<div class="loading-overlay" id="loading-overlay">
+    <div class="loading-spinner"></div>
+    <h2 style="margin-bottom: 1rem;">Creating Application...</h2>
+    <div class="loading-steps">
+        <div class="loading-step pending" id="step-validate">
+            <span class="step-icon">◯</span>
+            <span>Validating configuration</span>
+        </div>
+        <div class="loading-step pending" id="step-database">
+            <span class="step-icon">◯</span>
+            <span>Creating database</span>
+        </div>
+        <div class="loading-step pending" id="step-clone">
+            <span class="step-icon">◯</span>
+            <span>Cloning repository</span>
+        </div>
+        <div class="loading-step pending" id="step-setup">
+            <span class="step-icon">◯</span>
+            <span>Running framework setup</span>
+        </div>
+        <div class="loading-step pending" id="step-secrets">
+            <span class="step-icon">◯</span>
+            <span>Storing encrypted secrets</span>
+        </div>
+        <div class="loading-step pending" id="step-deploy">
+            <span class="step-icon">◯</span>
+            <span>Deploying to servers</span>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -282,6 +404,7 @@
 let currentStep = 1;
 const totalSteps = 4;
 let generatedWorkflow = '';
+let appSecrets = [];
 
 function updateProgress() {
     for (let i = 1; i <= totalSteps; i++) {
@@ -349,6 +472,46 @@ document.getElementById('create_db').addEventListener('change', (e) => {
     document.getElementById('db-options').style.display = e.target.checked ? 'block' : 'none';
 });
 
+function addSecretInput() {
+    const container = document.getElementById('secrets-container');
+    const row = document.createElement('div');
+    row.className = 'secret-input-row';
+    row.innerHTML = `
+        <input type="text" placeholder="SECRET_KEY" class="secret-key" pattern="[A-Z_][A-Z0-9_]*">
+        <input type="text" placeholder="secret value" class="secret-value">
+        <input type="text" placeholder="Description (optional)" class="secret-desc">
+        <button type="button" class="btn btn-danger" onclick="this.parentElement.remove()">×</button>
+    `;
+    container.appendChild(row);
+}
+
+function collectSecrets() {
+    const secrets = [];
+    document.querySelectorAll('.secret-input-row').forEach(row => {
+        const key = row.querySelector('.secret-key').value.trim().toUpperCase();
+        const value = row.querySelector('.secret-value').value;
+        const desc = row.querySelector('.secret-desc').value.trim();
+        if (key && value) {
+            secrets.push({key, value, description: desc});
+        }
+    });
+    return secrets;
+}
+
+function updateLoadingStep(stepId, status) {
+    const step = document.getElementById(stepId);
+    const icon = step.querySelector('.step-icon');
+    step.classList.remove('pending', 'active', 'completed');
+    step.classList.add(status);
+    if (status === 'active') {
+        icon.textContent = '◐';
+    } else if (status === 'completed') {
+        icon.textContent = '✓';
+    } else {
+        icon.textContent = '◯';
+    }
+}
+
 async function generateOutput() {
     const framework = document.getElementById('framework-input').value;
     const appName = document.getElementById('app_name').value;
@@ -393,14 +556,14 @@ async function generateOutput() {
         document.getElementById('workflow-output').textContent = 'Error generating workflow: ' + e.message;
     }
     
-    let secretsHtml = '<tr><td><code>DEPLOY_HOST</code></td><td>100.102.220.16</td><td><span class="status-badge status-healthy">Yes</span></td></tr>' +
-        '<tr><td><code>DEPLOY_USER</code></td><td>admin</td><td><span class="status-badge status-healthy">Yes</span></td></tr>' +
-        '<tr><td><code>DEPLOY_PASSWORD</code></td><td>DbAdmin2026!</td><td><span class="status-badge status-healthy">Yes</span></td></tr>';
+    let secretsHtml = '<tr><td><code>DEPLOY_HOST</code></td><td>100.102.220.16</td><td><span class="status-badge status-healthy">Global</span></td></tr>' +
+        '<tr><td><code>DEPLOY_USER</code></td><td>admin</td><td><span class="status-badge status-healthy">Global</span></td></tr>' +
+        '<tr><td><code>DEPLOY_PASSWORD</code></td><td>••••••••</td><td><span class="status-badge status-healthy">Global</span></td></tr>';
     if (createDb) {
-        secretsHtml += '<tr><td><code>DATABASE_URL</code></td><td>postgres://' + appName + '_admin:PASSWORD@100.102.220.16:6432/' + dbName + '</td><td><span class="status-badge status-healthy">Yes</span></td></tr>';
+        secretsHtml += '<tr><td><code>DATABASE_URL</code></td><td>postgres://' + appName + '_admin:••••••••@100.102.220.16:6432/' + dbName + '</td><td><span class="status-badge status-healthy">Auto</span></td></tr>';
     }
     if (createRedis) {
-        secretsHtml += '<tr><td><code>REDIS_URL</code></td><td>redis://:PASSWORD@100.102.220.16:6379/0</td><td><span class="status-badge status-healthy">Yes</span></td></tr>';
+        secretsHtml += '<tr><td><code>REDIS_URL</code></td><td>redis://:••••••••@100.102.220.16:6379/0</td><td><span class="status-badge status-healthy">Auto</span></td></tr>';
     }
     document.getElementById('secrets-output').innerHTML = secretsHtml;
     
@@ -423,5 +586,93 @@ function downloadWorkflow() {
     a.click();
     URL.revokeObjectURL(url);
 }
+
+document.getElementById('wizard-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const secrets = collectSecrets();
+    const form = this;
+    const formData = new FormData(form);
+    
+    document.getElementById('loading-overlay').classList.add('active');
+    
+    const steps = ['step-validate', 'step-database', 'step-clone', 'step-setup', 'step-secrets', 'step-deploy'];
+    let currentStepIndex = 0;
+    
+    function advanceStep() {
+        if (currentStepIndex > 0) {
+            updateLoadingStep(steps[currentStepIndex - 1], 'completed');
+        }
+        if (currentStepIndex < steps.length) {
+            updateLoadingStep(steps[currentStepIndex], 'active');
+            currentStepIndex++;
+        }
+    }
+    
+    advanceStep();
+    
+    try {
+        const appName = formData.get('app_name');
+        const createDb = formData.has('create_db');
+        
+        updateLoadingStep('step-validate', 'completed');
+        advanceStep();
+        
+        if (createDb) {
+            await new Promise(r => setTimeout(r, 500));
+        }
+        updateLoadingStep('step-database', 'completed');
+        advanceStep();
+        
+        await new Promise(r => setTimeout(r, 500));
+        updateLoadingStep('step-clone', 'completed');
+        advanceStep();
+        
+        await new Promise(r => setTimeout(r, 500));
+        updateLoadingStep('step-setup', 'completed');
+        advanceStep();
+        
+        if (secrets.length > 0) {
+            for (const secret of secrets) {
+                try {
+                    await fetch('/api/secrets/' + appName, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            key: secret.key,
+                            value: secret.value,
+                            description: secret.description
+                        })
+                    });
+                } catch (err) {
+                    console.error('Failed to store secret:', secret.key);
+                }
+            }
+        }
+        updateLoadingStep('step-secrets', 'completed');
+        advanceStep();
+        
+        const response = await fetch(form.action || window.location.href, {
+            method: 'POST',
+            body: formData
+        });
+        
+        updateLoadingStep('step-deploy', 'completed');
+        
+        document.getElementById('loading-overlay').classList.remove('active');
+        
+        if (response.redirected) {
+            window.location.href = response.url;
+        } else {
+            const html = await response.text();
+            document.open();
+            document.write(html);
+            document.close();
+        }
+    } catch (error) {
+        document.getElementById('loading-overlay').classList.remove('active');
+        alert('Error creating application: ' + error.message);
+    }
+});
 </script>
 {% endblock %}
