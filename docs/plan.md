@@ -205,7 +205,7 @@ cp .env.example .env
 
 **Next Steps:**
 1. Test locally with Docker
-2. Deploy to Synology NAS
+2. Deploy to NAS
 3. Verify Tailscale connectivity
 4. Set up auto-start on boot
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Goal: Deploy the infrastructure management dashboard as a Docker Compose package that can run on a Synology NAS or any machine connected to the Tailscale network.
+Goal: Deploy the infrastructure management dashboard as a Docker Compose package that can run on a NAS or any machine connected to the Tailscale network.
 
 ## Architecture
 
@@ -248,10 +248,10 @@ services:
 
 ## Deployment Options
 
-### Synology NAS
+### NAS
 
 1. **Install Docker** from Package Center
-2. **Install Container Manager** (newer Synology DSM)
+2. **Install Container Manager** (newer DSM)
 3. **Enable Tailscale** on NAS
 4. **Deploy via SSH:**
 
@@ -361,7 +361,7 @@ iptables -A INPUT -p tcp --dport 8080 -j DROP
 
 ### Phase 4: NAS Deployment (Week 4)
 
-1. Deploy to Synology NAS
+1. Deploy to NAS
 2. Configure auto-start
 3. Set up monitoring
 4. Document maintenance

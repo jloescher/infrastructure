@@ -44,7 +44,7 @@ nano .env  # Fill in your credentials
 ./scripts/deploy.sh restore   # Restore from backup
 ```
 
-## Synology NAS Deployment
+## NAS Deployment
 
 1. **Install Docker** from Package Center
 2. **Enable SSH** in Control Panel → Terminal & SNMP

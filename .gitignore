@@ -1,0 +1,45 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Environment files with secrets
+.env
+*.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+.venv/
+
+# Node
+node_modules/
+
+# Backup files
+*.bak
+*.backup
+backups/
+
+# Logs
+*.log
+
+# Screenshots and images (optional - remove if you want to track these)
+# *.png
+# *.jpg
+# *.jpeg
+screencapture-*.png
+
+# Temporary files
+*.tmp
+*.temp
+/tmp/
