@@ -88,9 +88,9 @@ haproxy_backends:
     - name: app1
       address: 100.92.26.38:80
     - name: app2
-      address: 100.101.39.22:80
+      address: 100.89.130.19:80
   web_https:
     - name: app1
       address: 100.92.26.38:443
     - name: app2
-      address: 100.101.39.22:443
+      address: 100.89.130.19:443

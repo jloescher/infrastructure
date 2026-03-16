@@ -46,7 +46,7 @@ Host re-db
     User root
 
 Host re-node-02
-    HostName 100.101.39.22
+    HostName 100.89.130.19
     User root
 ```
 

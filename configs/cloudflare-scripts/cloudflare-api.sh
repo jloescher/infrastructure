@@ -11,7 +11,7 @@ ROUTER_02_IP="23.29.118.6"
 
 # App server IPs (for reference)
 APP_SERVER_1="100.92.26.38"
-APP_SERVER_2="100.101.39.22"
+APP_SERVER_2="100.89.130.19"
 
 cf_api() {
     local method="$1"

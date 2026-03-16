@@ -16,7 +16,7 @@ Infrastructure-as-code repository for managing Quantyra VPS infrastructure with:
 
 ### Server Access
 - **Dashboard**: http://100.102.220.16:8080 (admin / DbAdmin2026!)
-- **App Servers**: re-db (100.92.26.38), re-node-02 (100.101.39.22)
+- **App Servers**: re-db (100.92.26.38), re-node-02 (100.89.130.19)
 - **Routers**: router-01 (100.102.220.16), router-02 (100.116.175.9)
 
 ### Critical Credentials
@@ -128,7 +128,7 @@ ssh root@100.102.220.16 "systemctl status dashboard"
 
 # App servers
 ssh root@100.92.26.38 "systemctl status nginx php8.5-fpm"
-ssh root@100.101.39.22 "systemctl status nginx php8.5-fpm"
+ssh root@100.89.130.19 "systemctl status nginx php8.5-fpm"
 ```
 
 ### Docker Compose Deployment

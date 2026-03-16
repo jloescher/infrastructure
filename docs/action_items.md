@@ -144,8 +144,8 @@ Last updated: 2026-03-15
 - [ ] Test application failover between NYC and ATL
 
 **Current IPs (NYC)**:
-- Public: 23.29.118.8
-- Tailscale: 100.101.39.22
+- Public: 23.227.173.245
+- Tailscale: 100.89.130.19
 
 **New IPs (ATL)**: *Pending*
 

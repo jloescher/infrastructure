@@ -1,0 +1,13 @@
+[Unit]
+Description=NGINX Prometheus Exporter
+Documentation=https://github.com/nginxinc/nginx-prometheus-exporter man:prometheus-nginx-exporter(1)
+After=network.target nginx.service
+
+[Service]
+Restart=on-failure
+User=prometheus
+EnvironmentFile=/etc/default/prometheus-nginx-exporter
+ExecStart=/usr/bin/prometheus-nginx-exporter $ARGS
+
+[Install]
+WantedBy=multi-user.target

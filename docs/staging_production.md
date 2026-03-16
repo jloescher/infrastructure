@@ -250,7 +250,7 @@ cat /opt/dashboard/config/applications.yml | grep -A20 staging
 2. Check app server:
    ```bash
    curl -s -o /dev/null -w '%{http_code}' http://100.92.26.38:8100
-   curl -s -o /dev/null -w '%{http_code}' http://100.101.39.22:8100
+   curl -s -o /dev/null -w '%{http_code}' http://100.89.130.19:8100
    ```
 
 3. Check PHP-FPM:

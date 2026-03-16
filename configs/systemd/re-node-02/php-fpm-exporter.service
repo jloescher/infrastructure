@@ -1,0 +1,13 @@
+[Unit]
+Description=PHP-FPM Prometheus Exporter
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+ExecStart=/usr/local/bin/php-fpm-exporter --addr=:9253 --fastcgi=unix:///run/php/php8.5-fpm-rentalfixer.sock
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -70,7 +70,7 @@ Infrastructure-as-code repository for managing Quantyra VPS infrastructure.
 | router-01 | 100.102.220.16 | Router/Monitoring | 2 vCPU, 8GB RAM, 160GB SSD |
 | router-02 | 100.116.175.9 | Router | 2 vCPU, 8GB RAM, 160GB SSD |
 | re-db | 100.92.26.38 | App Server | 12 vCPU, 48GB RAM, 720GB NVMe |
-| re-node-02 | 100.101.39.22 | App Server | 12 vCPU, 48GB RAM, 720GB NVMe |
+| re-node-02 | 100.89.130.19 | App Server | 12 vCPU, 48GB RAM, 720GB NVMe |
 
 ## Directory Structure
 

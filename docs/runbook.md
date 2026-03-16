@@ -10,7 +10,7 @@
 | **Database** | re-node-03 | 100.114.117.46 | 172.93.54.145 | PostgreSQL + Redis | 8 vCPU, 32GB RAM, 640GB NVMe |
 | **Database** | re-node-04 | 100.115.75.119 | 172.93.54.122 | PostgreSQL | 8 vCPU, 32GB RAM, 640GB NVMe |
 | **App** | re-db | 100.92.26.38 | 208.87.128.115 | App Server | 12 vCPU, 48GB RAM, 720GB NVMe |
-| **App** | re-node-02 | 100.101.39.22 | 23.29.118.8 | App Server (ATL pending) | 12 vCPU, 48GB RAM, 720GB NVMe |
+| **App** | re-node-02 | 100.89.130.19 | 23.227.173.245 | App Server (ATL pending) | 12 vCPU, 48GB RAM, 720GB NVMe |
 | **Router** | router-01 | 100.102.220.16 | 172.93.54.112 | HAProxy/PgBouncer/Monitoring | 2 vCPU, 8GB RAM, 160GB SSD |
 | **Router** | router-02 | 100.116.175.9 | 23.29.118.6 | HAProxy/PgBouncer | 2 vCPU, 8GB RAM, 160GB SSD |
 
@@ -354,7 +354,7 @@ curl http://100.126.103.51:9100/metrics | head
 ```bash
 # Deploy to both app servers
 ssh root@100.92.26.38 "cd /opt/apps/APP_NAME && git pull && systemctl restart APP_NAME"
-ssh root@100.101.39.22 "cd /opt/apps/APP_NAME && git pull && systemctl restart APP_NAME"
+ssh root@100.89.130.19 "cd /opt/apps/APP_NAME && git pull && systemctl restart APP_NAME"
 ```
 
 ## Contacts

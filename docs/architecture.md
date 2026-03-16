@@ -72,7 +72,7 @@ The infrastructure uses a multi-tier architecture with high availability at ever
 │   ┌─────────────────────────────┐    ┌─────────────────────────────┐           │
 │   │       APP SERVER 1          │    │       APP SERVER 2          │           │
 │   │       re-db                 │    │       re-node-02            │           │
-│   │    100.92.26.38             │    │    100.101.39.22            │           │
+│   │    100.92.26.38             │    │    100.89.130.19            │           │
 │   │                             │    │                             │           │
 │   │  ┌───────────────────────┐  │    │  ┌───────────────────────┐  │           │
 │   │  │ nginx (port 8100+)    │  │    │  │ nginx (port 8100+)    │  │           │
@@ -135,7 +135,7 @@ The infrastructure uses a multi-tier architecture with high availability at ever
 | Name | Tailscale IP | Public IP | Location | PHP | Node.js |
 |------|--------------|-----------|----------|-----|---------|
 | re-db | 100.92.26.38 | 208.87.128.115 | NYC | 8.5 | 20 |
-| re-node-02 | 100.101.39.22 | 23.29.118.8 | ATL | 8.5 | 20 |
+| re-node-02 | 100.89.130.19 | 23.227.173.245 | ATL | 8.5 | 20 |
 
 ### Database Servers
 
@@ -189,7 +189,7 @@ HAProxy Backend Configuration:
 │    option httpchk GET /                  │
 │    http-check expect status 200-499      │
 │    server app1 100.92.26.38:8100 check   │
-│    server app2 100.101.39.22:8100 check  │
+│    server app2 100.89.130.19:8100 check  │
 └─────────────────────────────────────────┘
 ```
 
@@ -321,7 +321,7 @@ backend rentalfixer_backend
     http-check expect status 200-499
     option forwardfor
     server app1 100.92.26.38:8100 check
-    server app2 100.101.39.22:8100 check
+    server app2 100.89.130.19:8100 check
 
 backend rentalfixer_staging_backend
     mode http
@@ -330,7 +330,7 @@ backend rentalfixer_staging_backend
     http-check expect status 200-499
     option forwardfor
     server app1 100.92.26.38:8101 check
-    server app2 100.101.39.22:8101 check
+    server app2 100.89.130.19:8101 check
 
 backend not_found_backend
     mode http

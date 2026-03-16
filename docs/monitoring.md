@@ -55,7 +55,7 @@ scrape_configs:
           - '100.102.220.16:9100'  # router-01
           - '100.116.175.9:9100'   # router-02
           - '100.92.26.38:9100'    # re-db
-          - '100.101.39.22:9100'   # re-node-02
+          - '100.89.130.19:9100'   # re-node-02
 
   # PostgreSQL Exporter
   - job_name: 'postgres_exporter'
@@ -101,14 +101,14 @@ scrape_configs:
     static_configs:
       - targets:
           - '100.92.26.38:9113'
-          - '100.101.39.22:9113'
+          - '100.89.130.19:9113'
 
   # PHP-FPM Exporter
   - job_name: 'php_fpm_exporter'
     static_configs:
       - targets:
           - '100.92.26.38:9253'
-          - '100.101.39.22:9253'
+          - '100.89.130.19:9253'
 ```
 
 ## Exporter Configuration

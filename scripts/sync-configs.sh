@@ -45,7 +45,7 @@ echo "=== App Servers ==="
 mkdir -p configs/app-servers/re-db/nginx-sites configs/app-servers/re-node-02/nginx-sites
 mkdir -p configs/app-servers/re-db/php-fpm configs/app-servers/re-node-02/php-fpm
 
-for server in "100.92.26.38:re-db" "100.101.39.22:re-node-02"; do
+for server in "100.92.26.38:re-db" "100.89.130.19:re-node-02"; do
     ip=$(echo $server | cut -d: -f1)
     name=$(echo $server | cut -d: -f2)
     
@@ -146,7 +146,7 @@ echo "=== App .env examples ==="
 mkdir -p configs/apps
 for app in rentalfixer rentalfixer-staging; do
     ssh root@100.92.26.38 "cat /opt/apps/$app/.env 2>/dev/null" | sed 's/=.*/=***/' > "configs/apps/$app-re-db.env.example" 2>/dev/null
-    ssh root@100.101.39.22 "cat /opt/apps/$app/.env 2>/dev/null" | sed 's/=.*/=***/' > "configs/apps/$app-re-node-02.env.example" 2>/dev/null
+    ssh root@100.89.130.19 "cat /opt/apps/$app/.env 2>/dev/null" | sed 's/=.*/=***/' > "configs/apps/$app-re-node-02.env.example" 2>/dev/null
 done
 echo "App .env examples synced"
 

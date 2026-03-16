@@ -40,7 +40,7 @@ Goal: Deploy the infrastructure management dashboard as a Docker Compose package
 │   Routers     │       │  App Servers  │       │   Databases   │
 │ (HAProxy)     │       │ (nginx/PHP)   │       │ (Postgres/    │
 │ 172.93.54.112 │       │ 100.92.26.38  │       │  Redis)       │
-│ 23.29.118.6   │       │ 100.101.39.22 │       │               │
+│ 23.29.118.6   │       │ 100.89.130.19 │       │               │
 └───────────────┘       └───────────────┘       └───────────────┘
 ```
 
@@ -237,7 +237,7 @@ services:
       - "router-01:100.102.220.16"
       - "router-02:100.116.175.9"
       - "re-db:100.92.26.38"
-      - "re-node-02:100.101.39.22"
+      - "re-node-02:100.89.130.19"
       - "re-node-01:100.126.103.51"
       - "re-node-03:100.114.117.46"
       - "re-node-04:100.115.75.119"

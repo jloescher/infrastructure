@@ -52,7 +52,7 @@ echo "=== Scanning services on app servers ==="
 for server in re-db re-node-02; do
     case $server in
         re-db) ip="100.92.26.38" ;;
-        re-node-02) ip="100.101.39.22" ;;
+        re-node-02) ip="100.89.130.19" ;;
     esac
     
     echo ""

@@ -6,7 +6,7 @@ if [ "$1" == "--rebuild" ]; then
     echo "Rebuilding HAProxy config..."
     
     APP_SERVER_1="100.92.26.38"
-    APP_SERVER_2="100.101.39.22"
+    APP_SERVER_2="100.89.130.19"
     
     http_cfg="/etc/haproxy/domains/web_http.cfg"
     https_cfg="/etc/haproxy/domains/web_https.cfg"
@@ -157,7 +157,7 @@ if [ -z "$DOMAIN" ] || [ -z "$APP_NAME" ] || [ -z "$APP_PORT" ]; then
 fi
 
 APP_SERVER_1="100.92.26.38"
-APP_SERVER_2="100.101.39.22"
+APP_SERVER_2="100.89.130.19"
 
 echo "Provisioning domain: $DOMAIN for app: $APP_NAME on port: $APP_PORT"
 [ -n "$WWW_DOMAIN" ] && echo "WWW redirect: $WWW_DOMAIN -> $DOMAIN"

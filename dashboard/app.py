@@ -70,7 +70,7 @@ ROUTERS = [
 
 APP_SERVERS = [
     {"name": "re-db", "ip": "100.92.26.38", "public_ip": "208.87.128.115", "role": "App Server"},
-    {"name": "re-node-02", "ip": "100.101.39.22", "public_ip": "23.29.118.8", "role": "App Server (ATL)"}
+    {"name": "re-node-02", "ip": "100.89.130.19", "public_ip": "23.227.173.245", "role": "App Server (ATL)"}
 ]
 
 APP_PORT_RANGE = {"start": 8100, "end": 8199}
@@ -2360,7 +2360,7 @@ def delete_database(db_name):
 def generate_github_workflow(framework, app_name, target_servers, staging_env, create_db, db_name):
     deploy_servers = [
         {"name": "re-db", "ip": "100.92.26.38"},
-        {"name": "re-node-02", "ip": "100.101.39.22"}
+        {"name": "re-node-02", "ip": "100.89.130.19"}
     ]
     
     gh_secret = "${{ secrets."

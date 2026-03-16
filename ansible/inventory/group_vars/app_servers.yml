@@ -92,8 +92,8 @@ app_servers:
     secrets_file: /opt/quantyra-datalayer/secrets.env
 
   re-node-02:
-    tailscale_ip: 100.101.39.22
-    public_ip: 23.29.118.8
+    tailscale_ip: 100.89.130.19
+    public_ip: 23.227.173.245
     ipv6: 2602:ff16:3:1299::1
     uptime_days: 63
     services: {}
