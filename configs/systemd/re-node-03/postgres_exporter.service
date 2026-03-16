@@ -1,0 +1,15 @@
+[Unit]
+Description=Prometheus PostgreSQL Exporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=postgres_exporter
+Group=postgres_exporter
+Type=simple
+Environment=DATA_SOURCE_NAME=postgresql://postgres_exporter:Dr6cjGiBQzEEgGN4d3vs@100.114.117.46:5432/postgres?sslmode=disable
+ExecStart=/usr/local/bin/postgres_exporter --web.listen-address=100.114.117.46:9187
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

@@ -5,7 +5,7 @@ After=network.target
 [Service]
 Type=simple
 User=www-data
-ExecStart=/usr/local/bin/php-fpm-exporter --addr=:9253 --fastcgi=unix:///run/php/php8.5-fpm-rentalfixer.sock
+ExecStart=/usr/local/bin/php-fpm-exporter --addr=100.89.130.19:9253 --fastcgi=unix:///run/php/php8.5-fpm-rentalfixer.sock
 Restart=on-failure
 RestartSec=5
 

@@ -1,0 +1,14 @@
+[Unit]
+Description=HAProxy Exporter
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/haproxy_exporter --web.listen-address=100.116.175.9:9101 --haproxy.scrape-uri=http://localhost:8405/metrics
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

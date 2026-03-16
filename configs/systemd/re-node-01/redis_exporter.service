@@ -1,0 +1,14 @@
+[Unit]
+Description=Redis Exporter
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/redis_exporter --web.listen-address=100.126.103.51:9121 -redis.addr redis://100.126.103.51:6379 -redis.password CcPUa3nvcxHtyNYjztbDyfCCuhgix78novmBDNGk
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
