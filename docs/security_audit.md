@@ -191,19 +191,18 @@ Applications tested and verified working after change.
 
 ---
 
-### 8. MEDIUM: Nginx server_tokens Not Disabled
+### 8. ~~MEDIUM: Nginx server_tokens Not Disabled~~ ✅ FIXED
 
-**Severity:** MEDIUM
+**Severity:** ~~MEDIUM~~ RESOLVED
 **Servers:** re-db, re-node-02
 
 **Finding:**
-Nginx `server_tokens` is commented out (enabled by default), exposing version information.
+~~Nginx `server_tokens` was commented out (enabled by default), exposing version information.~~
 
-**Remediation:**
-```nginx
-# /etc/nginx/nginx.conf
-server_tokens off;
-```
+**Resolution (2026-03-16):**
+Enabled `server_tokens off;` in `/etc/nginx/nginx.conf` on both app servers.
+
+**Result:** Server header now shows `nginx` without version number.
 
 ---
 
