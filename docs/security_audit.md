@@ -144,30 +144,22 @@ Both ports restricted to Tailscale network only via UFW:
 
 ---
 
-### 6. MEDIUM: Missing Security Headers
+### 6. ~~MEDIUM: Missing Security Headers~~ ✅ FIXED
 
-**Severity:** MEDIUM
-**Servers:** HAProxy, Nginx
+**Severity:** ~~MEDIUM~~ RESOLVED
+**Servers:** HAProxy (routers)
 
 **Finding:**
-Missing HTTP security headers on responses:
-- Strict-Transport-Security (HSTS)
-- X-Content-Type-Options (partially present)
-- X-Frame-Options (partially present)
-- Content-Security-Policy
-- X-XSS-Protection
-- Referrer-Policy
-- Permissions-Policy
+~~Missing HTTP security headers on responses.~~
 
-**Remediation:**
-Add to HAProxy HTTPS frontend:
-```
-http-response set-header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-http-response set-header X-Content-Type-Options "nosniff"
-http-response set-header X-Frame-Options "SAMEORIGIN"
-http-response set-header X-XSS-Protection "1; mode=block"
-http-response set-header Referrer-Policy "strict-origin-when-cross-origin"
-```
+**Resolution (2026-03-16):**
+Added security headers to HAProxy HTTPS frontend:
+- `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload` (HSTS)
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: SAMEORIGIN`
+- `X-XSS-Protection: 1; mode=block`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()`
 
 ---
 
