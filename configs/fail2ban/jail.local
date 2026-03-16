@@ -1,0 +1,25 @@
+[DEFAULT]
+# Ban duration (1 hour for first offense, increases for repeat offenders)
+bantime = 1h
+bantime.multipliers = 1 2 4 8 16 32 64 128 256 512 1024
+
+# Time window for counting failures
+findtime = 10m
+
+# Max retries before ban
+maxretry = 3
+
+# Backend for log monitoring
+backend = systemd
+
+# Whitelist Tailscale network and localhost
+ignoreip = 127.0.0.1/8 ::1 100.64.0.0/10
+
+[sshd]
+enabled = true
+port = ssh
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = 3
+findtime = 10m
+bantime = 1h

@@ -78,33 +78,33 @@ Prometheus scrapes via Tailscale network only.
 
 ---
 
-### 3. HIGH: SSH Open to Internet on All Servers
+### 3. ~~HIGH: SSH Open to Internet on All Servers~~ ✅ FIXED
 
-**Severity:** MEDIUM-HIGH
+**Severity:** ~~MEDIUM-HIGH~~ RESOLVED
 **Servers:** All servers
 
 **Finding:**
-Port 22 (SSH) is open to the entire internet on all servers. While SSH is configured securely (key-only auth, root prohibit-password), this still represents unnecessary exposure.
+~~Port 22 (SSH) is open to the entire internet on all servers. While SSH is configured securely (key-only auth, root prohibit-password), this still represents unnecessary exposure.~~
 
-**Risk:**
-- Brute force attempts (though unlikely to succeed)
-- Zero-day exploits in OpenSSH
-- Log flooding from automated attacks
+**Resolution (2026-03-16):**
+Fail2Ban configured on all servers with:
+- Ban after 3 failed attempts within 10 minutes
+- Initial ban duration: 1 hour
+- Progressive ban duration multipliers for repeat offenders
+- Tailscale network (100.64.0.0/10) whitelisted
 
-**Remediation:**
-```bash
-# Restrict SSH to Tailscale network only
-ufw delete allow 22
-ufw allow from 100.64.0.0/10 to any port 22
+This provides protection against brute force attacks while maintaining access if Tailscale goes down.
 
-# OR use fail2ban with stricter settings
-# /etc/fail2ban/jail.local
-[sshd]
-enabled = true
-maxretry = 3
-bantime = 1h
-findtime = 10m
-```
+**Current Status:**
+| Server | Banned IPs |
+|--------|------------|
+| router-01 | 4 |
+| router-02 | 1 |
+| re-db | 8 |
+| re-node-02 | 1 |
+| re-node-01 | 2 |
+| re-node-03 | 7 |
+| re-node-04 | 3 |
 
 ---
 
