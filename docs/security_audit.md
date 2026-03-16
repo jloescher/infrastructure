@@ -163,23 +163,31 @@ Added security headers to HAProxy HTTPS frontend:
 
 ---
 
-### 7. MEDIUM: PHP disable_functions Empty
+### 7. ~~MEDIUM: PHP disable_functions Empty~~ ✅ FIXED
 
-**Severity:** MEDIUM
+**Severity:** ~~MEDIUM~~ RESOLVED
 **Servers:** re-db, re-node-02
 
 **Finding:**
-PHP `disable_functions` is empty, allowing potentially dangerous functions.
+~~PHP `disable_functions` was empty, allowing potentially dangerous functions.~~
 
-**Risk:**
-- If application is compromised, attackers can use exec(), shell_exec(), etc.
-- RCE potential through vulnerable PHP code
+**Resolution (2026-03-16):**
+Configured `disable_functions` in `/etc/php/8.5/fpm/php.ini` on both app servers:
 
-**Remediation:**
-```ini
-# /etc/php/8.5/fpm/php.ini
-disable_functions = exec,passthru,shell_exec,system,proc_open,popen,curl_exec,curl_multi_exec,parse_ini_file,show_source,symlink,pcntl_exec,pcntl_fork,pcntl_signal,dl
-```
+**Disabled functions:**
+- `pcntl_*` - Process control functions (fork, signal, etc.)
+- `show_source`, `highlight_file` - Source code disclosure
+- `symlink`, `link` - Filesystem attacks
+- `posix_kill`, `posix_mkfifo`, `posix_set*` - Process/user manipulation
+- `posix_getpwuid`, `posix_getgrgid` - User/group info disclosure
+- `dl` - Loading arbitrary extensions
+
+**Kept enabled (needed by Laravel/frameworks):**
+- `exec`, `shell_exec`, `passthru`, `system` - Used by Artisan/queue workers
+- `proc_open` - Used by Symfony Process component
+- `parse_ini_file` - Configuration parsing
+
+Applications tested and verified working after change.
 
 ---
 
