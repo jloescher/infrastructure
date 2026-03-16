@@ -384,9 +384,53 @@ Each server has a customized Promtail config collecting relevant logs:
 
 | Server | Logs Collected |
 |--------|----------------|
-| router-01/02 | syslog, auth, haproxy |
+| router-01/02 | syslog, auth, haproxy, prometheus, alertmanager, dashboard |
 | re-db, re-node-02 | syslog, auth, nginx, php-fpm |
 | re-node-01/03/04 | syslog, auth, postgresql, patroni, redis |
+
+### HAProxy Log Collection
+
+HAProxy logs require special configuration:
+
+1. **rsyslog config** (`/etc/rsyslog.d/49-haproxy.conf`):
+```bash
+# Create socket for chroot'ed HAProxy
+$AddUnixListenSocket /var/lib/haproxy/dev/log
+
+# Route HAProxy logs to dedicated file
+:programname, startswith, "haproxy" {
+  /var/log/haproxy.log
+  stop
+}
+local0.* /var/log/haproxy.log
+& stop
+local1.* /var/log/haproxy.log
+& stop
+```
+
+2. **Log file permissions**:
+```bash
+touch /var/log/haproxy.log
+chown syslog:adm /var/log/haproxy.log
+chmod 644 /var/log/haproxy.log
+systemctl restart rsyslog
+```
+
+3. **Logrotate** (`/etc/logrotate.d/haproxy`):
+```bash
+/var/log/haproxy.log {
+    weekly
+    rotate 4
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 644 syslog adm
+    postrotate
+        /usr/bin/systemctl reload rsyslog > /dev/null 2>&1 || true
+    endscript
+}
+```
 
 ### Querying Logs in Grafana
 

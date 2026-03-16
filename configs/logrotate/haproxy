@@ -1,11 +1,12 @@
 /var/log/haproxy.log {
-    daily
-    rotate 7
-    missingok
-    notifempty
+    weekly
+    rotate 4
     compress
     delaycompress
+    missingok
+    notifempty
+    create 644 syslog adm
     postrotate
-        [ ! -x /usr/lib/rsyslog/rsyslog-rotate ] || /usr/lib/rsyslog/rsyslog-rotate
+        /usr/bin/systemctl reload rsyslog > /dev/null 2>&1 || true
     endscript
 }
