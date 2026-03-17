@@ -1216,6 +1216,7 @@ def create_app():
             "build_commands": {
                 "install": request.form.get("install_cmd", ""),
                 "build": request.form.get("build_cmd", ""),
+                "migrate": request.form.get("migrate_cmd", ""),
                 "start": request.form.get("start_cmd", "")
             }
         }
