@@ -16,7 +16,7 @@ Infrastructure-as-code repository for managing Quantyra VPS infrastructure with:
 
 ### Server Access
 - **Dashboard**: http://100.102.220.16:8080 (admin / DbAdmin2026!)
-- **App Servers**: re-db (100.92.26.38), re-node-02 (100.89.130.19)
+- **App Servers**: re-db (100.92.26.38), re-node-02 (100.89.130.19, public: 23.227.173.245)
 - **Routers**: router-01 (100.102.220.16), router-02 (100.116.175.9)
 
 ### Critical Credentials
@@ -226,3 +226,48 @@ Apps automatically configured on deploy:
 **Node.js:**
 - `NODE_ENV` based on environment
 - `NEXT_PUBLIC_URL` if Next.js
+
+## SSH Key Infrastructure
+
+### SSH Key Distribution
+
+All servers have the following SSH keys authorized:
+- `id_vps` (ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDWDnyAL96iqiqsxJLPkD+ShpHra55FWH7hULEsOc4Ih) - Primary access key
+- `root@re-db` - For server-to-server communication from re-db
+- `root@router-01` - For server-to-server communication from router-01 (dashboard orchestrator)
+- `root@router-02` - For server-to-server communication from router-02 (secondary router)
+
+### Tailscale SSH
+
+Tailscale SSH (`RunSSH`) is **disabled** on all servers. SSH access uses standard SSH keys.
+
+### SSH Rollback Procedure
+
+If SSH connectivity issues arise after disabling Tailscale SSH:
+
+1. **Re-enable Tailscale SSH via SSDNodes console**:
+   ```bash
+   tailscale set --ssh=true
+   ```
+
+2. **Or via Tailscale admin console ACL**:
+   - Go to https://login.tailscale.com/admin/acls
+   - Add SSH rule to allow access
+   - Connect via Tailscale SSH and re-add keys
+
+3. **Verify access and re-disable Tailscale SSH**:
+   ```bash
+   tailscale set --ssh=false --accept-risk=lose-ssh
+   ```
+
+### Server SSH Matrix
+
+| Server | Tailscale IP | Public IP | SSH Keys |
+|--------|-------------|-----------|----------|
+| router-01 | 100.102.220.16 | 172.93.54.112 | id_vps, re-db, router-01, router-02 |
+| router-02 | 100.116.175.9 | 23.29.118.6 | id_vps, re-db, router-01, router-02 |
+| re-db | 100.92.26.38 | 208.87.128.115 | id_vps, re-db, router-01, router-02 |
+| re-node-01 | 100.126.103.51 | 104.225.216.26 | id_vps, re-db, router-01, router-02 |
+| re-node-02 | 100.89.130.19 | 23.227.173.245 | id_vps, re-db, router-01, router-02 |
+| re-node-03 | 100.114.117.46 | 172.93.54.145 | id_vps, re-db, router-01, router-02 |
+| re-node-04 | 100.115.75.119 | 172.93.54.122 | id_vps, re-db, router-01, router-02 |

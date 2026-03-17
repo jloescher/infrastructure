@@ -264,6 +264,315 @@ bind :443 ssl crt /etc/haproxy/certs/rentalfixer.app.pem alpn h2,http/1.1 ssl-mi
 
 ---
 
+### 11. CRITICAL: Dashboard/Webhook Exposure Boundary Not Enforced (2026-03-17)
+
+**Severity:** CRITICAL  
+**Scope:** Dashboard ingress, webhook ingress
+
+**Finding:**
+- Dashboard API/UI can be reached from non-Tailscale paths depending on current ingress routing.
+- Webhook and dashboard traffic are not cleanly isolated.
+
+**Required Fix:**
+- Keep dashboard private (Tailscale-only)
+- Expose only GitHub webhook endpoint publicly via dedicated host:
+  - `https://hooks.quantyralabs.cc/<app_name>`
+- Deny all non-webhook routes on webhook host
+
+**Status:** ✅ Implemented (2026-03-17)
+
+---
+
+### 12. HIGH: Deployment Pipeline Missing Rollback Safety Guarantees (2026-03-17)
+
+**Severity:** HIGH  
+**Scope:** App deployment and rolling updates
+
+**Finding:**
+- Rolling deployment can continue to secondary server even when primary health fails.
+- Last-known-good commit tracking and rollback behavior are incomplete.
+
+**Required Fix:**
+- Primary-first strict gate
+- Stop rollout on primary failure
+- Rollback to previous known-good commit automatically
+- Add explicit redeploy and rollback UI actions
+
+**Status:** ✅ Implemented (2026-03-17)
+
+---
+
+### 13. HIGH: Domain Provisioning Reliability Gaps Cause 404 Exposure (2026-03-17)
+
+**Severity:** HIGH  
+**Scope:** Domain provisioning, HAProxy registration, SSL issuance
+
+**Finding:**
+- Provisioning can fail per-router (SSH self-targeting, timeout), leaving domains in failed state.
+- Failed provisioning results in `404 not found` from HAProxy default backend.
+
+**Required Fix:**
+- Fix router execution path and timeout handling
+- Validate cert+registry+HAProxy reload on both routers before marking success
+- Add domain health checks after deploy (prod: 200, staging: 200 or 401)
+
+**Status:** ✅ Implemented (2026-03-17)
+
+---
+
+### 14. MEDIUM: Database Cleanup Inconsistency Leaves Staging Artifacts (2026-03-17)
+
+**Severity:** MEDIUM  
+**Scope:** App delete, staging delete, DB delete flows
+
+**Finding:**
+- Staging DB/users may remain after app deletion due to incomplete drop handling.
+
+**Required Fix:**
+- Terminate active DB sessions before drop
+- Drop prod/staging DBs and users independently with explicit status reporting
+
+**Status:** ✅ Implemented (2026-03-17)
+
+---
+
+### 15. MEDIUM: Database Credential Visibility Inconsistency (2026-03-17)
+
+**Severity:** MEDIUM  
+**Scope:** Databases UI
+
+**Finding:**
+- Password display is inconsistent between app-created and manual DB records.
+
+**Required Fix:**
+- Normalize password display model
+- For hash-only credentials, show `Not recoverable` and provide reset flow
+
+**Status:** 🚧 Partially Implemented (2026-03-17)
+
+---
+
+### 16. MEDIUM: Deployment State Transparency and Domain Override Safety (2026-03-17)
+
+**Severity:** MEDIUM  
+**Scope:** Deployment UX/API status reporting, domain provisioning controls
+
+**Finding:**
+- Deploy outcomes are not clearly separated into independent phases (app deploy vs domain provisioning).
+- Users can misinterpret domain state after deploy failures when provisioning is skipped.
+- No explicit, auditable manual override exists for provisioning pending domains after a failed deploy.
+
+**Required Fix:**
+- Add explicit two-phase deployment reporting in API/UI:
+  - `deploy`
+  - `domain_provisioning`
+- Mark domain provisioning as `skipped` when deploy fails.
+- Surface last deploy failure clearly on app status page.
+- Add manual opt-in endpoint/UI action: **Force Provision Pending Domains**.
+- Keep strict default behavior (no automatic provisioning when deploy fails).
+
+**Status:** ✅ Implemented (2026-03-17 10:56 EDT)
+
+---
+
+### 17. MEDIUM: Infra-Orchestrator Reliability Gaps (Deploy Error Clarity + Staging Cleanup) (2026-03-17)
+
+**Severity:** MEDIUM  
+**Scope:** Dashboard deploy orchestration and delete lifecycle consistency
+
+**Finding:**
+- Deploy failures can surface as low-context `server:` errors if stderr is empty.
+- Initial deployment failures can incorrectly imply rollback behavior when no known-good commit exists.
+- Staging DB/user artifacts may remain represented in configuration after delete flows.
+
+**Task-by-Task Execution List:**
+1. ✅ Add stdout-tail fallback for deploy error reporting when stderr is empty
+2. ✅ Skip rollback attempts for first-time deploy failures without known-good commit
+3. ✅ Surface explicit "initial deploy failed, rollback unavailable" messaging
+4. ✅ Normalize staging cleanup across app/staging/database delete flows including config entry removal
+5. ✅ Sync mirrored config files in local repository (`dashboard/*` -> `configs/dashboard/*`)
+
+**Status:** ✅ Implemented (2026-03-17 11:38 EDT)
+
+---
+
+### 18. MEDIUM: Force-Provision Request Hang via Router-to-Router SSH Path (2026-03-17)
+
+**Severity:** MEDIUM  
+**Scope:** Domain provisioning orchestration and operator control-plane responsiveness
+
+**Finding:**
+- Manual **Force Provision Pending Domains** can hang when router-01 attempts SSH to router-02 over Tailscale IP and interactive Tailscale SSH checks are triggered.
+- Hung provisioning requests leave domains in `pending` state and users see no completion feedback.
+
+**Task-by-Task Execution List:**
+1. ✅ Add router command fallback path from Tailscale IP to public IP when needed
+2. ✅ Enforce bounded execution behavior so force-provision returns without indefinite hangs
+3. ✅ Improve UI request-state handling for force-provision action
+4. ✅ Deploy updated dashboard and verify endpoint behavior
+5. ✅ Sync mirrored config files (`dashboard/*` -> `configs/dashboard/*`)
+
+**Status:** ✅ Implemented (2026-03-17 12:21 EDT)
+
+**Operational Note (2026-03-17 12:21 EDT):**
+- Control-plane no longer hangs on force-provision requests.
+- Remaining environmental access issue: router-02 provisioning path still reports `Tailscale timeout` and `public IP permission denied (publickey,password)` and requires SSH access remediation.
+
+---
+
+### 19. HIGH: Router-to-Router Non-Interactive SSH Gap Blocks Domain Provisioning Completion (2026-03-17)
+
+**Severity:** HIGH  
+**Scope:** Router provisioning execution path, HAProxy domain lifecycle
+
+**Finding:**
+- Domain provisioning still cannot complete on router-02 because router-01 lacks a working non-interactive SSH path.
+- This prevents cert issuance/registry updates on router-02 and leaves domains pending/404.
+
+**Task-by-Task Execution List:**
+1. ✅ Validate router-01 SSH key material and router-02 authorized key access
+2. ✅ Restore non-interactive SSH path(s) for provisioning (`BatchMode=yes`)
+3. ✅ Re-run force-provision and validate cert + registry artifacts on both routers
+4. ✅ Record verification in docs and close finding status
+
+**Status:** ✅ Implemented (2026-03-17 12:50 EDT)
+
+**Verification Outcome (2026-03-17 12:50 EDT):**
+- Manual force-provision returned success (`HTTP 200`) and pending domains reached zero.
+- Router-01 and router-02 now both contain rentalfixer production/staging registry entries and certificates.
+- Remaining user-facing error state changed to `503` (upstream app availability), no longer router-level `404` from missing domain provisioning.
+
+---
+
+### 20. MEDIUM: Composer Runtime Compatibility Gap on App Servers (2026-03-17)
+
+**Severity:** MEDIUM  
+**Scope:** App-server deploy toolchain (`composer` under PHP 8.5)
+
+**Finding:**
+- Composer runtime on app servers emits repeated `E_STRICT` deprecation notices under newer PHP runtime.
+- Notice flood obscures actionable deploy errors and increases operator triage time.
+
+**Task-by-Task Execution List:**
+1. ✅ Audit Composer versions on `re-db` and `re-node-02`
+2. ✅ Upgrade Composer to 2.8+ on both app servers
+3. ✅ Verify `composer --version` and binary path consistency
+4. ✅ Re-run deploy check and confirm notice flood reduction
+5. ✅ Record completion and verification in docs
+
+**Status:** ✅ Implemented (2026-03-17 13:10 EDT)
+
+**Verification Outcome (2026-03-17 13:10 EDT):**
+- `composer` now resolves to `/usr/local/bin/composer` on both app servers.
+- Composer version is `2.9.5` on `re-db` and `re-node-02`.
+- Deprecated `E_STRICT` notice flood no longer obscures deploy output.
+- Deploy failures now surface application/runtime issues directly (sqlite path + health check), improving triage quality.
+
+---
+
+### 21. HIGH: App-Server Language Tooling Executed as Root (2026-03-17)
+
+**Severity:** HIGH  
+**Scope:** App-server deploy/build/runtime orchestration
+
+**Finding:**
+- App clone/build/migration paths could execute as `root`, increasing blast radius for compromised dependency scripts.
+- Runtime user selection across generated non-Laravel services was not standardized to a dedicated least-privilege account.
+
+**Required Fix:**
+- Standardize non-root app tooling/runtime user to `webapps` on app servers.
+- Ensure user existence before clone/build/service creation paths.
+- Execute Composer/NPM/Pip/Go and migration steps under `webapps`.
+- Enforce ownership guardrails on `/opt/apps/<app>` and Laravel writable paths to prevent permission drift/regression.
+
+**Task-by-Task Execution List:**
+1. ✅ Add `webapps` runtime-user bootstrap in dashboard orchestration
+2. ✅ Run clone/build/setup tooling as `webapps` in dashboard paths
+3. ✅ Generate non-Laravel systemd units with `User=webapps` and `Group=webapps`
+4. ✅ Update deploy script to execute tooling via `sudo -u webapps`
+5. ✅ Add permission guardrails for Laravel writable directories while keeping non-root app ownership
+6. ✅ Update docs to encode the policy and operational behavior
+
+**Status:** ✅ Implemented (2026-03-17 13:52 EDT)
+
+**Verification Outcome (2026-03-17 13:52 EDT):**
+- Dashboard and mirrored config code now ensure `webapps` user creation and usage for app tooling.
+- Non-Laravel generated services run as `webapps:webapps`.
+- Deploy script now re-applies ownership and uses non-root command execution for build/migration paths.
+
+---
+
+### 22. HIGH: Deploy-Time Runtime Environment Not Materialized from SOPS (2026-03-17)
+
+**Severity:** HIGH  
+**Scope:** Dashboard deploy orchestration, Laravel runtime configuration on app servers
+
+**Finding:**
+- SOPS-based secret management exists on dashboard host, but deploy flow can run without a generated app `.env` on app servers.
+- Missing `.env` causes runtime fallback/misconfiguration during Laravel deploy steps (e.g. sqlite path errors), obscuring the intended secrets model.
+
+**Required Fix:**
+- Keep AGE private key only on router-01.
+- Generate runtime `.env` from SOPS-managed app/global secrets on router-01 during deploy.
+- Push `.env` atomically to app servers with strict ownership/permissions.
+- Add fail-fast guard in deploy script when `.env` is absent.
+
+**Task-by-Task Execution List:**
+1. ✅ Implement SOPS-backed env generation + required-key validation in dashboard deploy path
+2. ✅ Atomically write `.env` on app servers (`webapps:webapps`, `640`)
+3. ✅ Add explicit missing-`.env` guard in `/opt/scripts/deploy-app.sh`
+4. ✅ Correct `.sops.yaml` path rules to include active `.yml` config filenames
+5. ✅ Deploy and verify on `re-db` and `re-node-02`
+6. ✅ Update docs with completion timestamp and verification evidence
+
+**Status:** ✅ Implemented (2026-03-17 14:12 EDT)
+
+**Verification Outcome (2026-03-17 14:12 EDT):**
+- Dashboard deploy flow now materializes runtime `.env` from SOPS-derived secrets before app deploy execution.
+- Required-key validation now fails fast with explicit missing key names (no secret values exposed).
+- Deploy script now exits immediately with actionable message if `.env` is missing.
+- App servers remain keyless (`sops`/`age` not installed; no AGE private key present), preserving router-01-only key boundary.
+
+---
+
+### 23. HIGH: Branch-to-Environment Deploy Policy and Secret Scope Separation Not Fully Enforced (2026-03-17)
+
+**Severity:** HIGH  
+**Scope:** Webhook deploy routing, production/staging isolation, runtime secret propagation
+
+**Finding:**
+- Webhook deploy behavior must enforce strict branch mapping to avoid accidental cross-environment rollout.
+- Secret updates must propagate to runtime `.env` files on app servers for both production and staging targets.
+- App secrets require explicit environment scoping (`shared`, `production`, `staging`) to prevent configuration bleed.
+
+**Required Fix:**
+- Enforce webhook routing policy:
+  - `main` -> production deploy only
+  - `staging` -> staging deploy only
+  - all other branches ignored
+- Maintain separate codebase deploy targets for production and staging.
+- Add scoped SOPS secret model and runtime `.env` sync on secret add/edit/delete.
+- Ensure Laravel first deploy auto-generates `APP_KEY` when absent.
+
+**Task-by-Task Execution List:**
+1. ✅ Implement strict webhook branch gating
+2. ✅ Implement dual production/staging deploy targets and env wiring
+3. ✅ Add scoped app-secret schema (`shared`/`production`/`staging`) with compatibility migration
+4. ✅ Sync runtime `.env` to app servers on secret CRUD operations
+5. ✅ Validate behavior for `main`, `staging`, and non-deploy branches
+6. ✅ Record completion and verification evidence
+
+**Status:** ✅ Implemented (2026-03-17 14:58 EDT)
+
+**Verification Outcome (2026-03-17 14:58 EDT):**
+- Branch gate behavior is enforced (`main` -> production, `staging` -> staging, others ignored).
+- Deploy path now uses explicit environment target directories (`/opt/apps/{app}` and `/opt/apps/{app}-staging`).
+- Scoped secret model is active with compatibility for legacy flat secret files.
+- Laravel `APP_KEY` auto-generation on first deploy is implemented and persisted in encrypted app secrets.
+- Secret CRUD now triggers runtime `.env` regeneration/sync; partial sync warnings are surfaced when a server is unreachable.
+
+---
+
 ## Performance Optimization Opportunities
 
 ### 1. PostgreSQL Configuration ✅ FULLY APPLIED
@@ -700,7 +1009,7 @@ systemctl restart redis-server
 ### Long Term (This Quarter) ✅ IN PROGRESS
 
 - [x] Implement centralized logging (Loki)
-- [ ] Implement secrets management (Vault/SOPS)
+- [x] Implement secrets management (SOPS on dashboard host)
 - [ ] Security audit logging
 - [ ] Penetration testing
 - [ ] Disaster recovery testing
@@ -820,7 +1129,200 @@ The infrastructure is now **well-hardened** with:
 - ✅ VPS-tuned kernel network settings applied
 - ✅ PostgreSQL optimized with huge pages
 
-**Remaining Priority Actions:**
-1. **Implement automated backups** (Critical)
-2. **Add Prometheus alert rules** (High)
-3. **Document restore procedures** (High)
+**Remaining Priority Actions (Updated 2026-03-17 14:58 EDT):**
+1. **Add password reset/regenerate flow for hash-only manual DB users** (Medium)
+2. **Add webhook endpoint rate limiting and optional GitHub IP allowlisting** (Medium)
+
+---
+
+### 24. HIGH: Tailscale SSH Intercepting Server-to-Server Communication (2026-03-17)
+
+**Severity:** HIGH  
+**Scope:** Server-to-server SSH, deploy orchestration, infrastructure automation
+
+**Finding:**
+- Tailscale SSH (`RunSSH: true`) was enabled on all servers, intercepting port 22 on Tailscale IPs.
+- Browser-based authentication requirement caused timeouts in automated scripts.
+- Deploy orchestration from router-01 to app servers failed silently or with misleading errors.
+
+**Required Fix:**
+- Disable Tailscale SSH on all servers
+- Establish SSH key-based authentication between servers
+- Maintain SSH key mesh for infrastructure automation
+
+**Task-by-Task Execution List:**
+1. ✅ Diagnose root cause of SSH timeouts
+2. ✅ Disable Tailscale SSH on all 7 Linux servers
+3. ✅ Generate SSH keys for server-to-server communication
+4. ✅ Distribute SSH keys to all servers (id_vps, re-db, router-01, router-02)
+5. ✅ Verify full SSH mesh connectivity
+6. ✅ Update AGENTS.md with SSH rollback procedure
+
+**Status:** ✅ Implemented (2026-03-17 20:10 EDT)
+
+**Verification Outcome (2026-03-17 20:10 EDT):**
+- Tailscale SSH disabled on all servers (`RunSSH: false`)
+- SSH key mesh established with 4 keys distributed to all servers
+- All servers can SSH to each other without browser authentication
+- Deploy orchestration and `.env` sync working correctly
+
+---
+
+### 25. HIGH: Database Deletion Scope Bug (2026-03-17)
+
+**Severity:** HIGH  
+**Scope:** Database lifecycle management, data loss prevention
+
+**Finding:**
+- Deleting production database incorrectly deleted staging database as well.
+- `delete_database()` function had `include_staging=True` hardcoded for production database deletion path.
+
+**Required Fix:**
+- Change `include_staging=False` when deleting production database
+- Only delete the explicitly requested scope
+
+**Task-by-Task Execution List:**
+1. ✅ Identify bug in `delete_database()` function
+2. ✅ Fix `include_staging` parameter for production deletion path
+3. ✅ Sync fix to local repo and config mirror
+4. ✅ Deploy fix to router-01
+5. ✅ Recreate deleted databases
+
+**Status:** ✅ Implemented (2026-03-17 21:00 EDT)
+
+**Verification Outcome (2026-03-17 21:00 EDT):**
+- Production database deletion now only affects production database
+- Staging database deletion continues to work correctly
+- Databases and users recreated after fix
+
+---
+
+### 26. MEDIUM: PostgreSQL Schema Permissions Not Granted for App Users (2026-03-17)
+
+**Severity:** MEDIUM  
+**Scope:** Database user lifecycle, Laravel migrations
+
+**Finding:**
+- App database users (`*_user`) were created but lacked CREATE TABLE permissions on the `public` schema.
+- This caused Laravel migrations to fail with `permission denied for schema public` error.
+- Issue surfaced after database recreation following the deletion bug fix.
+
+**Root Cause:**
+- PostgreSQL 15+ changed default permissions on the `public` schema.
+- App users need explicit `GRANT ALL ON SCHEMA public` to create tables.
+
+**Required Fix:**
+- Grant schema permissions to both `_user` and `_admin` accounts when creating databases.
+- Add default privileges for future tables.
+
+**Task-by-Task Execution List:**
+1. ✅ Identify the permission issue from deploy error logs
+2. ✅ Grant schema permissions on PostgreSQL primary (manual fix)
+3. ✅ Add `grant_schema_permissions()` helper function to `app.py`
+4. ✅ Call helper after CREATE DATABASE for both production and staging
+5. ✅ Fix premature connection close causing "cursor already closed" error
+6. ✅ Save secrets immediately after user creation (not at end of block)
+
+**Status:** ✅ Implemented (2026-03-17 22:10 EDT)
+
+**Verification Outcome:**
+- Removed premature connection close after production database
+- Secrets now saved immediately after user creation
+- Staging secrets saved immediately after staging user creation
+- Fallback secret saving checks if secret exists before setting
+- Deploy proceeded without cursor errors
+
+---
+
+### 27. MEDIUM: Deploy Script Backup Function Matches Multiple Env Variables (2026-03-17)
+
+**Severity:** MEDIUM  
+**Scope:** Deploy script reliability, database backup operations
+
+**Finding:**
+- The `backup_database()` function in `/opt/scripts/deploy-app.sh` uses unanchored grep:
+  ```bash
+  DB_USER=$(grep DB_USERNAME .env 2>/dev/null | cut -d'=' -f2)
+  ```
+- This matches both `DB_USERNAME` and `STAGING_DB_USERNAME`, causing pg_dump to receive multiple values.
+- Result: `pg_dump: error: too many command-line arguments`
+
+**Required Fix:**
+- Change to anchored grep:
+  ```bash
+  DB_USER=$(grep "^DB_USERNAME=" .env 2>/dev/null | cut -d'=' -f2)
+  ```
+
+**Task-by-Task Execution List:**
+1. ✅ Identify the grep matching issue
+2. ✅ Fix all grep patterns in `backup_database()` function
+3. ✅ Deploy fix to both app servers
+
+**Status:** ✅ Implemented (2026-03-17 21:20 EDT)
+
+**Verification Outcome (2026-03-17 21:20 EDT):**
+- All 5 grep patterns in `backup_database()` now use anchored matching (`^VARNAME=`)
+- Fix deployed to both `re-db` and `re-node-02`
+- Script synced to local repo (`scripts/deploy-app.sh`)
+
+---
+
+### 28. LOW: App Creation Wizard Missing Scoped Secrets Configuration (2026-03-17)
+
+**Severity:** LOW  
+**Scope:** App creation UX, secret management
+
+**Finding:**
+- The app creation wizard allows adding secrets, but all secrets are stored in the `shared` scope.
+- Users cannot configure production-specific or staging-specific secrets during app creation.
+- This requires a separate step after creation to edit secrets with proper scopes.
+
+**Required Fix:**
+- Add scope dropdown to each secret input row in the wizard
+- Default scope: "Shared" (applies to all environments)
+- Options: "Shared", "Production Only", "Staging Only"
+- Save secrets to appropriate scope during app creation
+
+**Task-by-Task Execution List:**
+1. ✅ Add scope dropdown to `addSecretInput()` function in `create_app.html`
+2. ✅ Update `collectSecrets()` to include scope
+3. ✅ Update form submission to send scoped secrets array
+4. ✅ Backend API already supports scope parameter
+5. ✅ Deploy and test
+
+**Status:** ✅ Implemented (2026-03-17 21:45 EDT)
+
+**Verification Outcome:**
+- Added scope dropdown to each secret input row with options: Shared (All), Production, Staging
+- Default scope is "Shared" (applies to all environments)
+- Updated `collectSecrets()` to return `{key, value, scope, description}`
+- API call updated to include scope parameter
+- Deployed to router-01
+
+---
+
+### 29. MEDIUM: Branch Names Hardcoded in Deploy Logic (2026-03-17)
+
+**Severity:** MEDIUM  
+**Scope:** Deploy orchestration, webhook handling, application lifecycle
+
+**Finding:**
+- Branch names (`main`, `staging`) are hardcoded in deploy logic.
+- Users cannot customize which branch triggers production vs staging deployments.
+- Limits flexibility for teams with different branching strategies (e.g., `master`/`develop`, `prod`/`dev`).
+
+**Required Fix:**
+- Add configurable `production_branch` and `staging_branch` fields in app creation wizard
+- Store branch configuration in applications.yml per app
+- Update deploy logic to use configured branches
+- Maintain backward compatibility with defaults (`main`/`staging`)
+
+**Task-by-Task Execution List:**
+1. ⏳ Add branch input fields to app creation wizard (Step 2)
+2. ⏳ Save branch configuration to app config
+3. ⏳ Update `run_pull_deploy()` to use app's configured branches
+4. ⏳ Update webhook handler to check against app's branches
+5. ⏳ Update GitHub workflow generation to use configured branches
+6. ⏳ Deploy and verify backward compatibility
+
+**Status:** 🚧 In Progress

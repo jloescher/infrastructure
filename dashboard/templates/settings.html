@@ -7,6 +7,61 @@
 </div>
 
 <div class="card">
+    <h2>Cloudflare Integration</h2>
+    <p>Configure Cloudflare API credentials for automatic DNS provisioning and SSL certificates.</p>
+    
+    <form method="POST" action="/settings/cloudflare">
+        <div class="form-group">
+            <label for="cf_api_token">Cloudflare API Token</label>
+            <input type="password" id="cf_api_token" name="cf_api_token" placeholder="zf5ncwuOaaXz2IJ1BVBu8myf0HQt5IxkPje_Rm1V" {% if cf_api_token_set %}value="****************"{% endif %}>
+            <div class="hint">Token with <code>Zone.DNS</code>, <code>Zone.Zone</code>, and <code>Zone.Settings</code> permissions.</div>
+        </div>
+        
+        <div class="form-group">
+            <label for="cf_zone_id">Default Zone ID (Optional)</label>
+            <input type="text" id="cf_zone_id" name="cf_zone_id" value="{{ cf_zone_id }}" placeholder="26470f68ef4dbbf7bf5a770630aa2a97">
+            <div class="hint">Default Cloudflare Zone ID. Can be overridden per domain in app settings.</div>
+        </div>
+        
+        <div class="form-group">
+            <label for="cf_zone_name">Default Zone Name (Optional)</label>
+            <input type="text" id="cf_zone_name" name="cf_zone_name" value="{{ cf_zone_name }}" placeholder="xotec.io">
+            <div class="hint">Default domain name for this zone.</div>
+        </div>
+        
+        <div class="form-group">
+            <button type="submit" class="btn">Save Cloudflare Settings</button>
+            {% if cf_api_token_set %}
+            <span style="color: #27ae60; margin-left: 1rem;">API Token configured</span>
+            {% else %}
+            <span style="color: #e74c3c; margin-left: 1rem;">Not configured - DNS provisioning unavailable</span>
+            {% endif %}
+        </div>
+    </form>
+    
+    <h3 style="margin-top: 2rem;">How to Create a Cloudflare API Token</h3>
+    <ol>
+        <li>Go to <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" class="link">Cloudflare Dashboard → My Profile → API Tokens</a></li>
+        <li>Click "Create Token"</li>
+        <li>Use "Edit zone DNS" template or create custom with these permissions:
+            <ul>
+                <li><code>Zone - DNS - Edit</code></li>
+                <li><code>Zone - Zone - Read</code></li>
+                <li><code>Zone - Settings - Edit</code> (for SSL)</li>
+            </ul>
+        </li>
+        <li>Copy the token and paste it above</li>
+    </ol>
+    
+    <h3 style="margin-top: 1rem;">Finding Your Zone ID</h3>
+    <ol>
+        <li>Go to your domain in Cloudflare Dashboard</li>
+        <li>Click "Overview" in the sidebar</li>
+        <li>Scroll down to "API" section - copy the Zone ID</li>
+    </ol>
+</div>
+
+<div class="card">
     <h2>GitHub Integration</h2>
     <p>Configure GitHub token for accessing private repositories during application deployment.</p>
     

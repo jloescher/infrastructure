@@ -24,7 +24,7 @@
 | Server | Tailscale IP | Public IP | Specs | Status |
 |--------|-------------|-----------|-------|--------|
 | re-db | 100.92.26.38 | 208.87.128.115 | 12 vCPU, 48GB RAM, 720GB NVMe | ✅ Online |
-| re-node-02 | 100.101.39.22 | 23.29.118.8 | 12 vCPU, 48GB RAM, 720GB NVMe | ✅ Online (63 days) |
+| re-node-02 | 100.89.130.19 | 23.227.173.245 | 12 vCPU, 48GB RAM, 720GB NVMe | ✅ Online (63 days) |
 
 ---
 
@@ -230,7 +230,7 @@ backend apps_https
 | router-01 | 172.93.54.112 | SSD Nodes |
 | router-02 | 23.29.118.6 | SSD Nodes |
 | re-db | 208.87.128.115 | SSD Nodes |
-| re-node-02 | 23.29.118.8 | SSD Nodes |
+| re-node-02 | 23.227.173.245 | SSD Nodes |
 
 ---
 

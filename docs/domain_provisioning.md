@@ -13,6 +13,39 @@ The infrastructure supports automated domain provisioning with:
 - **DNS**: Automatic Cloudflare DNS configuration with multi-zone support
 - **Security**: 5 Cloudflare WAF rules with managed_challenge support
 
+## Domain Lifecycle
+
+- Domains are stored in a single `domains` list per app.
+- Wizard-selected domains are saved as `pending` and provisioned during deployment.
+- Domains page is used for adding/removing additional domains after deployment.
+- Each domain tracks status: `pending`, `provisioned`, or `failed` with error details.
+- A Cloudflare zone selected by one app is locked and not selectable by other apps.
+
+## Deployment Validation
+
+Domain provisioning is validated as part of deployment:
+
+- **Production domain check:** must return `200` (redirect chain to `200` is accepted)
+- **Staging domain check:** `200` or `401` is accepted (staging auth enabled)
+
+If validation fails, deployment is marked failed and domain status remains `failed` with router-level error details.
+
+### Deploy Failure Handling
+
+Implemented 2026-03-17 10:56 EDT. UX/API flow now makes deploy/provision behavior explicit:
+
+- Deployment progress is split into two phases:
+  - `deploy`
+  - `domain_provisioning`
+- When deploy fails, `domain_provisioning` is marked `skipped` (not attempted by default).
+- A manual app-level action (**Force Provision Pending Domains**) is provided for explicit operator override after failed deploy.
+
+### Force-Provision Operational Note (Updated 2026-03-17 12:21 EDT)
+
+- Manual force-provision now uses bounded request behavior with in-progress guard rails.
+- Router execution path now tolerates router-to-router SSH path issues via fallback connectivity strategy.
+- Operational remediation completed (2026-03-17 12:50 EDT): restored non-interactive SSH from router-01 to router-02 and validated successful force-provision on both routers.
+
 ## Architecture
 
 ### Traffic Flow
@@ -287,6 +320,35 @@ rm /etc/haproxy/certs/domain.tld.pem
 
 ## DNS Configuration
 
+### DNS Read-Only View
+
+When configuring domains through the dashboard, existing DNS records are displayed in read-only mode:
+
+- **Automatic Fetch**: DNS records are fetched from Cloudflare API
+- **Conflict Indicators**: Records that will be updated are highlighted
+- **Lock Icons**: Indicates records cannot be modified through the dashboard
+
+### Conflict Resolution Rules
+
+| Record Type | If Exists | Action |
+|-------------|-----------|--------|
+| `@` (root A) | Any value | Override with router IPs |
+| `www` | Any value | Override with router IPs |
+| `staging` | Any value | Override with router IPs |
+| Other CNAMEs | Exists | Block provisioning, show error |
+
+**Behavior:**
+- `@`, `www`, and `staging` records are automatically updated with the correct router IPs
+- Other existing CNAMEs will block provisioning with an error message
+- User must manually delete conflicting CNAMEs in Cloudflare dashboard before provisioning
+
+### DNS Refresh
+
+Refresh DNS records at any time:
+- **Domains Page**: Click refresh button to reload records
+- **App Creation Wizard**: Click refresh icon in Step 5 (Domain Configuration)
+- Records are re-fetched from Cloudflare without page reload
+
 ### For Cloudflare-Managed Domains (Auto-Configured)
 
 | Type | Name | Content | Proxy | Purpose |
@@ -403,6 +465,8 @@ This removes:
 - Staging PHP-FPM pool from both app servers
 - Staging SSL certificate from both routers
 - Staging entry from registry.conf
+- Staging database users (`{app}_staging_user`, `{app}_staging_admin`)
+- Staging database
 - Rebuilds HAProxy configs
 
 Keeps:
@@ -416,10 +480,12 @@ Via Dashboard: **Applications → [App Name] → Delete → Delete Application**
 
 This removes:
 - All server configurations (app servers + routers)
-- All SSL certificates
-- All registry entries
+- All SSL certificates from both routers
+- All HAProxy registry entries and rebuilds config
+- PM2 processes (for Node.js apps)
+- All database users (`{app}_user`, `{app}_admin`, `{app}_staging_user`, `{app}_staging_admin`)
 - Databases (after confirmation)
-- GitHub secrets
+- Secrets file (`/opt/dashboard/secrets/{app}.yaml`)
 - Application from applications.yml
 
 **Note**: DNS records and WAF rules are NOT deleted automatically to allow easy redeployment or manual cleanup in Cloudflare dashboard.

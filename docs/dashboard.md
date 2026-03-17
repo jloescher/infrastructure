@@ -24,16 +24,40 @@ Password: DbAdmin2026!
 ### Application Creation Wizard
 Navigate to **Applications → Create Application** to:
 
-1. **Select Framework**: Laravel, Next.js, Svelte, or Go
+1. **Select Framework**: Laravel, Next.js, Svelte, Python, or Go
 2. **Configure App Details**: Name, description, Git repository
-3. **Database Options**: Create PostgreSQL database with optional staging environment
-4. **Generate GitHub Actions**: Auto-generated workflow deploying to **both app servers** for redundancy
+3. **Build Settings**: Auto-detect or customize install/build/migrate/start commands
+4. **Database Options**: Create PostgreSQL database with separate user/admin accounts for production and staging
+5. **Domain Configuration**: Select domains from Cloudflare with multi-select, configure production/staging/CNAMEs
+6. **Review**: Summary of all settings with generated GitHub Actions workflow
 
 #### Supported Frameworks
-- **Laravel**: composer install, npm build, artisan optimize/migrate
+- **Laravel**: composer install, npm build, artisan optimize/migrate, DB_CONNECTION=pgsql auto-configured
 - **Next.js**: npm ci, npm run build
-- **Svelte**: npm ci, npm run build  
-- **Go**: go build
+- **Svelte**: npm ci, npm run build
+- **Python**: pip install -r requirements.txt, gunicorn
+- **Go**: go mod download, go build
+
+Toolchain baseline (updated 2026-03-17 13:10 EDT):
+- App servers now run Composer 2.9.5 (`/usr/local/bin/composer`) for PHP 8.5 compatibility during deploy steps.
+- Deprecated Composer `E_STRICT` notice flood is resolved; deploy failures now surface app/runtime errors directly.
+
+Runtime and permission baseline (updated 2026-03-17 13:52 EDT):
+- Application tooling and non-Laravel service runtimes on app servers are standardized to non-root user `webapps`.
+- Dashboard orchestration auto-creates `webapps` if missing and runs clone/build/setup steps under that user.
+- Laravel writable directories (`storage`, `bootstrap/cache`) are permissioned for `www-data` group access without changing app ownership from `webapps`.
+
+#### Domain Wizard (Step 5)
+When Cloudflare is configured in Settings:
+
+- **Search and Select**: Filter domains from all Cloudflare zones
+- **Multi-Domain Support**: Select multiple domains at once
+- **Per-Domain Configuration**:
+  - Production: Root domain or subdomain
+  - Staging: Enable/disable with custom prefix
+  - Additional CNAMEs: api, dashboard, admin, etc.
+  - Staging password: Auto-generated or custom
+- **Live Preview**: See exactly what DNS records and domains will be created
 
 ### Application Management
 - View application status on all app servers
@@ -56,10 +80,28 @@ Navigate to **Applications → [App Name]** to view and manage:
 4. **Domains**: List of provisioned domains with staging indicators
 5. **GitHub Actions**: View deployment workflow status
 
+#### Deployment Phases
+
+Implemented 2026-03-17 10:56 EDT. Deployment UX now shows two distinct phases:
+
+1. **Deploy Phase**: pull/build/start/health checks on app servers
+2. **Domain Provisioning Phase**: DNS + SSL + router provisioning for pending domains
+
+Behavior:
+- If deploy phase fails, domain provisioning is explicitly marked **skipped**.
+- App status page shows a clear failed deploy indicator.
+- Users can opt into a manual fallback action: **Force Provision Pending Domains**.
+- For first-time deploy failures with no known-good commit, rollback is not attempted; UI reports rollback unavailable.
+
+#### Delete Consistency (Updated 2026-03-17 11:38 EDT)
+
+- App delete, staging delete, and database delete flows are treated as infra lifecycle operations.
+- Cleanup must remove both runtime artifacts (DB/users) and corresponding config entries (including staging records) to avoid stale state in dashboard views.
+
 ### Domain Management with SSL
 Navigate to **Applications → [App Name] → Domains** to:
 
-1. **Multi-Domain Provisioning**: Select multiple Cloudflare zones with search and tags
+1. **Add Additional Domains**: Select Cloudflare zones and add production/staging/CNAME domains after initial deployment
 2. **Per-Domain Configuration**:
    - **Production**: Root domain (`domain.tld`) with automatic `www` redirect
    - **Staging**: Subdomain (`staging.domain.tld`) with password protection
@@ -67,7 +109,10 @@ Navigate to **Applications → [App Name] → Domains** to:
 3. **Live Preview**: See exactly what DNS records will be created
 4. **Automatic SSL**: Certbot provisions Let's Encrypt certificates on both routers
 5. **Security Rules**: 5 Cloudflare WAF rules applied automatically
-6. **WWW Redirect**: Production domains automatically create `www.domain.tld` → `domain.tld` redirect
+6. **WWW Redirect**: Production root domains automatically create `www.domain.tld` → `domain.tld` redirect
+
+Initial domains selected in the create wizard are stored in the same `domains` list and are provisioned during deployment.
+Cloudflare zones already assigned to an app are excluded from selection in other apps.
 
 #### Production vs Staging
 
@@ -123,20 +168,67 @@ Navigate to **Applications → [App Name] → Delete** to remove an application:
 - Removes staging nginx config from both app servers
 - Removes staging PHP-FPM pool from both app servers
 - Removes staging SSL certificate from both routers
+- Drops staging database users (`{app}_staging_user`, `{app}_staging_admin`)
+- Drops staging database
 - Keeps DNS records intact
 - Keeps Cloudflare WAF rules intact
 - Keeps production environment intact
 
 **Delete Entire Application**:
 - Removes all server configurations (app servers + routers)
-- Removes all SSL certificates
+- Removes all SSL certificates from both routers
+- Removes HAProxy registry entries and rebuilds config
+- Stops PM2 processes (for Node.js apps)
+- Drops all database users (`{app}_user`, `{app}_admin`, `{app}_staging_user`, `{app}_staging_admin`)
+- Drops databases (after confirmation)
+- Removes secrets file (`/opt/dashboard/secrets/{app}.yaml`)
+- Removes application from applications.yml
 - Keeps all DNS records intact
 - Keeps all Cloudflare WAF rules intact
-- Removes databases (after confirmation)
-- Removes GitHub secrets
-- Removes application from applications.yml
 
 **Note**: DNS and WAF rules are NOT deleted to allow easy redeployment or manual cleanup.
+
+### GitHub Repository Validation
+
+When creating an application, the GitHub repository is validated before any resources are created:
+
+1. **URL Format Check**: Validates `https://github.com/owner/repo` format
+2. **Repository Access**: Verifies the repository exists and is accessible
+3. **Error Handling**: Shows clear error message if repo not found
+
+**Supported Formats:**
+- `https://github.com/owner/repo`
+- `git@github.com:owner/repo.git`
+- `owner/repo` (short form)
+
+**Behavior:**
+- If validation fails, app creation is blocked with an error message
+- Both public and private repos are supported (private requires GitHub token)
+
+### DNS Record Management
+
+#### Read-Only DNS View
+
+When configuring domains, existing DNS records are displayed in read-only mode:
+
+- **Record Table**: Shows all existing DNS records for selected zones
+- **Conflict Indicators**: Highlights records that will be updated
+- **Lock Icons**: Indicates records that cannot be modified through the dashboard
+
+#### Conflict Rules
+
+| Record Type | If Exists | Action |
+|-------------|-----------|--------|
+| `@` (root A) | Any | Override with app IP |
+| `www` | Any | Override with app IP |
+| `staging` | Any | Override with app IP |
+| Other CNAMEs | Exists | Block - show error, require manual deletion in Cloudflare |
+
+#### DNS Refresh
+
+Click the refresh button to reload DNS records from Cloudflare:
+- On the **Domains** page for existing apps
+- In the **Domain Configuration** step (step 5) of the app creation wizard
 
 ### Cloudflare Integration
 
@@ -159,6 +251,88 @@ See [Cloudflare Documentation](cloudflare.md) for details.
 - Create new databases with users
 - View connection strings with actual passwords
 - Automatic PgBouncer configuration
+
+#### Database User Structure
+
+When creating a database for an application, the following users are automatically created:
+
+**Production Database:**
+- `{app_name}_user` - Standard read/write user
+- `{app_name}_admin` - Administrative user with CREATEDB privilege
+
+**Staging Database (if enabled):**
+- `{app_name}_staging_user` - Standard read/write user for staging
+- `{app_name}_staging_admin` - Administrative user for staging
+
+All passwords are auto-generated and stored as encrypted secrets.
+
+Runtime deployment model (updated 2026-03-17 14:58 EDT):
+- SOPS-encrypted secrets remain source-of-truth on dashboard host (`/opt/dashboard/secrets/*.yaml`).
+- Deploy flow generates runtime `.env` from SOPS secrets and writes it to each app server just before deploy execution.
+- AGE private key remains only on router-01; app servers do not hold SOPS key material.
+- Branch policy is strict: `main` deploys production only, `staging` deploys staging only, all other branches are ignored.
+- Production and staging deploy to separate app directories (`/opt/apps/{app_name}` and `/opt/apps/{app_name}-staging`).
+
+### Secrets Management
+
+Navigate to **Secrets** to manage encrypted secrets:
+
+#### Global Secrets
+- Shared across all applications
+- Editable via UI
+- Examples: DEPLOY_HOST, DEPLOY_USER, STRIPE_SECRET_KEY
+
+#### Application Secrets
+- Per-application secrets
+- Scoped in one app file: `shared`, `production`, `staging`
+- Merge precedence for generated runtime env: `global` -> `shared` -> environment scope -> computed infra vars
+- **Import from .env file** - Upload a .env file to batch import secrets
+- Automatic database credentials:
+  - `DB_USERNAME`, `DB_PASSWORD` - Production database user
+  - `DB_ADMIN_USERNAME`, `DB_ADMIN_PASSWORD` - Production admin user
+  - `STAGING_DB_USERNAME`, `STAGING_DB_PASSWORD` - Staging user (if enabled)
+  - `STAGING_DB_ADMIN_USERNAME`, `STAGING_DB_ADMIN_PASSWORD` - Staging admin (if enabled)
+
+#### Importing Secrets from .env
+
+1. Navigate to **Applications → [App Name] → Secrets**
+2. Click **Import .env File**
+3. Select a .env file with format:
+   ```
+   STRIPE_SECRET_KEY=sk_test_xxxxx
+   SENDGRID_API_KEY=SG.xxxxx
+   AWS_ACCESS_KEY_ID=AKIAxxxxx
+   ```
+4. Secrets are automatically encrypted and stored
+
+Deploy-time behavior:
+- Dashboard validates required runtime keys (Laravel) before deploy and fails fast with missing-key names.
+- Laravel first deploy auto-generates `APP_KEY` when missing and persists it in encrypted app secrets.
+- `.env` is written atomically with `webapps:webapps` ownership and `640` mode to:
+  - `/opt/apps/{app_name}/.env` (production)
+  - `/opt/apps/{app_name}-staging/..env` (staging)
+- Secret add/edit/delete operations trigger `.env` regeneration + sync to app servers for affected environment(s).
+
+#### Secrets UI (Updated 2026-03-17)
+
+The secrets management page now uses **tab-based navigation** instead of a dropdown:
+
+- **Tabs**: All | Shared | Production | Staging
+- **Scope Badges**: Color-coded indicators for each secret's scope
+  - Shared: Blue (#8ab4f8)
+  - Production: Green (#81c784)
+  - Staging: Orange (#ffb74d)
+- **Import .env**: Batch import respects currently selected scope
+
+#### Database Deletion (Updated 2026-03-17)
+
+**Important:** Database deletion now respects scope boundaries:
+
+- Deleting a **production database** only removes the production database and its users
+- Deleting a **staging database** only removes the staging database and its users
+- The `include_staging` parameter is now correctly scoped to the requested deletion
+
+This prevents accidental deletion of staging environments when managing production databases.
 
 ### Server Management
 - View all servers status
@@ -262,25 +436,46 @@ POST /api/clear-cache/<app_name>
 
 Control applications on app servers. Returns JSON with status.
 
-### Domain Provisioning
+### Deployment APIs
 ```
-POST /api/provision-domain
+POST /api/apps/<app_name>/deploy
+POST /api/webhooks/github/<app_name>
+POST /<app_name>  (webhook host only)
 ```
 
-Provision domains with DNS, SSL, and security rules. Request body:
+- `/api/apps/<app_name>/deploy`: authenticated dashboard/API deploy
+- `/api/webhooks/github/<app_name>`: public GitHub webhook endpoint with HMAC signature validation (`X-Hub-Signature-256`)
+- `POST https://hooks.quantyralabs.cc/<app_name>`: canonical GitHub webhook URL
+
+Webhook branch gating:
+- `refs/heads/main` -> production deploy only
+- `refs/heads/staging` -> staging deploy only
+- other branches -> ignored (no deployment)
+
+**Ingress policy:**
+- Dashboard host and all non-webhook APIs are Tailscale-only
+- Public webhooks use dedicated host: `https://hooks.quantyralabs.cc/<app_name>`
+- `hooks.quantyralabs.cc` only allows webhook POST traffic; all other paths return 404
+
+### Cloudflare DNS Records
+```
+GET /api/cloudflare/zones
+GET /api/cloudflare/zones/<zone_id>/dns
+```
+
+List Cloudflare zones and their DNS records. DNS records are returned in read-only mode.
+
+### GitHub Repository Validation
+```
+GET /api/github/validate?repo=https://github.com/owner/repo
+```
+
+Validate a GitHub repository exists and is accessible. Returns:
 ```json
 {
-  "app_name": "myapp",
-  "domains": [
-    {
-      "zone_id": "abc123",
-      "zone_name": "xotec.io",
-      "production_root": true,
-      "production_subdomain": null,
-      "staging": true,
-      "cnames": ["api"]
-    }
-  ]
+  "valid": true,
+  "private": false,
+  "error": null
 }
 ```
 
@@ -372,11 +567,14 @@ On Routers:
 
 ## GitHub Actions Integration
 
-The application wizard generates a complete GitHub Actions workflow that:
+GitHub Actions are optional for CI checks (lint/test/build). Deployment is handled by dashboard webhooks with strict branch mapping.
 
-1. **Builds** the application
-2. **Deploys to BOTH app servers** (re-db and re-node-02) in parallel
-3. Optionally creates a **staging environment** on the `develop` branch
+Webhook deploy policy:
+1. `refs/heads/main` -> production deploy
+2. `refs/heads/staging` -> staging deploy
+3. Any other branch -> ignored
+
+If you use Actions, keep them CI-only or as a workflow-dispatch helper that calls dashboard deploy endpoints.
 
 ### Required GitHub Secrets
 

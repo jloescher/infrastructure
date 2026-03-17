@@ -224,7 +224,7 @@ groups:
           description: "Connection rate is {{ $value }} per second"
 
       - alert: HAProxySessionLimit
-        expr: (haproxy_frontend_current_sessions / haproxy_frontend_max_sessions) * 100 > 80
+        expr: (haproxy_frontend_current_sessions{frontend!~"stats|haproxy_metrics"} / clamp_min(haproxy_frontend_max_sessions{frontend!~"stats|haproxy_metrics"}, 1)) * 100 > 80
         for: 5m
         labels:
           severity: warning

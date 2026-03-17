@@ -29,6 +29,7 @@ if [ "$1" == "--rebuild" ]; then
 frontend web_http
     bind :80
     mode http
+    http-request redirect scheme https code 301 if { hdr(host) -i hooks.quantyralabs.cc }
 
 EOF
 
@@ -53,6 +54,14 @@ frontend web_https
     http-response set-header X-XSS-Protection "1; mode=block"
     http-response set-header Referrer-Policy "strict-origin-when-cross-origin"
     http-response set-header Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
+
+    # Dedicated public webhook host (only webhook paths allowed)
+    acl is_hooks_host hdr(host) -i hooks.quantyralabs.cc
+    acl is_hooks_path path_reg ^/[a-z0-9][a-z0-9_-]*$
+    acl is_hooks_api path_reg ^/api/webhooks/github/[a-z0-9][a-z0-9_-]*$
+    use_backend dashboard_webhook_backend if is_hooks_host is_hooks_path
+    use_backend dashboard_webhook_backend if is_hooks_host is_hooks_api
+    http-request deny deny_status 404 if is_hooks_host !is_hooks_path !is_hooks_api
 
 EOF
 
@@ -116,6 +125,11 @@ EOF
 backend not_found_backend
     mode http
     http-request deny deny_status 404
+
+backend dashboard_webhook_backend
+    mode http
+    option httpchk GET /api/health
+    server dashboard 100.102.220.16:8080 check
 EOF
 
     haproxy -c -f /etc/haproxy/haproxy.cfg -f /etc/haproxy/domains 2>&1
@@ -191,7 +205,7 @@ get_ssl_cert() {
         certbot certonly --dns-cloudflare \
             --dns-cloudflare-credentials "$CLOUDFLARE_CREDS" \
             $certbot_args \
-            --non-interactive --agree-tos --email "$EMAIL" || {
+            --non-interactive --agree-tos --expand --email "$EMAIL" || {
             echo "Failed to obtain certificate for $domain"
             return 1
         }

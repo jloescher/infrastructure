@@ -2,6 +2,14 @@
 
 This document outlines the standardized build and deployment process for each supported framework.
 
+## Runtime Security Baseline
+
+- App-server language/tooling commands run as non-root user `webapps`.
+- Generated non-Laravel systemd services run as `webapps:webapps`.
+- Laravel keeps app ownership as `webapps` while writable paths (`storage`, `bootstrap/cache`) are group-writable for `www-data`.
+- Deployment guardrails re-apply ownership/permissions to prevent drift during updates.
+- Runtime `.env` files are generated during deploy from SOPS-managed dashboard secrets (router-01 key boundary), not committed plaintext files.
+
 ## Build Tool Detection
 
 The dashboard automatically detects build tools and frameworks by scanning config files:
@@ -143,6 +151,7 @@ npm run build  # or detected build script
 - **systemd** service: `{app_name}.service`
 - ExecStart: `npm start`
 - Port: 3000 (configurable via PORT env var)
+- User/Group: `webapps:webapps`
 
 ---
 
@@ -174,6 +183,7 @@ python manage.py migrate
 ### Runtime
 - **systemd** service: `{app_name}.service`
 - ExecStart: `/opt/apps/{app_name}/venv/bin/gunicorn --bind 0.0.0.0:8000 app:app`
+- User/Group: `webapps:webapps`
 
 ---
 
@@ -227,6 +237,7 @@ go build -ldflags="-s -w" -o bin/{app_name} .
 ### Runtime
 - **systemd** service: `{app_name}.service`
 - ExecStart: `/opt/apps/{app_name}/bin/{app_name}`
+- User/Group: `webapps:webapps`
 
 ---
 

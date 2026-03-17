@@ -24,11 +24,11 @@ When you push to `main`:
 ```
 Push to main
      ↓
-GitHub Actions triggered
+GitHub webhook to dashboard
      ↓
-Build & Test
+Dashboard branch gate (`main` only)
      ↓
-Deploy to both app servers
+Deploy to both app servers (production target)
      ↓
 /opt/apps/{app_name}
 Port: 8100 (or assigned)
@@ -44,11 +44,11 @@ When you push to `staging`:
 ```
 Push to staging
      ↓
-GitHub Actions triggered
+GitHub webhook to dashboard
      ↓
-Build & Test
+Dashboard branch gate (`staging` only)
      ↓
-Deploy to both app servers
+Deploy to both app servers (staging target)
      ↓
 /opt/apps/{app_name}-staging
 Port: 8101 (or assigned +1)
@@ -57,12 +57,24 @@ APP_ENV: staging
 APP_DEBUG: true
 ```
 
-## GitHub Actions Workflow
+## Webhook Branch Policy
 
-The auto-generated workflow handles both environments:
+Webhook deploy routing is strict:
+
+```text
+refs/heads/main      -> production deploy only
+refs/heads/staging   -> staging deploy only
+any other branch     -> ignored (no deploy)
+```
+
+## GitHub Actions (Optional)
+
+GitHub Actions are optional and used for CI checks (lint/test/build). Deployment is handled by dashboard webhook orchestration.
+
+Example CI-only workflow:
 
 ```yaml
-name: Deploy myapp
+name: CI myapp
 
 on:
   push:
@@ -71,28 +83,14 @@ on:
       - staging
 
 jobs:
-  build:
+  ci:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
       - name: Install Dependencies
         run: composer install --no-dev --optimize-autoloader
       - name: Build Assets
         run: npm ci && npm run build
-      # ... deploy to production
-
-  staging:
-    runs-on: ubuntu-latest
-    environment: staging
-    if: github.ref == 'refs/heads/staging'
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Dependencies
-        run: composer install --no-dev --optimize-autoloader
-      - name: Build Assets
-        run: npm ci && npm run build
-      # ... deploy to staging
 ```
 
 ## Environment Configuration
@@ -157,14 +155,28 @@ frontend staging.domain.tld_https
 
 ## Database Separation
 
-Each environment has its own database:
+Each environment has its own database and credentials:
 
 | Environment | Database Name | Owner |
 |-------------|--------------|-------|
 | Production | `{app_name}` | `{app_name}_admin` |
-| Staging | `{app_name}_staging` | `{app_name}_admin` |
+| Staging | `{app_name}_staging` | `{app_name}_staging_admin` |
 
-Both databases are owned by the same user, allowing migrations to run independently.
+Environments are isolated so migrations and credentials do not overlap.
+
+### Database Deletion (Updated 2026-03-17)
+
+**Important:** Database deletion respects scope boundaries:
+
+- Deleting **production database** only removes:
+  - Production database (`{app_name}`)
+  - Production users (`{app_name}_user`, `{app_name}_admin`)
+  
+- Deleting **staging database** only removes:
+  - Staging database (`{app_name}_staging`)
+  - Staging users (`{app_name}_staging_user`, `{app_name}_staging_admin`)
+
+This prevents accidental deletion of the wrong environment when managing databases.
 
 ## Manual Deployment
 

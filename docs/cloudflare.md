@@ -42,6 +42,37 @@ Required permissions for the API token:
 
 ## DNS Configuration
 
+### DNS Read-Only View
+
+When configuring domains through the dashboard, existing DNS records are displayed in read-only mode:
+
+**Features:**
+- Automatic fetch of existing DNS records from Cloudflare API
+- Conflict indicators showing which records will be affected
+- Refresh button to update record list without page reload
+
+**Conflict Indicators:**
+
+| Icon | Meaning | Action |
+|------|---------|--------|
+| ⚠️ | Will be updated | Record will be overridden with app IP |
+| 🔒 | Read-only | Record cannot be modified through dashboard |
+| Block | Conflict | Provisioning blocked - requires manual deletion |
+
+**Conflict Resolution Rules:**
+
+| Record | If Exists | Action |
+|--------|-----------|--------|
+| `@` (root A) | Any | Override with router IPs |
+| `www` | Any | Override with router IPs |
+| `staging` | Any | Override with router IPs |
+| Other CNAMEs | Exists | Block provisioning with error |
+
+**Behavior:**
+- `@`, `www`, and `staging` records are automatically updated
+- Other existing CNAMEs will block provisioning
+- User must manually delete conflicting CNAMEs in Cloudflare dashboard
+
 ### Domain Types
 
 | Type | Pattern | Example | Access |
