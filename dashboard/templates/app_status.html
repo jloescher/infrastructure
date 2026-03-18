@@ -83,6 +83,12 @@
                 <th>Webhook URL</th>
                 <td><code>{{ webhook_base_url }}/{{ app_name }}</code></td>
             </tr>
+            {% if app.github_webhook_secret %}
+            <tr>
+                <th>Webhook Secret</th>
+                <td><code>{{ app.github_webhook_secret }}</code> <span class="hint">(for GitHub webhook HMAC signature)</span></td>
+            </tr>
+            {% endif %}
         </table>
     </div>
 </div>
