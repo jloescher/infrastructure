@@ -2812,6 +2812,18 @@ def api_force_provision_domains(app_name):
     }), (200 if success else 500)
 
 
+import threading
+from functools import wraps
+
+def run_in_thread(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        thread = threading.Thread(target=f, args=args, kwargs=kwargs)
+        thread.daemon = True
+        thread.start()
+    return wrapper
+
+
 @app.route("/api/webhooks/github/<app_name>", methods=["POST"])
 @app.route("/<app_name>", methods=["POST"])
 def github_webhook_deploy(app_name):
@@ -2854,9 +2866,18 @@ def github_webhook_deploy(app_name):
             "message": f"Branch ignored (only {production_branch} and {staging_branch} trigger deploy)",
         }), 200
 
-    results = run_pull_deploy(app_name, branch=branch, rolling=True)
-    status = 200 if results.get("success_flag") else 500
-    return jsonify(results), status
+    @run_in_thread
+    def run_deploy_async():
+        run_pull_deploy(app_name, branch=branch, rolling=True)
+    
+    run_deploy_async()
+    
+    return jsonify({
+        "success": True,
+        "message": "Deploy started",
+        "branch": branch,
+        "environment": "staging" if branch == staging_branch else "production"
+    }), 202
 
 
 @app.route("/apps/<app_name>/deploy", methods=["GET", "POST"])
