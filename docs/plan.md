@@ -629,6 +629,123 @@ HTTP/2 200
 
 ---
 
+### Phase 31: PHP-FPM Pool Optimization and Alert Fix (2026-03-18)
+
+**Problem Statement:**
+- PHP-FPM alerts (PHPFPMPoolExhausted, PHPFPMPoolBusy) are firing with false positives
+- Current pool configuration may be too small for growing user base (target: 500-1000 users)
+- Need to optimize for multi-app deployment (currently 1 Laravel app, planning 3)
+
+**Environment:**
+- 2 app servers: re-db, re-node-02 (12 vCPU, 48GB RAM each)
+- PostgreSQL max_connections = 200 (verified via Prometheus)
+- PgBouncer pool_size = 20 per app
+- Redis on re-node-01 and re-node-03 (4GB RAM each)
+- Staging environments are low traffic, password protected
+
+**Critical Finding from Code Review:**
+- `phpfpm_active_max_processes` is a COUNTER (peak concurrency ever seen), NOT the configured `pm.max_children`
+- The PHP-FPM exporter does NOT expose `pm.max_children` as a metric
+- Current alert query `(phpfpm_processes_total{state="active"} / phpfpm_processes_total) * 100` is BROKEN
+- Must use `phpfpm_processes_total{state="idle"}` for pool health detection
+
+**Task-by-Task Execution List:**
+
+1. **Phase 1: Fix Prometheus Alert Rules**
+   - [ ] Update `configs/prometheus/alerts.yml` with correct queries
+   - [ ] Deploy to router-01: `scp configs/prometheus/alerts.yml root@100.102.220.16:/etc/prometheus/rules/alerts.yml`
+   - [ ] Reload Prometheus: `ssh root@100.102.220.16 "systemctl reload prometheus"`
+   - [ ] Verify alerts clear in Prometheus UI
+
+2. **Phase 2: Audit Current Pool Configuration**
+   - [ ] SSH to re-db and check `/etc/php/8.5/fpm/pool.d/rentalfixer.conf`
+   - [ ] Document actual `pm.max_children` setting
+   - [ ] SSH to re-node-02 and verify same config
+   - [ ] Check staging pool config if exists
+
+3. **Phase 3: Update Pool Configuration**
+   - [ ] Update production pool with optimized settings
+   - [ ] Update staging pool with low-traffic settings
+   - [ ] Deploy to re-db first, verify health
+   - [ ] Deploy to re-node-02, verify health
+   - [ ] Verify metrics updated via Prometheus
+
+4. **Phase 4: Update Dashboard Template**
+   - [ ] Add `traffic_tier` parameter to `configure_php_fpm_pool()`
+   - [ ] Change `systemctl restart` to `systemctl reload`
+   - [ ] Add backup/rollback logic
+   - [ ] Add config validation before reload
+   - [ ] Deploy to router-01, restart dashboard
+
+5. **Phase 5: Verification**
+   - [ ] Test app health after changes
+   - [ ] Verify alert rules trigger correctly under load
+   - [ ] Monitor slowlog for long-running requests
+   - [ ] Update documentation
+
+**Corrected Alert Rules:**
+
+```yaml
+- alert: PHPFPMPoolExhausted
+  expr: phpfpm_processes_total{state="idle"} < 2
+  for: 2m
+  labels:
+    severity: critical
+  annotations:
+    summary: "PHP-FPM pool nearly exhausted on {{ $labels.node }}"
+    description: "Only {{ $value }} idle workers remaining"
+
+- alert: PHPFPMPoolBusy
+  expr: phpfpm_processes_total{state="idle"} < 5 and phpfpm_processes_total{state="idle"} >= 2
+  for: 5m
+  labels:
+    severity: warning
+  annotations:
+    summary: "PHP-FPM pool busy on {{ $labels.node }}"
+    description: "Only {{ $value }} idle workers remaining (pool under load)"
+
+- alert: PHPFPMMaxChildrenReached
+  expr: rate(phpfpm_max_children_reached_total[5m]) > 0
+  for: 5m
+  labels:
+    severity: warning
+  annotations:
+    summary: "PHP-FPM max_children reached on {{ $labels.node }}"
+    description: "Workers hit max_children limit - consider increasing pool size"
+```
+
+**Traffic Tier Presets:**
+
+| Tier | pm.max_children | start_servers | min_spare | max_spare | Use Case |
+|------|-----------------|---------------|-----------|-----------|----------|
+| low | 5 | 1 | 1 | 2 | Staging, low-traffic apps |
+| medium | 20 | 4 | 2 | 8 | Production (default) |
+| high | 40 | 8 | 4 | 16 | High-traffic production |
+
+**Connection Capacity Analysis:**
+
+| Resource | Current | With 3 Apps | Limit | Headroom |
+|----------|---------|-------------|-------|----------|
+| PostgreSQL | 40 conn | 120 conn | 200 | 40% |
+| PgBouncer pool | 20 | 20 | - | Per app |
+| Redis | 20 conn | 60 conn | 10,000 | 99% |
+
+**Rollback Procedure:**
+```bash
+# Restore PHP-FPM config
+ssh root@{server} "mv /etc/php/8.5/fpm/pool.d/{pool}.conf.bak /etc/php/8.5/fpm/pool.d/{pool}.conf && systemctl reload php8.5-fpm"
+
+# Restore alert rules
+ssh root@100.102.220.16 "git checkout /etc/prometheus/rules/alerts.yml && systemctl reload prometheus"
+```
+
+**Tracking:**
+- Started: 2026-03-18 (planning)
+- Completed: [pending]
+- Status: ⏳ In Progress
+
+---
+
 ## Medium Priority
 
 ### 1. Multi-Framework Deployment Support
