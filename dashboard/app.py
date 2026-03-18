@@ -94,6 +94,8 @@ def get_next_port(app_name):
     for app_data in applications.values():
         if app_data.get("port"):
             used_ports.add(app_data["port"])
+            if app_data.get("staging_env"):
+                used_ports.add(app_data["port"] + 1)
     
     for port in range(APP_PORT_RANGE["start"], APP_PORT_RANGE["end"]):
         if port not in used_ports:
