@@ -105,8 +105,12 @@ php artisan view:cache
 php artisan migrate --force
 
 # 10. Set permissions
-chown -R www-data:www-data /opt/apps/{app_name}
-chmod -R 755 /opt/apps/{app_name}/storage
+chown -R webapps:webapps /opt/apps/{app_name}
+chgrp -R www-data /opt/apps/{app_name}/storage /opt/apps/{app_name}/bootstrap/cache
+chmod -R ug+rwX /opt/apps/{app_name}/storage /opt/apps/{app_name}/bootstrap/cache
+find /opt/apps/{app_name}/storage /opt/apps/{app_name}/bootstrap/cache -type d -exec chmod 2775 {} \;
+chgrp www-data /opt/apps/{app_name}/.env
+chmod 640 /opt/apps/{app_name}/.env
 php artisan storage:link
 ```
 

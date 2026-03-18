@@ -47,6 +47,38 @@ Runtime and permission baseline (updated 2026-03-17 13:52 EDT):
 - Dashboard orchestration auto-creates `webapps` if missing and runs clone/build/setup steps under that user.
 - Laravel writable directories (`storage`, `bootstrap/cache`) are permissioned for `www-data` group access without changing app ownership from `webapps`.
 
+#### Permission Model (Updated 2026-03-17 23:55 EDT)
+
+| Path | Owner | Group | Mode | Purpose |
+|------|-------|-------|------|---------|
+| `/opt/apps/{app}` | webapps | webapps | 755/644 | Code world-readable for www-data execution |
+| `storage/` | webapps | www-data | 2775 (setgid) | New files inherit www-data group for write access |
+| `bootstrap/cache/` | webapps | www-data | 2775 (setgid) | Same |
+| `.env` | webapps | www-data | 640 | www-data reads, not world-readable (security) |
+
+**Why this works:**
+- `www-data` (PHP-FPM) can **read** all PHP files (world-readable 644)
+- `www-data` can **write** to storage/ and bootstrap/cache (group www-data + setgid)
+- `www-data` **cannot modify** application code (security best practice)
+- `webapps` user can `git pull`, `composer install`, etc.
+
+#### Laravel Deployment Setup (Updated 2026-03-17 23:55 EDT)
+
+On first deployment, the dashboard automatically:
+1. Detects framework as Laravel (presence of `composer.json` + `artisan`)
+2. Checks if PHP-FPM pool exists (`/etc/php/8.5/fpm/pool.d/{app}.conf`)
+3. If not, creates nginx + PHP-FPM configuration via `setup_laravel_app()`
+4. Ensures `.env` has correct permissions (`webapps:www-data 640`)
+5. Runs migrations after backing up database
+
+#### Configurable Branch Selection (Updated 2026-03-17 22:54 EDT)
+
+During app creation, users can configure:
+- **Production Branch**: Branch that triggers production deployments (default: `main`)
+- **Staging Branch**: Branch that triggers staging deployments (default: `staging`)
+
+Backward compatibility: Existing apps without branch config use defaults (`main`/`staging`).
+
 #### Domain Wizard (Step 5)
 When Cloudflare is configured in Settings:
 

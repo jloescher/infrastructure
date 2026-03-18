@@ -149,7 +149,7 @@ pm.start_servers = 2
 pm.min_spare_servers = 1
 pm.max_spare_servers = 5
 pm.max_requests = 500
-php_admin[value[disable_functions] = exec,passthru,shell_exec,system
+php_admin_value[disable_functions] = exec,passthru,shell_exec,system
 php_admin_flag[log_errors] = on
 php_admin_value[error_log] = /var/log/php8.5-fpm/{app_name}-error.log
 """
@@ -1199,7 +1199,7 @@ def write_runtime_env_to_servers(app_name, app, servers, environment="production
         cmd = (
             f"mkdir -p /opt/apps/{target_name} && "
             f"printf '%s' '{encoded_env}' | base64 -d > {tmp_path} && "
-            f"chown {APP_RUNTIME_USER}:{APP_RUNTIME_USER} {tmp_path} && "
+            f"chown {APP_RUNTIME_USER}:www-data {tmp_path} && "
             f"chmod 640 {tmp_path} && mv {tmp_path} {env_path}"
         )
         result = ssh_command(server["ip"], cmd, timeout=60)
@@ -1810,10 +1810,12 @@ def create_app():
         except:
             domain_configs = []
         
-        create_staging = any(
+        create_staging_checkbox = "create_staging" in request.form
+        create_staging_from_domains = any(
             dc.get("staging", {}).get("type") != "none" 
             for dc in domain_configs
         )
+        create_staging = create_staging_checkbox or create_staging_from_domains
         
         if not app_name or not framework or not git_repo:
             flash("Application name, framework, and GitHub repository are required", "error")
@@ -2494,6 +2496,24 @@ def run_pull_deploy(app_name, branch="main", rolling=True):
     for server_name, status in env_sync.get("servers", {}).items():
         if status == "written":
             results["success"].append(f"{server_name} env: written")
+
+    framework = app.get("framework", "")
+    if framework == "laravel":
+        for server in APP_SERVERS:
+            pool_check = ssh_command(server["ip"], f"test -f /etc/php/8.5/fpm/pool.d/{deploy_target_name}.conf && echo exists", timeout=10)
+            if "exists" not in (pool_check.get("stdout") or ""):
+                setup_result = setup_laravel_app(deploy_target_name, server["ip"], app_port)
+                if not setup_result.get("success"):
+                    results["errors"].append(f"{server['name']}: Laravel setup failed - {setup_result.get('error', 'unknown error')}")
+                    results["phases"]["deploy"]["status"] = "failed"
+                    results["phases"]["deploy"]["completed_at"] = datetime.utcnow().isoformat()
+                    results["phases"]["domain_provisioning"] = {"status": "skipped", "reason": "Deploy phase failed"}
+                    results["success_flag"] = False
+                    update_last_deploy_status(app, results)
+                    applications[app_name] = app
+                    save_applications(applications)
+                    return results
+                results["success"].append(f"{server['name']}: Laravel nginx+php-fpm configured")
 
     primary_server = APP_SERVERS[0]
     secondary_servers = APP_SERVERS[1:]

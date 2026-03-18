@@ -407,10 +407,10 @@
                 <div class="hint">Branch that triggers production deployments (default: main)</div>
             </div>
 
-            <div class="form-group" id="staging-branch-group" style="display: none;">
+            <div class="form-group" id="staging-branch-group">
                 <label for="staging_branch">Staging Branch</label>
                 <input type="text" id="staging_branch" name="staging_branch" value="staging" placeholder="staging">
-                <div class="hint">Branch that triggers staging deployments (default: staging)</div>
+                <div class="hint">Branch that triggers staging deployments (default: staging). Only used if staging environment is configured.</div>
             </div>
 
             <div class="checkbox-group">
@@ -857,9 +857,12 @@
         document.getElementById('db-options').style.display = e.target.checked ? 'block' : 'none';
     });
 
-    document.getElementById('create_staging').addEventListener('change', (e) => {
-        document.getElementById('staging-branch-group').style.display = e.target.checked ? 'block' : 'none';
-    });
+    const createStagingEl = document.getElementById('create_staging');
+    if (createStagingEl) {
+        createStagingEl.addEventListener('change', (e) => {
+            document.getElementById('staging-branch-group').style.display = e.target.checked ? 'block' : 'none';
+        });
+    }
 
     function addSecretInput() {
         const container = document.getElementById('secrets-container');

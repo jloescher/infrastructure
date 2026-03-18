@@ -442,6 +442,43 @@ This document tracks current tasks, priorities, and future improvements for the 
 - Existing apps without branch config will use defaults (`main`/`staging`)
 - `app.get("production_branch", "main")` pattern ensures graceful fallback
 
+### Phase 21: Laravel Deploy Fixes + Permission Hardening (2026-03-17)
+
+**Issues Found:**
+1. **PHP-FPM Pool Config Syntax**: `php_admin[` should be `php_admin_value[` causing PHP-FPM to fail
+2. **Missing Laravel Setup on First Deploy**: `run_pull_deploy()` didn't call `setup_laravel_app()` for initial deployments
+3. **.env Permissions**: Created as `webapps:webapps` but PHP-FPM runs as `www-data` which couldn't read it
+4. **Health Check Port Extraction**: Deploy script read port from PHP-FPM config (uses sockets) instead of nginx
+
+**Task-by-Task Execution List:**
+1. ✅ Fix PHP-FPM pool config syntax (`php_admin[` → `php_admin_value[`)
+2. ✅ Add Laravel setup check in `run_pull_deploy()` before deploy execution
+3. ✅ Fix `write_runtime_env_to_servers()` to set `.env` group to `www-data`
+4. ✅ Fix deploy script `ensure_app_permissions()` to set `.env` permissions
+5. ✅ Fix deploy script health check to read port from nginx config
+6. ✅ Fix JavaScript null error for `create_staging` element
+7. ✅ Fix staging branch handling in backend (`create_staging` checkbox)
+8. ✅ Sync to configs/
+9. ✅ Deploy and verify rentalfixer app
+
+**Tracking:**
+- Started: 2026-03-17 23:30 EDT
+- Completed: 2026-03-17 23:55 EDT
+- Status: ✅ Complete
+
+**Verification Outcome:**
+- Both app servers return HTTP 200 on port 8100
+- `rentalfixer.app` deployed successfully
+- Migrations ran successfully on both servers
+
+**Permission Model Documented:**
+| Path | Owner | Group | Mode |
+|------|-------|-------|------|
+| `/opt/apps/{app}` | webapps | webapps | 755/644 |
+| `storage/` | webapps | www-data | 2775 (setgid) |
+| `bootstrap/cache/` | webapps | www-data | 2775 (setgid) |
+| `.env` | webapps | www-data | 640 |
+
 ---
 
 ## Medium Priority
@@ -696,6 +733,8 @@ export default function handler(req, res) {
 | Database permissions + deploy script fix | 2026-03-17 21:20 EDT | Schema grants, anchored grep in backup function |
 | Schema permissions in DB creation + secrets wizard scope | 2026-03-17 21:45 EDT | Schema grants automated, scope dropdown in app wizard |
 | Database creation flow fix | 2026-03-17 22:10 EDT | Fixed cursor closed error, secrets saved early |
+| Configurable branch selection | 2026-03-17 22:54 EDT | Custom production/staging branches in app creation |
+| Laravel deploy fixes + permission hardening | 2026-03-17 23:55 EDT | PHP-FPM syntax, .env permissions, setup check, health check port |
 
 ---
 
