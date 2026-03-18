@@ -427,7 +427,7 @@ def ssh_command(server_ip, command, timeout=30):
         return {"success": result.returncode == 0, "stdout": result.stdout, "stderr": result.stderr}
 
     public_ip = resolve_public_ip(server_ip)
-    primary_timeout = min(timeout, 30)
+    primary_timeout = timeout
 
     try:
         primary = run_target(server_ip, primary_timeout)
@@ -1965,6 +1965,7 @@ def create_app():
                 results["db_admin"] = db_admin
                 results["db_admin_password"] = db_admin_password
                 if create_staging:
+                    results["staging_db_name"] = staging_db_name
                     results["staging_db_user"] = staging_user
                     results["staging_db_user_password"] = staging_user_password
                     results["staging_db_admin"] = staging_admin
@@ -2100,6 +2101,12 @@ def create_app():
                 results["created"].append(f"Domains: {', '.join(deploy_results['domains']['provisioned'])}")
             if deploy_results.get("errors"):
                 results["errors"].extend(deploy_results["errors"])
+            
+            if create_staging and deploy_results.get("success_flag"):
+                staging_results = run_pull_deploy(app_name, branch=staging_branch, rolling=True)
+                results["staging_deploy_results"] = staging_results
+                if staging_results.get("errors"):
+                    results["errors"].extend([f"Staging: {e}" for e in staging_results["errors"]])
         
         results["pull_deploy"] = True
         results["deploy_endpoint"] = f"/api/apps/{app_name}/deploy"
@@ -2449,6 +2456,8 @@ def run_pull_deploy(app_name, branch="main", rolling=True):
         }
     }
     app_port = app.get("port", 8100)
+    if deploy_environment == "staging":
+        app_port = app_port + 1
     server_commits = app.get("server_commits", {})
 
     git_repo = app.get("git_repo")

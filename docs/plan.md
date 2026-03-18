@@ -765,6 +765,7 @@ export default function handler(req, res) {
 | Configurable branch selection | 2026-03-17 22:54 EDT | Custom production/staging branches in app creation |
 | Laravel deploy fixes + permission hardening | 2026-03-17 23:55 EDT | PHP-FPM syntax, .env permissions, setup check, health check port |
 | PostgreSQL client upgrade + migration detection fix | 2026-03-18 00:40 EDT | pg_dump 18.3 on both app servers, migration table detection |
+| SSH timeout fix + staging deploy | 2026-03-18 01:17 EDT | Fixed ssh_command timeout cap, staging port calculation, staging_db_name bug |
 
 ---
 
