@@ -12,14 +12,14 @@ applications:
     staging_branch: staging
     database: rentalfixer
     db_user: rentalfixer_user
-    db_user_password: JCKi-miobh4l_JABK7Oirw
+    db_user_password: fYecKNq5ThfHM8KsqI-Cqw
     db_admin: rentalfixer_admin
-    db_admin_password: ZYJMOrwvvACQmk4FFXCwRQ
+    db_admin_password: bKjeDiaUa1hAept06AZnAg
     staging_database: rentalfixer_staging
     staging_db_user: rentalfixer_staging_user
-    staging_db_user_password: zPLRoPPF8xL0Ow1LDG8Lnw
+    staging_db_user_password: 3pra0qaMGefSQZ7OEVNjHA
     staging_db_admin: rentalfixer_staging_admin
-    staging_db_admin_password: I633igvKl2v7QRoZMVTwOQ
+    staging_db_admin_password: XWkh0XZqIHu1uYCD0ssgdA
     redis_enabled: true
     port: 8100
     domains:
@@ -35,7 +35,7 @@ applications:
       status: pending
       security_enabled: true
       error: ''
-      created_at: '2026-03-18T01:43:43.484709'
+      created_at: '2026-03-18T02:37:42.503151'
     - name: staging.rentalfixer.app
       type: staging
       base_domain: rentalfixer.app
@@ -45,13 +45,13 @@ applications:
       provisioned: false
       status: pending
       security_enabled: true
-      password: StAerULJSamol5uP
+      password: 4eaJnZ_hKJd6lli6
       error: ''
-      created_at: '2026-03-18T01:43:43.484848'
+      created_at: '2026-03-18T02:37:42.503344'
     production_domain: rentalfixer.app
     enable_security: true
-    github_webhook_secret: kPAmHusxN1v61Nqg-yKP5ebQxguTjrrEn2LmRDSWjd8
-    created_at: '2026-03-18T01:43:43.485048'
+    github_webhook_secret: bQ9Uw2_SlxD5I7HSB5BzPyyW6RlvZzy1sXj4Jte4qoo
+    created_at: '2026-03-18T02:37:42.503464'
     build_commands:
       install: composer install --no-dev --optimize-autoloader
       build: npm ci && npm run build

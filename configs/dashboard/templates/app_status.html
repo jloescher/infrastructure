@@ -56,8 +56,15 @@
                     {% elif domains_phase and domains_phase.status == 'failed' %}
                     <span class="status-badge status-error">Failed</span>
                     {% elif domains_phase and domains_phase.status == 'skipped' %}
-                    <span class="status-badge status-warning">Skipped</span>
-                    <span class="hint">(deploy failed)</span>
+                        {% if 'Staging deploy' in domains_phase.reason %}
+                        <span class="status-badge" style="background: #4a5568; color: #fff;">N/A</span>
+                        <span class="hint">Domain provisioning runs during production deploy</span>
+                        {% else %}
+                        <span class="status-badge status-warning">Skipped</span>
+                        {% if domains_phase.reason %}
+                        <span class="hint">({{ domains_phase.reason }})</span>
+                        {% endif %}
+                        {% endif %}
                     {% else %}
                     <span class="status-badge status-warning">Unknown</span>
                     {% endif %}

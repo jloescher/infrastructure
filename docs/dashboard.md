@@ -91,6 +91,21 @@ When Cloudflare is configured in Settings:
   - Staging password: Auto-generated or custom
 - **Live Preview**: See exactly what DNS records and domains will be created
 
+#### Staging Password Protection (Updated 2026-03-18)
+
+All staging environments are password-protected via HAProxy HTTP Basic Auth:
+
+- **Username**: `admin`
+- **Password**: Auto-generated (16 chars) or custom during domain provisioning
+- **Storage**: Password stored in app config (`domains[].password`)
+- **Visibility**: Displayed in Domains tab for dashboard users (Tailscale-only access)
+- **htpasswd**: `/etc/haproxy/htpasswd/{app_name}-staging.htpasswd`
+
+Access staging via:
+```bash
+curl -u admin:<password> https://staging.domain.tld
+```
+
 ### Application Management
 - View application status on all app servers
 - **Restart/Reload/Stop** applications via API buttons
@@ -118,6 +133,10 @@ Implemented 2026-03-17 10:56 EDT. Deployment UX now shows two distinct phases:
 
 1. **Deploy Phase**: pull/build/start/health checks on app servers
 2. **Domain Provisioning Phase**: DNS + SSL + router provisioning for pending domains
+
+**Important:** Domain provisioning only runs during **production** deploys. Staging deploys show "N/A" because:
+- Staging domains are provisioned during production deploy or app creation
+- Staging deploy only updates code, not DNS/SSL infrastructure
 
 Behavior:
 - If deploy phase fails, domain provisioning is explicitly marked **skipped**.

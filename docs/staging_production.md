@@ -132,26 +132,53 @@ jobs:
 ### Staging
 
 - **Directory**: `/opt/apps/{app_name}-staging`
-- **Port**: 8101+ (production port + 1)
+- **Port**: 9200+ (separate staging port range)
 - **nginx config**: `/etc/nginx/sites-available/{app_name}-staging`
 - **PHP-FPM pool**: `/etc/php/8.5/fpm/pool.d/{app_name}-staging.conf`
 - **Socket**: `/run/php/php8.5-fpm-{app_name}-staging.sock`
+- **Password**: HTTP Basic Auth required (stored in app config)
 
 ## HAProxy Routing
 
-Production and staging use separate HAProxy frontends:
+Production and staging share a consolidated frontend with routing by Host header:
 
 ```
-# Production
-frontend domain.tld_https
-    bind :443 ssl crt /etc/haproxy/certs/domain.tld.pem
-    use_backend {app}_backend
+# Consolidated HTTPS frontend (all domains)
+frontend web_https
+    bind :443 ssl crt /etc/haproxy/certs/*.pem
+    
+    # Production routing
+    acl is_domain hdr(host) -i domain.tld
+    use_backend {app}_backend if is_domain
+    
+    # Staging routing (with password)
+    acl is_staging hdr(host) -i staging.domain.tld
+    use_backend {app}_staging_backend if is_staging
 
-# Staging  
-frontend staging.domain.tld_https
-    bind :443 ssl crt /etc/haproxy/certs/staging.domain.tld.pem
-    use_backend {app}_staging_backend
+# Production backend
+backend {app}_backend
+    server app1 100.92.26.38:8100 check
+    server app2 100.89.130.19:8100 check
+
+# Staging backend (password protected)
+backend {app}_staging_backend
+    http-request auth realm "Staging Area" unless { http_auth({app}_staging_users) }
+    server app1 100.92.26.38:9200 check
+    server app2 100.89.130.19:9200 check
+
+userlist {app}_staging_users
+    user admin insecure-password <password>
 ```
+
+### Staging Password Protection
+
+Staging environments require HTTP Basic Authentication:
+
+- **Realm**: "Staging Area"
+- **Username**: `admin`
+- **Password**: Auto-generated or custom (stored in app config)
+- **htpasswd file**: `/etc/haproxy/htpasswd/{app}-staging.htpasswd`
+- **Registry format**: `domain=app=port=password`
 
 ## Database Separation
 

@@ -2302,7 +2302,11 @@ def provision_pending_domains(app_name, app):
             dns_result = cf_replace_a_records(domain_name, router_ips, zone_id)
             dns_success = dns_result.get("success")
             if domain_type == "staging":
-                ssl_results = provision_domain_on_routers(domain_name, f"{app_name}-staging", get_staging_port(app_port), is_staging=True)
+                staging_password = domain.get("password")
+                ssl_results = provision_domain_on_routers(
+                    domain_name, f"{app_name}-staging", get_staging_port(app_port), 
+                    is_staging=True, staging_password=staging_password
+                )
             elif domain_type == "cname":
                 ssl_results = provision_domain_on_routers(domain_name, f"{app_name}-{dns_label}", app_port)
             else:
@@ -2671,11 +2675,11 @@ def run_pull_deploy(app_name, branch="main", rolling=True):
                 server_commits[server["name"]] = commit_sha
 
     app["server_commits"] = server_commits
+    results["success_flag"] = len(results["errors"]) == 0
     update_last_deploy_status(app, results)
     applications[app_name] = app
     save_applications(applications)
 
-    results["success_flag"] = len(results["errors"]) == 0
     return results
 
 
@@ -3494,7 +3498,7 @@ def update_app_url(app_name, app_url, servers=None):
     return {"success": all(r["success"] for r in results), "results": results}
 
 
-def provision_domain_on_routers(domain, app_name, app_port, www_domain=None, is_staging=False, git_repo=None, git_branch="main"):
+def provision_domain_on_routers(domain, app_name, app_port, www_domain=None, is_staging=False, staging_password=None, git_repo=None, git_branch="main"):
     results = []
     
     for router in ROUTERS:
@@ -3503,6 +3507,8 @@ def provision_domain_on_routers(domain, app_name, app_port, www_domain=None, is_
             cmd += f" --www {www_domain}"
         if is_staging:
             cmd += " --staging"
+        if staging_password:
+            cmd += f" --password {staging_password}"
         if git_repo:
             cmd += f" --repo {git_repo}"
         if git_branch:

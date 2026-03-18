@@ -5,12 +5,12 @@ databases:
     owner: rentalfixer_admin
     users:
     - name: rentalfixer_user
-      password: JCKi-miobh4l_JABK7Oirw
-      password_hash: SCRAM-SHA-256$4096:/wdd4JreqcQAqSSWBRNDXA==$zIbi+X7NkszL5S3faGZjApqvPH0cMM9ils9A+l51d2k=:nBdf8cOWh+ziv4ymq0K7yjIC2ZBeBStNIn5nwxeRIok=
+      password: fYecKNq5ThfHM8KsqI-Cqw
+      password_hash: SCRAM-SHA-256$4096:UlGW6cFwj0bSXX4/TLGUNg==$wh+PDFQL0kIMAxQclA5uSBeQMR3rQMKRlayCv6pY3uM=:/vRgtRBnOE1b+J07kGbKCYucE8xwEP9SOv3OkeXlFCg=
       roles: []
     - name: rentalfixer_admin
-      password: ZYJMOrwvvACQmk4FFXCwRQ
-      password_hash: SCRAM-SHA-256$4096:TmDhgH1HvSJrCuVmFUMKjw==$Y/q9F3DKn3rbEVU1dPbEEBjXuTDQxHcnmlXNmR+/rJk=:iL10UWtQ5nXi93mU4vP26ZTBVjYkIYKmmzKzexl0NpU=
+      password: bKjeDiaUa1hAept06AZnAg
+      password_hash: SCRAM-SHA-256$4096:m3KRDRa+7gY53norSA5seQ==$q7zYQmBb2vUKeufk9Lr0OTeEFfztCxe2yRP49f2kaBI=:iinzfvVdnNMym20ATi+hy3gTE9XNaepYuFPXd66bqLo=
       roles:
       - CREATEDB
     pgbouncer_pool_size: 20
@@ -22,12 +22,12 @@ databases:
     owner: rentalfixer_staging_admin
     users:
     - name: rentalfixer_staging_user
-      password: zPLRoPPF8xL0Ow1LDG8Lnw
-      password_hash: SCRAM-SHA-256$4096:O4e5OE0LdofuuMJRjRaqpw==$9upztgqhbXabHJOF2rLyt6Ff2oXYyS9KYEmSlL/g46I=:5ZYbX7M0lYNUrFCjwuop+LMHK6wg+D/NXAbyC/tE798=
+      password: 3pra0qaMGefSQZ7OEVNjHA
+      password_hash: SCRAM-SHA-256$4096:XVuifnElqsFWxsYP0OxQ4w==$HIbgC6tZJ0MMkQDtwVafR3ChnGGy5FWh74kEEUguwjs=:CmrcmRRrJyMCLyy+tHJD9lQDj71/jrs9TVF6pLVl9QU=
       roles: []
     - name: rentalfixer_staging_admin
-      password: I633igvKl2v7QRoZMVTwOQ
-      password_hash: SCRAM-SHA-256$4096:0uC/SaZvzn7S6ttfviTVGA==$r2ZRqhJDwoy70y6ev956JzVOo7r1pCH/xNIlqZ/FxwI=:RJG1sN+CNP8Vq3CNcrLHPgDcw6tb10XN7CD0b67QFq4=
+      password: XWkh0XZqIHu1uYCD0ssgdA
+      password_hash: SCRAM-SHA-256$4096:0JtkyEJCUS1D7pm6CA/hlQ==$Oogr8+oPq+NpwJBGOpgayZqeF111vFSF7lXtqNYDQyk=:3m1c5eeVzWwL9bkLGj5rT3IcDiB9dJH6H3+1F7ou10g=
       roles:
       - CREATEDB
     pgbouncer_pool_size: 20

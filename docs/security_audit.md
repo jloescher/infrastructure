@@ -1318,11 +1318,46 @@ The infrastructure is now **well-hardened** with:
 - Maintain backward compatibility with defaults (`main`/`staging`)
 
 **Task-by-Task Execution List:**
-1. ⏳ Add branch input fields to app creation wizard (Step 2)
-2. ⏳ Save branch configuration to app config
-3. ⏳ Update `run_pull_deploy()` to use app's configured branches
-4. ⏳ Update webhook handler to check against app's branches
-5. ⏳ Update GitHub workflow generation to use configured branches
-6. ⏳ Deploy and verify backward compatibility
+1. ✅ Add branch input fields to app creation wizard (Step 2)
+2. ✅ Save branch configuration to app config
+3. ✅ Update `run_pull_deploy()` to use app's configured branches
+4. ✅ Update webhook handler to check against app's branches
+5. ⏳ Update GitHub workflow generation to use configured branches (deferred)
+6. ✅ Deploy and verify backward compatibility
 
-**Status:** 🚧 In Progress
+**Status:** ✅ Resolved (2026-03-17)
+
+### 25. LOW: Staging Environments Not Password Protected (2026-03-18)
+
+**Severity:** LOW
+**Scope:** Staging environment access control
+
+**Finding:**
+- Staging environments were publicly accessible without authentication.
+- No access control mechanism in place to restrict staging to authorized users.
+
+**Required Fix:**
+- Implement HAProxy basic auth for staging backends
+- Generate htpasswd file for each staging app
+- Add `http-request auth` rule to staging backends
+
+**Task-by-Task Execution List:**
+1. ✅ Add `--password` parameter to `provision-domain.sh`
+2. ✅ Create htpasswd file for staging apps
+3. ✅ Add HAProxy `http-request auth` with userlist
+4. ✅ Update registry.conf format to include password
+5. ✅ Rebuild HAProxy config and verify
+
+**Status:** ✅ Resolved (2026-03-18)
+
+**Verification:**
+```
+# Without credentials: 401 Unauthorized
+curl -I https://staging.rentalfixer.app
+HTTP/2 401
+www-authenticate: Basic realm="Staging Area"
+
+# With credentials: 200 OK
+curl -I -u admin:<password> https://staging.rentalfixer.app
+HTTP/2 200
+```

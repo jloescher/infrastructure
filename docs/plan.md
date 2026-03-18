@@ -508,6 +508,65 @@ re-node-02: pg_dump (PostgreSQL) 18.3
 -rw-r--r-- 1 root root 91843 Mar 18 00:38 /tmp/test_backup.sql
 ```
 
+### Phase 23-26: Deploy Reliability Fixes (2026-03-18)
+
+**Issues Fixed:**
+1. **SSH Timeout**: Removed 30s timeout cap causing long-running deploys to fail
+2. **Staging Port Calculation**: Staging was using 8101 instead of 9200
+3. **Domain Health Check Bug**: Production deploy checked ALL domains including staging (not deployed yet)
+4. **Last Deploy Status Bug**: `success_flag` set after `update_last_deploy_status()` call
+
+**Tracking:**
+- Completed: 2026-03-18 02:15 EDT
+- Status: ✅ Complete
+
+### Phase 27: Staging Password Protection (2026-03-18)
+
+**Requirement:** Staging environments must be password-protected via HAProxy basic auth.
+
+**Task-by-Task Execution List:**
+1. ✅ Add `--password` parameter to `provision-domain.sh`
+2. ✅ Create htpasswd file for staging apps
+3. ✅ Add HAProxy `http-request auth` with userlist for password-protected backends
+4. ✅ Update registry.conf format: `domain=app=port=password`
+5. ✅ Rebuild HAProxy config to include auth for staging
+6. ✅ Verify staging.rentalfixer.app requires authentication
+7. ✅ Sync to scripts/
+
+**Tracking:**
+- Started: 2026-03-18 02:25 EDT
+- Completed: 2026-03-18 02:30 EDT
+- Status: ✅ Complete
+
+**Verification Outcome:**
+```
+# Without credentials: 401 Unauthorized
+curl -I https://staging.rentalfixer.app
+HTTP/2 401
+www-authenticate: Basic realm="Staging Area"
+
+# With credentials: 200 OK
+curl -I -u admin:o7YL2YVBEVUl8BaU https://staging.rentalfixer.app
+HTTP/2 200
+```
+
+### Phase 28: UI Bug Fix - Domain Provisioning Reason (2026-03-18)
+
+**Issue:** Domain provisioning phase always showed "(deploy failed)" when skipped, even when the actual reason was different.
+
+**Example:** Staging deploys show "Staging deploy does not run domain provisioning" in the stored data, but UI hardcoded "(deploy failed)".
+
+**Fix:** Display `domains_phase.reason` instead of hardcoded text.
+
+**File:** `dashboard/templates/app_status.html:60`
+
+**Tracking:**
+- Started: 2026-03-18 02:45 EDT
+- Completed: 2026-03-18 02:46 EDT
+- Status: ✅ Complete
+
+**Second Fix:** Staging deploys now show "N/A" badge with explanation "Domain provisioning runs during production deploy" instead of "Skipped" with technical reason.
+
 ---
 
 ## Medium Priority

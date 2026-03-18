@@ -173,12 +173,25 @@ The `provision-domain.sh` script handles domain provisioning:
 # Production domain with www redirect
 /opt/scripts/provision-domain.sh rentalfixer.app rentalfixer 8100 --www www.rentalfixer.app
 
-# Staging domain
-/opt/scripts/provision-domain.sh staging.rentalfixer.app rentalfixer_staging 8101 --staging
+# Staging domain with password protection
+/opt/scripts/provision-domain.sh staging.rentalfixer.app rentalfixer-staging 9200 --staging --password <password>
 
 # Rebuild all configs from registry
 /opt/scripts/provision-domain.sh --rebuild
 ```
+
+### Staging Password Protection
+
+Staging domains require HTTP Basic Authentication:
+
+- **Password**: Auto-generated or custom (stored in app config)
+- **htpasswd file**: `/etc/haproxy/htpasswd/{app_name}.htpasswd`
+- **Registry format**: `domain=app_name=port=password`
+
+When a password is provided:
+1. htpasswd file is created for the app
+2. HAProxy backend includes `http-request auth` directive
+3. Userlist is added to HAProxy config
 
 ### How It Works
 
@@ -189,7 +202,7 @@ The `provision-domain.sh` script handles domain provisioning:
 
 2. **Registry Update**
    - Domain added to `/etc/haproxy/domains/registry.conf`
-   - Format: `domain=app_name=port`
+   - Format: `domain=app_name=port` or `domain=app_name=port=password` (staging)
 
 3. **Config Rebuild**
    - Reads all domains from registry
