@@ -479,6 +479,35 @@ This document tracks current tasks, priorities, and future improvements for the 
 | `bootstrap/cache/` | webapps | www-data | 2775 (setgid) |
 | `.env` | webapps | www-data | 640 |
 
+### Phase 22: PostgreSQL Client Upgrade + Migration Detection Fix (2026-03-18)
+
+**Issues Found:**
+1. **pg_dump Version Mismatch**: Server runs PostgreSQL 18.3, but client was 16.13 (re-db) or not installed (re-node-02), causing backup failures
+2. **Migration Detection Bug**: `check_pending_migrations()` didn't detect "Migration table not found" as needing migrations
+
+**Task-by-Task Execution List:**
+1. ✅ Add PostgreSQL 18 APT repository to both app servers
+2. ✅ Install `postgresql-client-18` on re-db (upgrade from 16.13)
+3. ✅ Install `postgresql-client-18` on re-node-02 (was not installed)
+4. ✅ Fix `check_pending_migrations()` to detect "Migration table not found"
+5. ✅ Deploy updated script to both app servers
+6. ✅ Verify database backup works
+
+**Tracking:**
+- Started: 2026-03-18 00:30 EDT
+- Completed: 2026-03-18 00:40 EDT
+- Status: ✅ Complete
+
+**Verification Outcome:**
+```
+# Both servers now have matching client version
+re-db: pg_dump (PostgreSQL) 18.3
+re-node-02: pg_dump (PostgreSQL) 18.3
+
+# Database backup works
+-rw-r--r-- 1 root root 91843 Mar 18 00:38 /tmp/test_backup.sql
+```
+
 ---
 
 ## Medium Priority
@@ -735,6 +764,7 @@ export default function handler(req, res) {
 | Database creation flow fix | 2026-03-17 22:10 EDT | Fixed cursor closed error, secrets saved early |
 | Configurable branch selection | 2026-03-17 22:54 EDT | Custom production/staging branches in app creation |
 | Laravel deploy fixes + permission hardening | 2026-03-17 23:55 EDT | PHP-FPM syntax, .env permissions, setup check, health check port |
+| PostgreSQL client upgrade + migration detection fix | 2026-03-18 00:40 EDT | pg_dump 18.3 on both app servers, migration table detection |
 
 ---
 

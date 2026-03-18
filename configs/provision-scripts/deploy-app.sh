@@ -149,7 +149,14 @@ check_pending_migrations() {
     fi
     
     echo "Checking for pending migrations..."
-    PENDING=$(run_as_app_user "cd '$APP_DIR' && php artisan migrate:status" 2>&1 | grep -c "not run" || echo "0")
+    STATUS=$(run_as_app_user "cd '$APP_DIR' && php artisan migrate:status" 2>&1)
+    
+    if echo "$STATUS" | grep -q "Migration table not found"; then
+        echo "Migration table not found - migrations needed"
+        return 1
+    fi
+    
+    PENDING=$(echo "$STATUS" | grep -c "not run" || echo "0")
     
     if [ "$PENDING" -gt 0 ]; then
         echo "Found $PENDING pending migration(s)"
