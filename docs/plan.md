@@ -766,6 +766,66 @@ export default function handler(req, res) {
 | Laravel deploy fixes + permission hardening | 2026-03-17 23:55 EDT | PHP-FPM syntax, .env permissions, setup check, health check port |
 | PostgreSQL client upgrade + migration detection fix | 2026-03-18 00:40 EDT | pg_dump 18.3 on both app servers, migration table detection |
 | SSH timeout fix + staging deploy | 2026-03-18 01:17 EDT | Fixed ssh_command timeout cap, staging port calculation, staging_db_name bug |
+| Separate port ranges for production/staging | 2026-03-18 01:30 EDT | Production: 8100-8199, Staging: 9200-9299 |
+
+---
+
+## Session Summary: 2026-03-17 to 2026-03-18
+
+### Major Accomplishments
+
+**Deployment Pipeline:**
+- Full Laravel deployment pipeline working with health checks
+- Rolling deployments with automatic rollback
+- Dual-environment support (production + staging)
+- Configurable branch selection per environment
+- SSH timeout handling for long-running deploys
+
+**Permission Model:**
+- Non-root runtime user (`webapps`) for all app tooling
+- `www-data` group access for Laravel writable directories
+- Secure `.env` permissions (webapps:www-data 640)
+- Setgid on storage directories for inherited permissions
+
+**Database Management:**
+- Automatic schema permission grants on database creation
+- PostgreSQL 18 client on all app servers
+- Separate production/staging databases with dedicated users
+- Migration detection for fresh databases
+
+**Port Allocation:**
+- Production: 8100-8199
+- Staging: 9200-9299 (avoiding 9100 used by node_exporter)
+- Automatic port assignment with conflict prevention
+
+**Secrets Management:**
+- SOPS-encrypted secrets stored on router-01 only
+- Scoped secrets (shared/production/staging)
+- Runtime `.env` materialization during deploy
+- AGE key never leaves dashboard host
+
+**Monitoring:**
+- All servers reporting to Prometheus via node_exporter
+- Grafana dashboards for infrastructure
+- Alertmanager for critical alerts
+
+### Current Application Status
+
+| App | Production | Staging | Framework |
+|-----|------------|---------|-----------|
+| rentalfixer | ✅ rentalfixer.app (port 8100) | ✅ staging.rentalfixer.app (port 9200) | Laravel |
+
+### Server Matrix
+
+| Server | Tailscale IP | Role | Services |
+|--------|-------------|------|----------|
+| router-01 | 100.102.220.16 | Router + Dashboard | HAProxy, Dashboard, Prometheus, Grafana |
+| router-02 | 100.116.175.9 | Router | HAProxy |
+| re-db | 100.92.26.38 | App Server | nginx, PHP-FPM, Node.js |
+| re-node-02 | 100.89.130.19 | App Server | nginx, PHP-FPM, Node.js |
+| re-node-01 | 100.126.103.51 | Database | PostgreSQL, Redis |
+| re-node-03 | 100.114.117.46 | Database | PostgreSQL, Redis |
+| re-node-04 | 100.115.75.119 | Database | PostgreSQL |
 
 ---
 

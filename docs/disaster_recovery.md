@@ -190,41 +190,123 @@ This document outlines disaster recovery procedures for the Quantyra infrastruct
 
 ### Application Recovery
 
+#### Dashboard-Based Recovery (Recommended)
+
+The Quantyra PaaS Dashboard provides a web interface for application management:
+
+**Access:** `http://100.102.220.16:8080` (Tailscale only)
+**Credentials:** admin / DbAdmin2026!
+
+**Recovery Actions:**
+
+1. **Redeploy Application:**
+   - Navigate to Applications → [App Name] → Deploy
+   - Click "Deploy Production" or "Deploy Staging"
+   - Monitor two-phase progress (Deploy → Domain Provisioning)
+
+2. **Force Domain Provisioning:**
+   - If deploy succeeds but domains fail
+   - Applications → [App Name] → Force Provision Pending Domains
+
+3. **Rollback to Previous Commit:**
+   - Applications → [App Name] → Rollback
+   - Select previous known-good commit
+
+4. **Restart Services:**
+   - Applications → [App Name] → Restart App / Reload Nginx / Reload PHP-FPM
+
 #### Single App Server Failure
 
-1. Traffic automatically fails over to other app server
+1. Traffic automatically fails over to other app server (HAProxy round-robin)
 
 2. Replace or repair failed server
 
-3. Provision new server using Ansible:
+3. Run deployment from Dashboard or via webhook:
    ```bash
-   cd infrastructure/ansible
-   ansible-playbook playbooks/provision.yml --limit re-db
+   # Trigger redeploy via webhook
+   curl -X POST https://hooks.quantyralabs.cc/{app_name} \
+     -H "X-Hub-Signature-256: {secret}" \
+     -d '{"ref": "refs/heads/main"}'
    ```
 
-4. Deploy application:
+4. Verify application health:
    ```bash
-   ansible-playbook playbooks/deploy.yml --limit re-db
+   # Check local health
+   ssh root@100.92.26.38 "curl -s -o /dev/null -w '%{http_code}' http://localhost:8100"
+   ssh root@100.89.130.19 "curl -s -o /dev/null -w '%{http_code}' http://localhost:8100"
    ```
 
 #### Complete Application Failure
 
-1. Provision new app servers:
+1. Verify app servers are accessible:
    ```bash
-   ansible-playbook playbooks/provision.yml --limit app_servers
+   ssh root@100.92.26.38 "hostname"
+   ssh root@100.89.130.19 "hostname"
    ```
 
-2. Deploy applications:
+2. Check runtime user exists:
    ```bash
-   ansible-playbook playbooks/deploy.yml --limit app_servers
+   id webapps
+   # If missing: useradd --system --create-home --home-dir /home/webapps --shell /usr/sbin/nologin webapps
    ```
 
-3. Update DNS/Cloudflare if IPs changed
+3. Redeploy from Dashboard or trigger webhook
 
-4. Verify application health:
-   ```bash
-   curl https://api.quantyra.com/health
-   ```
+4. Verify both environments:
+   - Production: `https://{domain}.tld`
+   - Staging: `https://staging.{domain}.tld`
+
+#### Application Port Configuration
+
+Each application uses separate ports for production and staging:
+
+| Environment | Port Range | Example |
+|-------------|------------|---------|
+| Production | 8100-8199 | rentalfixer: 8100 |
+| Staging | 9200-9299 | rentalfixer-staging: 9200 |
+
+**Port Assignment:**
+- Ports are automatically assigned by dashboard during app creation
+- Production port stored in `/opt/dashboard/config/applications.yml`
+- Staging port = production_port + 1100
+
+**Verify Port Configuration:**
+```bash
+# Check nginx configs
+ls -la /etc/nginx/sites-enabled/
+
+# Check which ports are listening
+ss -tlnp | grep nginx
+```
+
+#### Permission Model Recovery
+
+Applications use a non-root permission model:
+
+| Path | Owner | Group | Mode | Purpose |
+|------|-------|-------|------|---------|
+| `/opt/apps/{app}` | webapps | webapps | 755/644 | Application code |
+| `storage/` | webapps | www-data | 2775 | Laravel writable (setgid) |
+| `bootstrap/cache/` | webapps | www-data | 2775 | Laravel writable (setgid) |
+| `.env` | webapps | www-data | 640 | Environment config |
+
+**Fix Permissions:**
+```bash
+APP_NAME="rentalfixer"
+APP_DIR="/opt/apps/$APP_NAME"
+
+# Fix ownership
+chown -R webapps:webapps $APP_DIR
+
+# Fix writable directories
+chgrp -R www-data $APP_DIR/storage $APP_DIR/bootstrap/cache
+chmod -R ug+rwX $APP_DIR/storage $APP_DIR/bootstrap/cache
+find $APP_DIR/storage $APP_DIR/bootstrap/cache -type d -exec chmod 2775 {} \;
+
+# Fix .env
+chgrp www-data $APP_DIR/.env
+chmod 640 $APP_DIR/.env
+```
 
 ### Router Failure
 
@@ -299,8 +381,133 @@ This document outlines disaster recovery procedures for the Quantyra infrastruct
 
 3. Verify:
    ```bash
-   curl http://localhost:3000/api/health
+curl http://localhost:3000/api/health
+    ```
+
+### Dashboard Recovery
+
+The PaaS Dashboard runs on router-01 and manages application deployments.
+
+#### Dashboard Service Failure
+
+1. Check service status:
+   ```bash
+   ssh root@100.102.220.16 "systemctl status dashboard"
    ```
+
+2. Restart dashboard:
+   ```bash
+   ssh root@100.102.220.16 "systemctl restart dashboard"
+   ```
+
+3. Check logs:
+   ```bash
+   ssh root@100.102.220.16 "journalctl -u dashboard -n 100"
+   ```
+
+#### Dashboard Code Recovery
+
+1. Dashboard code is stored in repo at `dashboard/` and `configs/dashboard/`
+
+2. Restore from repo:
+   ```bash
+   # On router-01
+   cd /opt/dashboard
+   git pull  # If using git
+   
+   # Or copy from local repo
+   scp -r dashboard/* root@100.102.220.16:/opt/dashboard/
+   ```
+
+3. Restart service:
+   ```bash
+   systemctl restart dashboard
+   ```
+
+#### Dashboard Configuration Files
+
+| File | Purpose |
+|------|---------|
+| `/opt/dashboard/app.py` | Main application code |
+| `/opt/dashboard/config/applications.yml` | Application registry |
+| `/opt/dashboard/config/databases.yml` | Database registry |
+| `/opt/dashboard/secrets/*.yaml` | SOPS-encrypted app secrets |
+| `/opt/dashboard/secrets/age.key` | AGE private key (DO NOT LOSE) |
+| `/opt/dashboard/templates/*.html` | UI templates |
+
+**CRITICAL: Backup AGE Key**
+```bash
+# Backup the AGE key - this cannot be recovered if lost
+cp /opt/dashboard/secrets/age.key /backup/age.key
+```
+
+### Secrets Recovery
+
+All application secrets are encrypted with SOPS using AGE encryption.
+
+#### Secrets Storage
+
+| Location | Content |
+|----------|---------|
+| `/opt/dashboard/secrets/{app}.yaml` | Per-app secrets (SOPS encrypted) |
+| `/opt/dashboard/secrets/age.key` | AGE private key (router-01 only) |
+| Repo: `secrets/*.yaml` | Encrypted secrets (version controlled) |
+
+#### Secrets Structure
+
+Each app's secrets file contains scoped secrets:
+
+```yaml
+production:
+  DB_USERNAME: ...
+  DB_PASSWORD: ...
+shared:
+  APP_KEY: ...
+staging:
+  STAGING_DB_USERNAME: ...
+  STAGING_DB_PASSWORD: ...
+```
+
+#### Recover Secrets from Backup
+
+1. Restore AGE key (required for decryption):
+   ```bash
+   scp /backup/age.key root@100.102.220.16:/opt/dashboard/secrets/age.key
+   chmod 600 /opt/dashboard/secrets/age.key
+   ```
+
+2. Restore encrypted secrets files:
+   ```bash
+   scp -r /backup/secrets/*.yaml root@100.102.220.16:/opt/dashboard/secrets/
+   ```
+
+3. Verify SOPS can decrypt:
+   ```bash
+   ssh root@100.102.220.16 "sops -d /opt/dashboard/secrets/rentalfixer.yaml | head -20"
+   ```
+
+#### Manual Secret Recovery
+
+If secrets are lost but database credentials need recovery:
+
+1. Check database registry:
+   ```bash
+   ssh root@100.102.220.16 "cat /opt/dashboard/config/databases.yml"
+   ```
+
+2. Reset database passwords if needed:
+   ```bash
+   # Connect to PostgreSQL primary
+   psql -h 100.102.220.16 -p 5000 -U patroni_superuser -d postgres
+   
+   # Reset password
+   ALTER USER rentalfixer_user WITH PASSWORD 'new_password';
+   ```
+
+3. Update secrets via Dashboard UI:
+   - Navigate to Applications → [App] → Secrets
+   - Update the affected secrets
+   - Redeploy to apply changes
 
 ## Testing Backup Integrity
 
@@ -346,28 +553,57 @@ redis-cli -p 6380 KEYS "*"
 
 ### Required Secrets
 
-- AWS Access Keys (for S3 backups)
-- Slack Webhook URL
-- PagerDuty Service Key
-- SSH Private Key (for deployment)
-- Database Passwords
-- Redis Password (if configured)
+| Secret | Location | Purpose |
+|--------|----------|---------|
+| AGE Private Key | `/opt/dashboard/secrets/age.key` | SOPS decryption (router-01 only) |
+| PostgreSQL Superuser | AGENTS.md | Database administration |
+| Redis Password | AGENTS.md | Redis authentication |
+| Cloudflare API Token | `/root/.secrets/cloudflare.ini` | DNS/API access |
+| Dashboard Auth | AGENTS.md | Dashboard login |
+| HAProxy Stats Auth | AGENTS.md | HAProxy stats page |
+| SSH Keys | `~/.ssh/authorized_keys` | Server access |
+
+### Critical Configuration Files
+
+| File | Server | Purpose |
+|------|--------|---------|
+| `/opt/dashboard/secrets/age.key` | router-01 | SOPS encryption key |
+| `/opt/dashboard/config/applications.yml` | router-01 | Application registry |
+| `/opt/dashboard/config/databases.yml` | router-01 | Database registry |
+| `/etc/haproxy/domains/registry.conf` | router-01, router-02 | Domain routing |
+| `/etc/haproxy/certs/*.pem` | router-01, router-02 | SSL certificates |
+| `/etc/hosts.override` | All servers | Tailscale hostname mapping |
+
+### Toolchain Versions
+
+| Tool | Version | Servers |
+|------|---------|---------|
+| PHP | 8.5 | App servers |
+| Composer | 2.9.5 | App servers |
+| Node.js | 20.x | App servers |
+| PostgreSQL Client | 18.3 | App servers |
+| nginx | latest | App servers |
+| HAProxy | 2.8.x | Routers |
 
 ### External Dependencies
 
-- **Tailscale**: VPN connectivity
-- **Cloudflare**: DNS and DDoS protection
-- **AWS S3**: Backup storage
-- **GitHub**: CI/CD and container registry
+- **Tailscale**: VPN connectivity (required for all server communication)
+- **Cloudflare**: DNS, DDoS protection, SSL (DNS-01 challenge)
+- **GitHub**: Source code hosting, webhooks for deploy triggers
+- **Let's Encrypt**: SSL certificates via certbot
 
 ### Recovery Checklist
 
 - [ ] Assess scope of failure
+- [ ] Check Tailscale connectivity
+- [ ] Verify SSH access to all servers
 - [ ] Notify stakeholders
 - [ ] Identify affected services
 - [ ] Check backup availability
+- [ ] Verify AGE key is accessible
 - [ ] Execute recovery procedure
 - [ ] Verify service health
+- [ ] Test application endpoints
 - [ ] Update monitoring
 - [ ] Document incident
 - [ ] Conduct post-mortem

@@ -1,0 +1,99 @@
+applications:
+  rentalfixer:
+    name: rentalfixer
+    description: Rental Fixer
+    framework: laravel
+    git_repo: https://github.com/jloescher/rentalfixer.git
+    target_servers:
+    - re-db
+    - re-node-02
+    staging_env: true
+    production_branch: main
+    staging_branch: staging
+    database: rentalfixer
+    db_user: rentalfixer_user
+    db_user_password: JCKi-miobh4l_JABK7Oirw
+    db_admin: rentalfixer_admin
+    db_admin_password: ZYJMOrwvvACQmk4FFXCwRQ
+    staging_database: rentalfixer_staging
+    staging_db_user: rentalfixer_staging_user
+    staging_db_user_password: zPLRoPPF8xL0Ow1LDG8Lnw
+    staging_db_admin: rentalfixer_staging_admin
+    staging_db_admin_password: I633igvKl2v7QRoZMVTwOQ
+    redis_enabled: true
+    port: 8100
+    domains:
+    - name: rentalfixer.app
+      type: production
+      base_domain: rentalfixer.app
+      dns_label: '@'
+      production_mode: root
+      www_redirect: true
+      ssl_enabled: true
+      dns_provisioned: false
+      provisioned: false
+      status: pending
+      security_enabled: true
+      error: ''
+      created_at: '2026-03-18T01:43:43.484709'
+    - name: staging.rentalfixer.app
+      type: staging
+      base_domain: rentalfixer.app
+      dns_label: staging
+      ssl_enabled: true
+      dns_provisioned: false
+      provisioned: false
+      status: pending
+      security_enabled: true
+      password: StAerULJSamol5uP
+      error: ''
+      created_at: '2026-03-18T01:43:43.484848'
+    production_domain: rentalfixer.app
+    enable_security: true
+    github_webhook_secret: kPAmHusxN1v61Nqg-yKP5ebQxguTjrrEn2LmRDSWjd8
+    created_at: '2026-03-18T01:43:43.485048'
+    build_commands:
+      install: composer install --no-dev --optimize-autoloader
+      build: npm ci && npm run build
+      migrate: php artisan migrate --force
+      start: php artisan config:cache && php artisan route:cache && php artisan view:cache
+    deploy_workflow: "name: Deploy rentalfixer\n\non:\n  push:\n    branches:\n  \
+      \    - main\n      - staging\n\njobs:\n  build:\n    runs-on: ubuntu-latest\n\
+      \    if: github.ref == 'refs/heads/main'\n    steps:\n      - uses: actions/checkout@v4\n\
+      \      - name: Install Dependencies\n        run: composer install --no-dev\
+      \ --optimize-autoloader\n      - name: Build Assets\n        run: |\n      \
+      \    npm ci\n          npm run build\n      - name: Optimize\n        run: |\n\
+      \          php artisan config:cache\n          php artisan route:cache\n   \
+      \       php artisan view:cache\n\n  deploy-re-db:\n    runs-on: ubuntu-latest\n\
+      \    needs: build\n    steps:\n      - name: Deploy to re-db\n        uses:\
+      \ appleboy/ssh-action@master\n        with:\n          host: ${{ secrets.DEPLOY_HOST\
+      \ }}\n          username: ${{ secrets.DEPLOY_USER }}\n          password: ${{\
+      \ secrets.DEPLOY_PASSWORD }}\n          script: |\n            cd /opt/apps/rentalfixer\n\
+      \            git pull origin ${{ github.ref_name }}\n            composer install\
+      \ --no-dev --optimize-autoloader\n            php artisan migrate --force\n\
+      \            php artisan config:cache\n            php artisan route:cache\n\
+      \            php artisan view:cache\n            sudo systemctl restart rentalfixer\n\
+      \n  deploy-re-node-02:\n    runs-on: ubuntu-latest\n    needs: build\n    steps:\n\
+      \      - name: Deploy to re-node-02\n        uses: appleboy/ssh-action@master\n\
+      \        with:\n          host: ${{ secrets.DEPLOY_HOST }}\n          username:\
+      \ ${{ secrets.DEPLOY_USER }}\n          password: ${{ secrets.DEPLOY_PASSWORD\
+      \ }}\n          script: |\n            cd /opt/apps/rentalfixer\n          \
+      \  git pull origin ${{ github.ref_name }}\n            composer install --no-dev\
+      \ --optimize-autoloader\n            php artisan migrate --force\n         \
+      \   php artisan config:cache\n            php artisan route:cache\n        \
+      \    php artisan view:cache\n            sudo systemctl restart rentalfixer\n\
+      \n  staging:\n    runs-on: ubuntu-latest\n    environment: staging\n    if:\
+      \ github.ref == 'refs/heads/staging'\n    steps:\n      - uses: actions/checkout@v4\n\
+      \      - name: Install Dependencies\n        run: composer install --no-dev\
+      \ --optimize-autoloader\n      - name: Build Assets\n        run: |\n      \
+      \    npm ci\n          npm run build\n      - name: Optimize\n        run: |\n\
+      \          php artisan config:cache\n          php artisan route:cache\n   \
+      \       php artisan view:cache\n      - name: Deploy to Staging\n        uses:\
+      \ appleboy/ssh-action@master\n        with:\n          host: ${{ secrets.DEPLOY_HOST\
+      \ }}\n          username: ${{ secrets.DEPLOY_USER }}\n          password: ${{\
+      \ secrets.DEPLOY_PASSWORD }}\n          script: |\n            cd /opt/apps/rentalfixer-staging\n\
+      \            git pull origin ${{ github.ref_name }}\n            composer install\
+      \ --no-dev --optimize-autoloader 2>/dev/null || true\n            npm ci &&\
+      \ npm run build 2>/dev/null || true\n            php artisan migrate --force\
+      \ 2>/dev/null || true\n            sudo systemctl restart rentalfixer-staging\
+      \ 2>/dev/null || sudo systemctl reload php8.5-fpm\n"
