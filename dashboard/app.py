@@ -2405,10 +2405,14 @@ def update_last_deploy_status(app, results):
         "errors": results.get("errors", []),
         "phases": results.get("phases", {}),
         "aborted": bool(results.get("aborted")),
-        "message": results.get("message", "")
+        "message": results.get("message", ""),
+        "branch": results.get("branch", "main"),
+        "environment": results.get("environment", "production"),
     }
     app["last_deploy_status"] = "success" if results.get("success_flag") else "failed"
     app["last_deploy_at"] = app["last_deploy"]["at"]
+    app["last_deploy_branch"] = results.get("branch", "main")
+    app["last_deploy_environment"] = results.get("environment", "production")
 
 
 def rollback_server_to_commit(server_ip, deploy_target_name, commit_sha, branch="main", environment="production"):
