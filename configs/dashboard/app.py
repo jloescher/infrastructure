@@ -85,7 +85,7 @@ APP_SERVERS = [
     {"name": "re-node-02", "ip": "100.89.130.19", "public_ip": "23.227.173.245", "role": "App Server (ATL)"}
 ]
 
-APP_PORT_RANGE = {"start": 8100, "end": 8199}
+APP_PORT_RANGE = {"production": {"start": 8100, "end": 8199}, "staging": {"start": 9200, "end": 9299}}
 allocated_ports = {}
 
 def get_next_port(app_name):
@@ -94,13 +94,14 @@ def get_next_port(app_name):
     for app_data in applications.values():
         if app_data.get("port"):
             used_ports.add(app_data["port"])
-            if app_data.get("staging_env"):
-                used_ports.add(app_data["port"] + 1)
     
-    for port in range(APP_PORT_RANGE["start"], APP_PORT_RANGE["end"]):
+    for port in range(APP_PORT_RANGE["production"]["start"], APP_PORT_RANGE["production"]["end"]):
         if port not in used_ports:
             return port
-    return APP_PORT_RANGE["start"]
+    return APP_PORT_RANGE["production"]["start"]
+
+def get_staging_port(production_port):
+    return production_port + 1100
 
 
 def configure_laravel_nginx(app_name, server_ip, port):
@@ -2301,7 +2302,7 @@ def provision_pending_domains(app_name, app):
             dns_result = cf_replace_a_records(domain_name, router_ips, zone_id)
             dns_success = dns_result.get("success")
             if domain_type == "staging":
-                ssl_results = provision_domain_on_routers(domain_name, f"{app_name}-staging", app_port + 1, is_staging=True)
+                ssl_results = provision_domain_on_routers(domain_name, f"{app_name}-staging", get_staging_port(app_port), is_staging=True)
             elif domain_type == "cname":
                 ssl_results = provision_domain_on_routers(domain_name, f"{app_name}-{dns_label}", app_port)
             else:
@@ -2459,7 +2460,7 @@ def run_pull_deploy(app_name, branch="main", rolling=True):
     }
     app_port = app.get("port", 8100)
     if deploy_environment == "staging":
-        app_port = app_port + 1
+        app_port = get_staging_port(app_port)
     server_commits = app.get("server_commits", {})
 
     git_repo = app.get("git_repo")
