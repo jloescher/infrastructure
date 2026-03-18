@@ -685,6 +685,107 @@ cp .env.example .env
 3. Verify Tailscale connectivity
 4. Set up auto-start on boot
 
+### 9. Per-App PHP-FPM Monitoring (Future)
+
+Automatically add new apps to Grafana PHP-FPM metrics dashboard as they are provisioned.
+
+**Problem:**
+- PHP-FPM exporter only monitors the default `www` pool
+- Per-app pools (rentalfixer, rentalfixer-staging, etc.) are not monitored
+- No automatic discovery when new apps are deployed
+
+**Solution:** Systemd templates + Prometheus file discovery + Grafana dashboard variables
+
+**Architecture:**
+```
+App Deploy → Enable pm.status_path → Start exporter@{app} → Write target file → Prometheus discovers → Grafana shows
+```
+
+**Implementation:**
+
+1. **Systemd Template** (`php-fpm-exporter@.service`):
+   ```ini
+   [Unit]
+   Description=PHP-FPM Prometheus Exporter for %i
+   After=network.target php8.5-fpm.service
+   
+   [Service]
+   Type=simple
+   User=www-data
+   ExecStart=/usr/local/bin/php-fpm-exporter \
+     --addr=%H:9253 \
+     --fastcgi=unix:///run/php/php8.5-fpm-%i.sock \
+     --endpoint=/metrics/%i
+   Restart=on-failure
+   
+   [Install]
+   WantedBy=multi-user.target
+   ```
+
+2. **Dashboard Deployment Flow** (in `setup_laravel_app()`):
+   ```python
+   # Enable status path in pool config
+   ssh_command(server, f"sed -i 's|;pm.status_path|pm.status_path|' /etc/php/8.5/fpm/pool.d/{app_name}.conf")
+   
+   # Start exporter for this pool
+   ssh_command(server, f"systemctl start php-fpm-exporter@{app_name}")
+   ssh_command(server, f"systemctl enable php-fpm-exporter@{app_name}")
+   
+   # Write Prometheus target file
+   target = {
+     "targets": [f"{server_ip}:9253"],
+     "labels": {"pool": app_name, "app": app_name}
+   }
+   ssh_command(server, f"echo '{json.dumps(target)}' > /etc/prometheus/targets/php-fpm/{app_name}.json")
+   ```
+
+3. **Prometheus File Discovery** (`prometheus.yml`):
+   ```yaml
+   - job_name: 'php_fpm_pools'
+     file_sd_configs:
+       - files:
+         - /etc/prometheus/targets/php-fpm/*.json
+         refresh_interval: 30s
+     relabel_configs:
+       - source_labels: [__address__]
+         target_label: instance
+       - source_labels: [pool]
+         target_label: pool
+   ```
+
+4. **Grafana Dashboard Variable**:
+   - Name: `$pool`
+   - Query: `label_values(phpfpm_processes_total, pool)`
+   - Multi-select: enabled
+   - All value: `.+`
+
+5. **Dashboard Panels** (using `$pool` variable):
+   - Process count: `phpfpm_processes_total{pool=~"$pool"}`
+   - Active connections: `phpfpm_accepted_connections_total{pool=~"$pool"}`
+   - Slow requests: `phpfpm_slow_requests_total{pool=~"$pool"}`
+   - Max children reached: `phpfpm_max_children_reached_total{pool=~"$pool"}`
+
+**Task-by-Task Execution List:**
+1. Create systemd template on both app servers
+2. Create `/etc/prometheus/targets/php-fpm/` directory on router-01
+3. Update Prometheus config for file discovery
+4. Update Grafana dashboard with pool variable
+5. Update `setup_laravel_app()` to start exporter per pool
+6. Update `setup_laravel_app()` to enable `pm.status_path` in pool config
+7. Test with existing rentalfixer app
+8. Update `delete_app()` to stop/remove exporter service
+9. Update `delete_staging()` to stop/remove staging exporter
+10. Document in monitoring.md
+
+**Benefits:**
+- Automatic monitoring for all app pools
+- Per-app metrics in Grafana
+- Pool selection via dropdown
+- No manual configuration needed
+
+**Alternative (Simpler):**
+Run single exporter with multiple `--fastcgi` flags (if supported by exporter version).
+
 ---
 
 ## Lower Priority
