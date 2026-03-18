@@ -2646,9 +2646,17 @@ def run_pull_deploy(app_name, branch="main", rolling=True):
         for domain in app.get("domains", []):
             if domain.get("status") != "provisioned":
                 continue
-            if domain.get("type") not in ["production", "staging"]:
+            
+            domain_type = domain.get("type")
+            if domain_type not in ["production", "staging"]:
                 continue
-            check = check_domain_http_health(domain.get("name"), domain.get("type"))
+            
+            if deploy_environment == "production" and domain_type != "production":
+                continue
+            if deploy_environment == "staging" and domain_type != "staging":
+                continue
+            
+            check = check_domain_http_health(domain.get("name"), domain_type)
             domain_health.append({"domain": domain.get("name"), **check})
             if not check.get("success"):
                 results["errors"].append(f"{domain.get('name')}: domain health check failed ({check.get('status_code')})")
