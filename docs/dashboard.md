@@ -12,6 +12,39 @@ Password: DbAdmin2026!
 
 > **Note**: Only accessible from Tailscale network (100.64.0.0/10)
 
+## Current Capabilities
+
+### Supported Frameworks
+
+| Framework | Status | Runtime | Notes |
+|-----------|--------|---------|-------|
+| Laravel | ✅ Production Ready | nginx + PHP-FPM 8.5 | Full pipeline tested |
+| Next.js | ⚠️ Beta | systemd + Node.js | Needs testing |
+| SvelteKit | ⚠️ Beta | systemd + Node.js | Needs testing |
+| Python | ⚠️ Beta | systemd + Gunicorn | Needs testing |
+| Go | ⚠️ Beta | systemd | Needs testing |
+
+### Deployment Features
+
+- **GitHub Webhook Integration**: Push to branch triggers automatic deploy
+- **Dual Environment**: Production (main) + Staging (staging) per app
+- **Configurable Branches**: Custom branch selection per environment
+- **Rolling Deployments**: Primary-first with automatic rollback on failure
+- **Health Checks**: Server and domain health validation
+- **Async Processing**: Webhook returns immediately, deploy runs in background
+- **Staging Protection**: HTTP Basic Auth for staging environments
+
+### Webhook Setup
+
+1. Go to GitHub → Repo → Settings → Webhooks → Add webhook
+2. **Payload URL**: `https://hooks.quantyralabs.cc/{app_name}`
+3. **Content type**: `application/json`
+4. **Secret**: Copy from App Status page
+5. **Events**: `push` and `ping`
+6. **Active**: Enabled
+
+**Response**: Returns `202 Accepted` immediately. Check Applications page for status.
+
 ## Features
 
 ### Dashboard Home

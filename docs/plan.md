@@ -567,6 +567,131 @@ HTTP/2 200
 
 **Second Fix:** Staging deploys now show "N/A" badge with explanation "Domain provisioning runs during production deploy" instead of "Skipped" with technical reason.
 
+### Phase 29: GitHub Webhook Timeout Fix (2026-03-18)
+
+**Issue:** GitHub has a 10-second webhook timeout, but deployments take several minutes, causing GitHub to report "timed out".
+
+**Fix:** Changed webhook handler to run deploys asynchronously:
+- Return immediately with `202 Accepted`
+- Run deploy in background thread using Python `threading`
+- Deploy status stored in `applications.yml`
+- Results visible on Applications page after completion
+
+**Tracking:**
+- Completed: 2026-03-18 03:40 EDT
+- Status: ✅ Complete
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Deploy started",
+  "branch": "staging",
+  "environment": "staging"
+}
+```
+
+### Phase 30: Last Deploy Status on Applications List (2026-03-18)
+
+**Issue:** Applications list didn't show last deploy status, environment, or branch.
+
+**Fix:**
+- Updated `update_last_deploy_status()` to store branch and environment
+- Updated `apps.html` to show success/failed badge with timestamp, environment, and branch
+- Replaced "Database" column with "Last Deploy" column
+
+**Format:** `[success/failed] 2026-03-18 03:34` followed by `production (main)`
+
+**Tracking:**
+- Completed: 2026-03-18 03:35 EDT
+- Status: ✅ Complete
+
+---
+
+## Milestone: Laravel PaaS Complete (2026-03-18)
+
+**Working Features:**
+- ✅ Laravel application deployment via GitHub webhook
+- ✅ Production + staging dual-environment support
+- ✅ Configurable branch selection per environment
+- ✅ Staging password protection (HAProxy basic auth)
+- ✅ PostgreSQL database provisioning with permissions
+- ✅ SOPS-encrypted secrets management
+- ✅ Rolling deployments with rollback
+- ✅ Health checks and failure handling
+- ✅ Domain provisioning with SSL (DNS-01 challenge)
+- ✅ Last deploy status visibility
+
+**Current App:**
+| App | Production | Staging | Framework |
+|-----|------------|---------|-----------|
+| rentalfixer | rentalfixer.app:8100 | staging.rentalfixer.app:9200 | Laravel |
+
+---
+
+## Medium Priority
+
+### 1. Multi-Framework Deployment Support
+
+**Current Status:** Laravel fully working. Other frameworks need testing/implementation.
+
+| Framework | Status | Notes |
+|-----------|--------|-------|
+| Laravel | ✅ Working | Full pipeline tested |
+| Next.js | ⚠️ Needs Testing | Systemd service, health check needed |
+| SvelteKit | ⚠️ Needs Testing | Systemd service, health check needed |
+| Python (Flask/Django) | ⚠️ Needs Testing | Gunicorn + systemd |
+| Go | ⚠️ Needs Testing | Binary + systemd |
+
+**Task-by-Task Execution List:**
+1. Create test app for each framework
+2. Test deployment end-to-end
+3. Fix any framework-specific issues
+4. Document build commands and health checks
+5. Update `docs/framework_builds.md`
+
+### 2. Dashboard Refactoring Plan
+
+**Problem:** `dashboard/app.py` is ~4600 lines, making it hard to maintain.
+
+**Solution:** Refactor into modular structure without breaking current functionality.
+
+**Proposed Structure:**
+```
+dashboard/
+├── app.py              # Main Flask app, routes only
+├── config.py           # Configuration loading
+├── auth.py             # Authentication decorators
+├── models/
+│   ├── applications.py # Application CRUD
+│   ├── databases.py    # Database CRUD
+│   └── secrets.py      # Secrets management
+├── services/
+│   ├── deploy.py       # Deployment orchestration
+│   ├── domain.py       # Domain provisioning
+│   ├── ssh.py          # SSH command execution
+│   └── cloudflare.py   # Cloudflare API
+├── templates/          # Existing templates
+└── static/             # Existing static files
+```
+
+**Refactoring Principles:**
+1. **No breaking changes** - Maintain all existing routes and APIs
+2. **Incremental migration** - One module at a time
+3. **Test after each step** - Deploy and verify
+4. **Keep app.py as entry point** - Routes import from modules
+
+**Migration Order:**
+1. Extract SSH functions → `services/ssh.py`
+2. Extract Cloudflare functions → `services/cloudflare.py`
+3. Extract deploy functions → `services/deploy.py`
+4. Extract domain functions → `services/domain.py`
+5. Extract model loading → `models/*.py`
+6. Extract auth → `auth.py`
+7. Extract config → `config.py`
+
+**Estimated Effort:** 2-3 sessions, low risk if done incrementally.
+
 ---
 
 ## Medium Priority
@@ -926,7 +1051,11 @@ export default function handler(req, res) {
 | Laravel deploy fixes + permission hardening | 2026-03-17 23:55 EDT | PHP-FPM syntax, .env permissions, setup check, health check port |
 | PostgreSQL client upgrade + migration detection fix | 2026-03-18 00:40 EDT | pg_dump 18.3 on both app servers, migration table detection |
 | SSH timeout fix + staging deploy | 2026-03-18 01:17 EDT | Fixed ssh_command timeout cap, staging port calculation, staging_db_name bug |
-| Separate port ranges for production/staging | 2026-03-18 01:30 EDT | Production: 8100-8199, Staging: 9200-9299 |
+| Port Allocation | 2026-03-18 01:30 EDT | Production: 8100-8199, Staging: 9200-9299 |
+| Staging password protection | 2026-03-18 02:30 EDT | HAProxy basic auth for staging domains |
+| UI domain provisioning fix | 2026-03-18 02:46 EDT | Show actual reason instead of hardcoded text |
+| Webhook async deployment | 2026-03-18 03:40 EDT | Return 202 immediately, run deploy in background |
+| Last deploy status on apps list | 2026-03-18 03:35 EDT | Show status, environment, branch |
 
 ---
 
@@ -935,11 +1064,12 @@ export default function handler(req, res) {
 ### Major Accomplishments
 
 **Deployment Pipeline:**
-- Full Laravel deployment pipeline working with health checks
-- Rolling deployments with automatic rollback
-- Dual-environment support (production + staging)
-- Configurable branch selection per environment
-- SSH timeout handling for long-running deploys
+- ✅ Full Laravel deployment pipeline working with health checks
+- ✅ GitHub webhook integration (async, returns immediately)
+- ✅ Rolling deployments with automatic rollback
+- ✅ Dual-environment support (production + staging)
+- ✅ Configurable branch selection per environment
+- ✅ SSH timeout handling for long-running deploys
 
 **Permission Model:**
 - Non-root runtime user (`webapps`) for all app tooling
@@ -952,6 +1082,11 @@ export default function handler(req, res) {
 - PostgreSQL 18 client on all app servers
 - Separate production/staging databases with dedicated users
 - Migration detection for fresh databases
+
+**Domain & SSL:**
+- Staging password protection via HAProxy basic auth
+- SSL certificates via DNS-01 challenge
+- Domain health checks by environment
 
 **Port Allocation:**
 - Production: 8100-8199
@@ -967,7 +1102,14 @@ export default function handler(req, res) {
 **Monitoring:**
 - All servers reporting to Prometheus via node_exporter
 - Grafana dashboards for infrastructure
+- PHP-FPM metrics enabled
 - Alertmanager for critical alerts
+
+**UI/UX:**
+- Last deploy status on applications list
+- Webhook secret visible on app status page
+- Domain provisioning phase shows actual reason
+- Deploy status tracking with branch/environment
 
 ### Current Application Status
 

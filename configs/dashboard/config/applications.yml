@@ -30,24 +30,26 @@ applications:
       production_mode: root
       www_redirect: true
       ssl_enabled: true
-      dns_provisioned: false
-      provisioned: false
-      status: pending
+      dns_provisioned: true
+      provisioned: true
+      status: provisioned
       security_enabled: true
       error: ''
       created_at: '2026-03-18T02:37:42.503151'
+      last_attempt_at: '2026-03-18T02:40:43.212582'
     - name: staging.rentalfixer.app
       type: staging
       base_domain: rentalfixer.app
       dns_label: staging
       ssl_enabled: true
-      dns_provisioned: false
-      provisioned: false
-      status: pending
+      dns_provisioned: true
+      provisioned: true
+      status: provisioned
       security_enabled: true
       password: 4eaJnZ_hKJd6lli6
       error: ''
       created_at: '2026-03-18T02:37:42.503344'
+      last_attempt_at: '2026-03-18T02:41:05.724723'
     production_domain: rentalfixer.app
     enable_security: true
     github_webhook_secret: bQ9Uw2_SlxD5I7HSB5BzPyyW6RlvZzy1sXj4Jte4qoo
@@ -97,3 +99,25 @@ applications:
       \ npm run build 2>/dev/null || true\n            php artisan migrate --force\
       \ 2>/dev/null || true\n            sudo systemctl restart rentalfixer-staging\
       \ 2>/dev/null || sudo systemctl reload php8.5-fpm\n"
+    server_commits:
+      re-node-02: ''
+    last_deploy:
+      at: '2026-03-18T03:41:46.178876'
+      success: true
+      errors: []
+      phases:
+        deploy:
+          status: success
+          started_at: '2026-03-18T03:40:09.619567'
+          completed_at: '2026-03-18T03:41:38.843155'
+        domain_provisioning:
+          status: skipped
+          reason: Staging deploy does not run domain provisioning
+      aborted: false
+      message: ''
+      branch: staging
+      environment: staging
+    last_deploy_status: success
+    last_deploy_at: '2026-03-18T03:41:46.178876'
+    last_deploy_branch: staging
+    last_deploy_environment: staging
