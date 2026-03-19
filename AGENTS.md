@@ -458,6 +458,38 @@ This script pulls all configuration files from all servers into the `configs/` d
 - **Consistency:** Easier to detect configuration drift between servers
 - **Documentation:** Configs in repo serve as documentation of current state
 
+## Documentation Update Workflow
+
+**CRITICAL:** After completing any task, the relevant documentation MUST be updated:
+
+### Required Updates
+
+1. **`docs/plan.md`**: Mark completed tasks with:
+   - Status: Change `⏳ In Progress` to `✅ Complete`
+   - Timestamp: Add completion date/time (e.g., `2026-03-19 02:24 UTC`)
+   - Checkboxes: Change `[ ]` to `[x]` for completed items
+
+2. **Related Documentation**: Update any relevant docs:
+   - `docs/architecture.md` - If architectural changes
+   - `docs/dashboard.md` - If dashboard features changed
+   - `docs/monitoring.md` - If monitoring/alerting changed
+   - `docs/security_audit.md` - If security-related changes
+
+### Documentation Format
+
+```markdown
+**Tracking:**
+- Started: YYYY-MM-DD (description)
+- Completed: YYYY-MM-DD HH:MM UTC
+- Status: ✅ Complete
+```
+
+### Why This Matters
+
+- **Audit Trail:** Clear history of what was done and when
+- **Continuity:** Future sessions can understand previous work
+- **Accountability:** Timestamps show progress over time
+
 ## Framework Support
 
 | Framework | Runtime | Environment Variable |
