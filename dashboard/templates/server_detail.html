@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+{% block title %}{{ server.name }} - Server Details{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>{{ server.name }}</h1>
+    <a href="/servers" class="btn btn-secondary">← Back to Servers</a>
+</div>
+
+<div class="status-row">
+    <div class="status-item">
+        <span class="status-label">Role:</span>
+        <span>{{ server.role or 'N/A' }}</span>
+    </div>
+    <div class="status-item">
+        <span class="status-label">Tailscale IP:</span>
+        <code>{{ server.ip }}</code>
+    </div>
+    <div class="status-item">
+        <span class="status-label">Public IP:</span>
+        <code>{{ server.public_ip }}</code>
+    </div>
+    <div class="status-item">
+        <span class="status-label">Status:</span>
+        {% if server_status.uptime != 'unreachable' %}
+        <span class="status-badge status-healthy">● Online</span>
+        {% else %}
+        <span class="status-badge status-error">● Offline</span>
+        {% endif %}
+    </div>
+    {% if server_status.uptime and server_status.uptime != 'unreachable' %}
+    <div class="status-item">
+        <span class="status-label">Uptime:</span>
+        <span>{{ server_status.uptime }}</span>
+    </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <div class="page-header">
+        <h2>Package Updates</h2>
+        <div class="header-actions">
+            <button onclick="refreshUpdates()" class="btn btn-secondary btn-sm" id="refreshBtn">Refresh</button>
+            {% if updates.success and updates.packages and updates.packages|length > 0 %}
+            <button onclick="showUpdateAllPackagesModal()" class="btn btn-sm">Update All ({{ updates.packages|length }})</button>
+            {% endif %}
+        </div>
+    </div>
+    
+    {% if updates.success %}
+        {% if updates.packages and updates.packages|length > 0 %}
+        <div class="table-container">
+            <table class="server-table">
+                <thead>
+                    <tr>
+                        <th>Package</th>
+                        <th>Current Version</th>
+                        <th>Available Version</th>
+                        <th>Security</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for pkg in updates.packages %}
+                    <tr data-package="{{ pkg.name }}">
+                        <td><strong>{{ pkg.name }}</strong></td>
+                        <td><code>{{ pkg.current_version }}</code></td>
+                        <td><code>{{ pkg.available_version }}</code></td>
+                        <td>
+                            {% if pkg.security %}
+                            <span class="status-badge status-error">🔒 Security</span>
+                            {% else %}
+                            <span class="status-badge" style="background: rgba(0,212,255,0.2); color: #00d4ff;">Normal</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button onclick="updatePackage('{{ pkg.name }}')" class="btn btn-sm">Update</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        {% if updates.services_to_restart and updates.services_to_restart|length > 0 %}
+        <div class="alert alert-warning" style="margin-top: 1rem;">
+            <strong>⚠️ Services requiring restart after update:</strong>
+            <ul>
+                {% for service in updates.services_to_restart %}
+                <li>{{ service }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        
+        {% else %}
+        <div class="empty-state">
+            <p>✓ All packages are up to date</p>
+        </div>
+        {% endif %}
+        
+        <p style="margin-top: 1rem; color: #8899a6; font-size: 0.875rem;">
+            Last checked: {{ updates.last_checked or 'Never' }}
+        </p>
+        
+    {% else %}
+    <div class="alert alert-error">
+        Failed to fetch updates: {{ updates.error or 'Unknown error' }}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Update Confirmation Modal -->
+<div id="updateModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <h3 id="modalTitle">Confirm Package Update</h3>
+        <p id="modalMessage"></p>
+        <div id="modalPackageList"></div>
+        <div id="modalServiceWarning"></div>
+        <div class="modal-actions">
+            <button onclick="closeModal()" class="btn btn-secondary">Cancel</button>
+            <button onclick="confirmUpdate()" class="btn" id="modalConfirmBtn">Confirm Update</button>
+        </div>
+        <div id="updateProgress" style="display: none; margin-top: 1rem;">
+            <p id="updateStatus">Updating...</p>
+        </div>
+    </div>
+</div>
+
+<!-- Update All Packages Modal -->
+<div id="updateAllPackagesModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <h3>Update All Packages</h3>
+        <p>This will update all {{ updates.packages|length }} packages on {{ server.name }}.</p>
+        
+        {% if updates.services_to_restart and updates.services_to_restart|length > 0 %}
+        <div class="alert alert-warning" style="margin: 1rem 0;">
+            <strong>⚠️ Services will need restart:</strong>
+            {{ updates.services_to_restart|join(', ') }}
+        </div>
+        {% endif %}
+        
+        <div class="modal-actions">
+            <button onclick="closeUpdateAllPackagesModal()" class="btn btn-secondary">Cancel</button>
+            <button onclick="confirmUpdateAllPackages()" class="btn">Update All</button>
+        </div>
+    </div>
+</div>
+
+<script>
+let pendingPackages = null;
+let allPackages = [{% for pkg in updates.packages %}'{{ pkg.name }}'{% if not loop.last %}, {% endif %}{% endfor %}];
+
+function refreshUpdates() {
+    window.location.href = '/servers/{{ server.name }}?refresh=true';
+}
+
+function updatePackage(packageName) {
+    pendingPackages = [packageName];
+    showModal(`Update package "${packageName}"?`, [packageName]);
+}
+
+function showUpdateAllPackagesModal() {
+    document.getElementById('updateAllPackagesModal').style.display = 'flex';
+}
+
+function closeUpdateAllPackagesModal() {
+    document.getElementById('updateAllPackagesModal').style.display = 'none';
+}
+
+function confirmUpdateAllPackages() {
+    pendingPackages = allPackages;
+    closeUpdateAllPackagesModal();
+    showModal('Update all packages on {{ server.name }}?', allPackages);
+}
+
+function showModal(message, packages) {
+    document.getElementById('modalTitle').textContent = packages.length === 1 ? 'Update Package' : 'Update Packages';
+    document.getElementById('modalMessage').textContent = message;
+    
+    let listHtml = '<ul style="margin: 1rem 0; padding-left: 1.5rem;">';
+    packages.slice(0, 10).forEach(pkg => {
+        listHtml += `<li>${pkg}</li>`;
+    });
+    if (packages.length > 10) {
+        listHtml += `<li>... and ${packages.length - 10} more</li>`;
+    }
+    listHtml += '</ul>';
+    document.getElementById('modalPackageList').innerHTML = listHtml;
+    
+    {% if updates.services_to_restart and updates.services_to_restart|length > 0 %}
+    document.getElementById('modalServiceWarning').innerHTML = `
+        <div class="alert alert-warning" style="margin-top: 1rem;">
+            <strong>⚠️ Services will need restart:</strong>
+            {{ updates.services_to_restart|join(', ') }}
+        </div>
+    `;
+    {% endif %}
+    
+    document.getElementById('updateProgress').style.display = 'none';
+    document.getElementById('updateModal').style.display = 'flex';
+}
+
+function closeModal() {
+    document.getElementById('updateModal').style.display = 'none';
+    pendingPackages = null;
+}
+
+function confirmUpdate() {
+    if (!pendingPackages) return;
+    
+    const confirmBtn = document.getElementById('modalConfirmBtn');
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Updating...';
+    
+    document.getElementById('updateProgress').style.display = 'block';
+    document.getElementById('updateStatus').textContent = 'Updating packages...';
+    
+    const isAll = pendingPackages.length === allPackages.length;
+    
+    fetch('/api/servers/{{ server.name }}/updates', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            packages: isAll ? null : pendingPackages,
+            confirm: true
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('updateStatus').textContent = 'Update completed! Updated: ' + (data.updated || []).join(', ');
+            setTimeout(() => {
+                window.location.reload();
+            }, 2000);
+        } else {
+            document.getElementById('updateStatus').textContent = 'Update failed: ' + (data.error || (data.errors || []).join(', '));
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = 'Confirm Update';
+        }
+    })
+    .catch(err => {
+        document.getElementById('updateStatus').textContent = 'Error: ' + err;
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Confirm Update';
+    });
+}
+</script>
+
+<style>
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: #16213e;
+    padding: 2rem;
+    border-radius: 12px;
+    max-width: 500px;
+    width: 90%;
+    border: 1px solid #2a3a5e;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.modal-content h3 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+}
+
+.modal-actions {
+    margin-top: 1.5rem;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+.header-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.alert ul {
+    margin: 0.5rem 0 0 1rem;
+    padding: 0;
+}
+</style>
+{% endblock %}

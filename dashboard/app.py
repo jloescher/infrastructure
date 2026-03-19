@@ -69,6 +69,12 @@ REDIS_HOST = os.environ.get("REDIS_HOST", "100.126.103.51")
 REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
 REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD", "CcPUa3nvcxHtyNYjztbDyfCCuhgix78novmBDNGk")
 
+# Redis client for caching (package updates, task status, etc.)
+redis_client = redis.Redis(
+    host=REDIS_HOST, port=REDIS_PORT, password=REDIS_PASSWORD,
+    decode_responses=True, socket_connect_timeout=5
+)
+
 PROMETHEUS_URL = os.environ.get("PROMETHEUS_URL", "http://100.102.220.16:9090")
 GRAFANA_URL = os.environ.get("GRAFANA_URL", "http://100.102.220.16:3000")
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "").strip()
@@ -429,7 +435,36 @@ def resolve_public_ip(server_ip):
     return None
 
 
+import socket
+
 def ssh_command(server_ip, command, timeout=30):
+    # Check if we're running on the same server - use local execution
+    local_ips = ["127.0.0.1", "localhost", "127.0.1.1"]
+    
+    # Get Tailscale IP if available
+    try:
+        result = subprocess.run(
+            ["ip", "addr", "show", "tailscale0"],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            import re
+            match = re.search(r'inet ([0-9.]+)/', result.stdout)
+            if match:
+                local_ips.append(match.group(1))
+    except:
+        pass
+    
+    def run_local(run_timeout):
+        result = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=run_timeout
+        )
+        return {"success": result.returncode == 0, "stdout": result.stdout, "stderr": result.stderr}
+    
     def run_target(target_ip, run_timeout):
         result = subprocess.run(
             ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5",
@@ -437,7 +472,16 @@ def ssh_command(server_ip, command, timeout=30):
             capture_output=True, text=True, timeout=run_timeout
         )
         return {"success": result.returncode == 0, "stdout": result.stdout, "stderr": result.stderr}
-
+    
+    # Use local execution if on same server
+    if server_ip in local_ips:
+        try:
+            return run_local(timeout)
+        except subprocess.TimeoutExpired:
+            return {"success": False, "stdout": "", "stderr": "Local command timed out"}
+        except Exception as e:
+            return {"success": False, "stdout": "", "stderr": str(e)}
+    
     public_ip = resolve_public_ip(server_ip)
     primary_timeout = timeout
 
@@ -1622,6 +1666,300 @@ def check_servers_async(servers):
     return results
 
 
+# ============================================================================
+# Package Update Functions
+# ============================================================================
+
+def get_server_updates(server_ip, force_refresh=False):
+    """
+    Check for available package updates on a server.
+    
+    Args:
+        server_ip: Server IP address
+        force_refresh: If True, run apt-get update first
+    
+    Returns:
+        {
+            "success": bool,
+            "packages": [
+                {
+                    "name": str,
+                    "current_version": str,
+                    "available_version": str,
+                    "security": bool,
+                    "priority": str
+                }
+            ],
+            "security_count": int,
+            "total_count": int,
+            "services_to_restart": [str],
+            "last_checked": str (ISO timestamp)
+        }
+    """
+    cache_key = f"server_updates:{server_ip}"
+    
+    if not force_refresh:
+        try:
+            cached = redis_client.get(cache_key)
+            if cached:
+                return json.loads(cached)
+        except Exception:
+            pass
+    
+    if force_refresh:
+        ssh_command(server_ip, "apt-get update -qq 2>/dev/null", timeout=60)
+    
+    result = ssh_command(
+        server_ip,
+        "apt list --upgradable 2>/dev/null | tail -n +2",
+        timeout=30
+    )
+    
+    if not result["success"]:
+        return {"success": False, "error": result.get("stderr", "Unknown error"), "packages": []}
+    
+    packages = []
+    security_count = 0
+    
+    for line in result["stdout"].strip().split("\n"):
+        if not line:
+            continue
+        
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        
+        name = parts[0].split("/")[0]
+        available_version = parts[1]
+        
+        # Extract current version from [upgradable from: VERSION]
+        current_version = ""
+        if "[upgradable from:" in line:
+            import re
+            match = re.search(r'\[upgradable from: ([^\]]+)\]', line)
+            if match:
+                current_version = match.group(1)
+        
+        security_check = ssh_command(
+            server_ip,
+            f"apt-cache policy {name} 2>/dev/null | grep -A1 '***' | head -1",
+            timeout=10
+        )
+        is_security = "security" in (security_check.get("stdout") or "").lower()
+        
+        if is_security:
+            security_count += 1
+        
+        packages.append({
+            "name": name,
+            "current_version": current_version,
+            "available_version": available_version,
+            "security": is_security,
+            "priority": "critical" if is_security else "normal"
+        })
+    
+    services = get_services_needing_restart(server_ip)
+    
+    response = {
+        "success": True,
+        "packages": packages,
+        "security_count": security_count,
+        "total_count": len(packages),
+        "services_to_restart": services,
+        "last_checked": datetime.utcnow().isoformat() + "Z"
+    }
+    
+    try:
+        redis_client.setex(cache_key, 3600, json.dumps(response))
+    except Exception:
+        pass
+    
+    return response
+
+
+def get_services_needing_restart(server_ip):
+    """
+    Detect services that need restart after package updates.
+    
+    Returns:
+        List of service names that need restart
+    """
+    services = []
+    
+    result = ssh_command(
+        server_ip,
+        "command -v checkrestart >/dev/null 2>&1 && checkrestart 2>/dev/null | grep -oP 'service \\K\\S+' || echo ''",
+        timeout=30
+    )
+    
+    if result["success"] and result["stdout"].strip():
+        services = [s for s in result["stdout"].strip().split("\n") if s]
+    
+    if not services:
+        result = ssh_command(
+            server_ip,
+            "lsof 2>/dev/null | grep 'DEL.*\\.so' | awk '{print $1}' | sort -u",
+            timeout=30
+        )
+        if result["success"]:
+            process_to_service = {
+                "nginx": "nginx",
+                "postgres": "postgresql",
+                "redis-server": "redis-server",
+                "node": "node",
+                "php-fpm": "php8.5-fpm",
+                "haproxy": "haproxy",
+                "patroni": "patroni",
+                "etcd": "etcd"
+            }
+            for proc in result["stdout"].strip().split("\n"):
+                if proc in process_to_service:
+                    services.append(process_to_service[proc])
+            services = list(set(services))
+    
+    return services
+
+
+def update_packages(server_ip, packages=None):
+    """
+    Update packages on a server.
+    
+    Args:
+        server_ip: Server IP address
+        packages: List of specific packages to update, or None for all
+    
+    Returns:
+        {
+            "success": bool,
+            "updated": [str],
+            "errors": [str],
+            "output": str
+        }
+    """
+    if packages:
+        pkg_list = " ".join(packages)
+        cmd = f"DEBIAN_FRONTEND=noninteractive apt-get install -y {pkg_list} 2>&1"
+    else:
+        cmd = "DEBIAN_FRONTEND=noninteractive apt-get upgrade -y 2>&1"
+    
+    result = ssh_command(server_ip, cmd, timeout=300)
+    
+    updated = []
+    errors = []
+    
+    if result["success"]:
+        for line in result["stdout"].split("\n"):
+            if "Unpacking" in line or "Setting up" in line:
+                parts = line.split()
+                if len(parts) >= 2:
+                    pkg = parts[1].split(":")[0]
+                    if pkg not in updated:
+                        updated.append(pkg)
+        
+        try:
+            redis_client.delete(f"server_updates:{server_ip}")
+        except Exception:
+            pass
+    else:
+        errors.append(result.get("stderr") or result.get("stdout", "Unknown error")[-500:])
+    
+    return {
+        "success": result["success"],
+        "updated": updated,
+        "errors": errors,
+        "output": result["stdout"][-2000:] if len(result["stdout"]) > 2000 else result["stdout"]
+    }
+
+
+def restart_services(server_ip, services):
+    """
+    Restart specified services on a server.
+    
+    Args:
+        server_ip: Server IP address
+        services: List of service names to restart
+    
+    Returns:
+        {
+            "success": bool,
+            "restarted": [str],
+            "failed": [str]
+        }
+    """
+    restarted = []
+    failed = []
+    
+    for service in services:
+        result = ssh_command(
+            server_ip,
+            f"systemctl restart {service} && systemctl is-active {service}",
+            timeout=30
+        )
+        if result["success"] and "active" in result["stdout"]:
+            restarted.append(service)
+        else:
+            failed.append(service)
+    
+    return {
+        "success": len(failed) == 0,
+        "restarted": restarted,
+        "failed": failed
+    }
+
+
+def get_all_servers_updates(force_refresh=False):
+    """
+    Get update status for all servers.
+    
+    Returns:
+        {
+            "total_updates": int,
+            "security_updates": int,
+            "servers": {
+                "server_name": {
+                    "total": int,
+                    "security": int,
+                    "last_checked": str
+                }
+            }
+        }
+    """
+    all_servers = DB_SERVERS + APP_SERVERS + ROUTERS
+    results = {
+        "total_updates": 0,
+        "security_updates": 0,
+        "servers": {}
+    }
+    
+    for server in all_servers:
+        updates = get_server_updates(server["ip"], force_refresh=force_refresh)
+        if updates.get("success"):
+            results["servers"][server["name"]] = {
+                "total": updates["total_count"],
+                "security": updates["security_count"],
+                "last_checked": updates["last_checked"]
+            }
+            results["total_updates"] += updates["total_count"]
+            results["security_updates"] += updates["security_count"]
+        else:
+            results["servers"][server["name"]] = {
+                "total": 0,
+                "security": 0,
+                "last_checked": None,
+                "error": updates.get("error", "Unknown error")
+            }
+    
+    return results
+
+
+def find_server_by_name(server_name):
+    """Find server by name in all server lists."""
+    for s in DB_SERVERS + APP_SERVERS + ROUTERS:
+        if s["name"] == server_name:
+            return s
+    return None
+
+
 @app.route("/")
 @requires_auth
 def index():
@@ -1739,7 +2077,13 @@ def connection_string(db_name):
 @requires_auth
 def servers():
     server_status = check_servers_async(DB_SERVERS + APP_SERVERS + ROUTERS)
-    return render_template("servers.html", servers=server_status, db_servers=DB_SERVERS, app_servers=APP_SERVERS, routers=ROUTERS)
+    updates_status = get_all_servers_updates()
+    return render_template("servers.html", 
+        servers=server_status, 
+        db_servers=DB_SERVERS, 
+        app_servers=APP_SERVERS, 
+        routers=ROUTERS,
+        updates_status=updates_status)
 
 
 @app.route("/api/generate-workflow", methods=["POST"])
@@ -4601,6 +4945,277 @@ def api_set_secret(app_name):
             sync_result = sync_runtime_env_for_app(app_name, app)
             result["env_sync"] = sync_result
     return jsonify(result)
+
+
+# ============================================================================
+# Package Update API Routes
+# ============================================================================
+
+@app.route("/api/updates/status")
+@requires_auth
+def api_updates_status():
+    """
+    Get aggregated update status for all servers.
+    Used for navigation badge and dashboard widget.
+    """
+    status = get_all_servers_updates()
+    return jsonify(status)
+
+
+@app.route("/api/servers/<server_name>/updates")
+@requires_auth
+def api_server_updates(server_name):
+    """
+    Get detailed update information for a specific server.
+    """
+    server = find_server_by_name(server_name)
+    
+    if not server:
+        return jsonify({"success": False, "error": "Server not found"}), 404
+    
+    force_refresh = request.args.get("refresh", "false").lower() == "true"
+    updates = get_server_updates(server["ip"], force_refresh=force_refresh)
+    
+    return jsonify({
+        "server": server_name,
+        "ip": server["ip"],
+        "success": updates.get("success", False),
+        "packages": updates.get("packages", []),
+        "security_count": updates.get("security_count", 0),
+        "total_count": updates.get("total_count", 0),
+        "services_to_restart": updates.get("services_to_restart", []),
+        "last_checked": updates.get("last_checked"),
+        "error": updates.get("error")
+    })
+
+
+@app.route("/api/updates/check", methods=["POST"])
+@requires_auth
+def api_check_updates():
+    """
+    Trigger update check on all servers.
+    Returns task ID for status polling.
+    """
+    task_id = f"update_check_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+    
+    all_servers = DB_SERVERS + APP_SERVERS + ROUTERS
+    
+    try:
+        redis_client.setex(f"task:{task_id}", 3600, json.dumps({
+            "status": "running",
+            "progress": 0,
+            "total": len(all_servers),
+            "servers_completed": [],
+            "started_at": datetime.utcnow().isoformat()
+        }))
+    except Exception:
+        pass
+    
+    @run_in_thread
+    def run_check():
+        completed = []
+        
+        for i, server in enumerate(all_servers):
+            get_server_updates(server["ip"], force_refresh=True)
+            completed.append(server["name"])
+            
+            try:
+                redis_client.setex(f"task:{task_id}", 3600, json.dumps({
+                    "status": "running",
+                    "progress": i + 1,
+                    "total": len(all_servers),
+                    "servers_completed": completed,
+                    "started_at": datetime.utcnow().isoformat()
+                }))
+            except Exception:
+                pass
+        
+        try:
+            redis_client.setex(f"task:{task_id}", 3600, json.dumps({
+                "status": "complete",
+                "progress": len(all_servers),
+                "total": len(all_servers),
+                "servers_completed": completed,
+                "started_at": datetime.utcnow().isoformat(),
+                "completed_at": datetime.utcnow().isoformat()
+            }))
+        except Exception:
+            pass
+    
+    run_check()
+    
+    return jsonify({
+        "success": True,
+        "task_id": task_id,
+        "message": "Update check started"
+    }), 202
+
+
+@app.route("/api/tasks/<task_id>")
+@requires_auth
+def api_task_status(task_id):
+    """
+    Get status of a background task.
+    """
+    try:
+        task_data = redis_client.get(f"task:{task_id}")
+        if not task_data:
+            return jsonify({"success": False, "error": "Task not found"}), 404
+        
+        return jsonify(json.loads(task_data))
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/servers/<server_name>/updates", methods=["POST"])
+@requires_auth
+def api_update_server(server_name):
+    """
+    Update packages on a specific server.
+    """
+    server = find_server_by_name(server_name)
+    
+    if not server:
+        return jsonify({"success": False, "error": "Server not found"}), 404
+    
+    data = request.json or {}
+    packages = data.get("packages")
+    confirm = data.get("confirm", False)
+    
+    if not confirm:
+        return jsonify({
+            "success": False,
+            "error": "Confirmation required. Set confirm: true in request body."
+        }), 400
+    
+    result = update_packages(server["ip"], packages=packages)
+    
+    return jsonify(result)
+
+
+@app.route("/api/updates/all", methods=["POST"])
+@requires_auth
+def api_update_all_servers():
+    """
+    Update packages on all servers.
+    Requires explicit confirmation.
+    """
+    data = request.json or {}
+    confirm = data.get("confirm", False)
+    confirmation_text = data.get("confirmation_text", "")
+    
+    if not confirm or confirmation_text != "UPDATE ALL":
+        return jsonify({
+            "success": False,
+            "error": "Type 'UPDATE ALL' in confirmation_text to proceed."
+        }), 400
+    
+    task_id = f"update_all_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+    all_servers = DB_SERVERS + APP_SERVERS + ROUTERS
+    
+    try:
+        redis_client.setex(f"task:{task_id}", 7200, json.dumps({
+            "status": "running",
+            "progress": 0,
+            "total": len(all_servers),
+            "servers_completed": [],
+            "servers_failed": [],
+            "started_at": datetime.utcnow().isoformat()
+        }))
+    except Exception:
+        pass
+    
+    @run_in_thread
+    def run_updates():
+        completed = []
+        failed = []
+        
+        for i, server in enumerate(all_servers):
+            result = update_packages(server["ip"])
+            
+            if result["success"]:
+                completed.append({"name": server["name"], "updated": result["updated"]})
+            else:
+                failed.append({"name": server["name"], "error": result["errors"]})
+            
+            try:
+                redis_client.setex(f"task:{task_id}", 7200, json.dumps({
+                    "status": "running",
+                    "progress": i + 1,
+                    "total": len(all_servers),
+                    "servers_completed": completed,
+                    "servers_failed": failed,
+                    "started_at": datetime.utcnow().isoformat()
+                }))
+            except Exception:
+                pass
+        
+        try:
+            redis_client.setex(f"task:{task_id}", 7200, json.dumps({
+                "status": "complete",
+                "progress": len(all_servers),
+                "total": len(all_servers),
+                "servers_completed": completed,
+                "servers_failed": failed,
+                "started_at": datetime.utcnow().isoformat(),
+                "completed_at": datetime.utcnow().isoformat()
+            }))
+        except Exception:
+            pass
+    
+    run_updates()
+    
+    return jsonify({
+        "success": True,
+        "task_id": task_id,
+        "message": "Update started on all servers"
+    }), 202
+
+
+@app.route("/api/servers/<server_name>/restart-services", methods=["POST"])
+@requires_auth
+def api_restart_services(server_name):
+    """
+    Restart services on a server after updates.
+    """
+    server = find_server_by_name(server_name)
+    
+    if not server:
+        return jsonify({"success": False, "error": "Server not found"}), 404
+    
+    data = request.json or {}
+    services = data.get("services", [])
+    
+    if not services:
+        return jsonify({"success": False, "error": "No services specified"}), 400
+    
+    result = restart_services(server["ip"], services)
+    return jsonify(result)
+
+
+@app.route("/servers/<server_name>")
+@requires_auth
+def server_detail(server_name):
+    """
+    Server detail page with package updates.
+    """
+    server = find_server_by_name(server_name)
+    
+    if not server:
+        flash("Server not found", "error")
+        return redirect(url_for("servers"))
+    
+    server_status = check_servers_async([server])
+    
+    force_refresh = request.args.get("refresh", "false").lower() == "true"
+    updates = get_server_updates(server["ip"], force_refresh=force_refresh)
+    
+    return render_template(
+        "server_detail.html",
+        server=server,
+        server_status=server_status.get(server_name, {}),
+        updates=updates
+    )
 
 
 if __name__ == "__main__":

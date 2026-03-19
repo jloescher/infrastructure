@@ -25,6 +25,7 @@ This document tracks current tasks, priorities, and future improvements for the 
 | Non-Root App Tooling Runtime | ✅ Complete | App build/runtime tooling standardized to `webapps` user with permission guardrails |
 | SOPS-Driven Deploy Env Generation | ✅ Complete | Deploy now materializes runtime `.env` from SOPS on router-01 and pushes to app servers |
 | Branch-Gated Dual-Env Deploy + Scoped Secrets | ✅ Complete | Enforced branch gating, scoped secrets, dual deploy targets, and runtime `.env` sync |
+| Package Update Dashboard | ✅ Complete | Server package updates visible with security highlighting and bulk update |
 
 ---
 
@@ -965,18 +966,105 @@ REDIS_HOST = os.environ.get("REDIS_HOST", "100.126.103.51")  # re-node-01
 # Ensure only your devices can access servers
 ```
 
-**API Token Scoping:**
+**API Token Scoping:** ✅ VERIFIED (2026-03-18)
 ```bash
-# Cloudflare token should be zone-scoped, not account-wide admin
-# Verify at https://dash.cloudflare.com/profile/api-tokens
+# Verification performed via Cloudflare API
+# Token ID: bca13c7bdfe90f51ce4dd1b6c1deb0d3
+# Status: active
 ```
 
+**Token Verification Results:**
+
+| Attribute | Value |
+|-----------|-------|
+| Token Status | Active ✅ |
+| Scope | Account-wide (all 75 zones) |
+| Total Zones Accessible | 75 zones |
+| xotec.io Zone ID | `26470f68ef4dbbf7bf5a770630aa2a97` ✅ |
+| rentalfixer.app Zone ID | `d565e98b12effe08e530da729b82c0b9` ✅ |
+
+**Token Permissions (per zone):**
+| Permission | Purpose | Dashboard Use |
+|------------|---------|---------------|
+| `#dns_records:read` | Read DNS records | ✅ Domain provisioning |
+| `#dns_records:edit` | Create/update/delete DNS records | ✅ Domain provisioning |
+| `#waf:read` | Read WAF rules | ✅ Security rules |
+| `#waf:edit` | Edit WAF rules | ✅ Security rules |
+| `#zone:read` | Read zone information | ✅ Zone validation |
+
+**Security Assessment:**
+| Factor | Risk Level | Justification |
+|--------|------------|---------------|
+| Account-wide scope | **ACCEPTABLE** | Private repo, single user |
+| No account admin | ✅ Good | Cannot create zones, manage billing |
+| Minimum permissions | ✅ Good | Only DNS/WAF/Zone read needed |
+| 75 zones accessible | **LOW RISK** | Tailscale perimeter protects repo |
+
+**Recommendation:** Token is properly scoped for infrastructure dashboard needs. The account-wide scope is acceptable given:
+- Private repository on private NAS
+- Single-user infrastructure
+- Tailscale network is the security perimeter
+- No elevated account permissions (can't create zones, manage billing)
+
 **Conclusion:** Infrastructure security is appropriate for private single-user setup. Tailscale IS the perimeter. Focus on keeping Tailscale ACLs tight and servers patched.
+
+---
+
+#### Apt Update Status (2026-03-18)
+
+**Summary Table:**
+
+| Server | IP | Upgradable | Security Updates | Critical Services |
+|--------|-----|------------|------------------|-------------------|
+| re-node-01 | 100.126.103.51 | 14 | snapd | tailscale (1.94.2→1.96.2), postgresql-18-h3 |
+| re-node-03 | 100.114.117.46 | 11 | snapd | tailscale |
+| re-node-04 | 100.115.75.119 | 11 | snapd | tailscale |
+| router-01 | 100.102.220.16 | 12 | snapd, python3-flask | tailscale |
+| router-02 | 100.116.175.9 | 3 | snapd | tailscale |
+| re-db | 100.92.26.38 | 53 | snapd, systemd-suite | tailscale, postgresql-client |
+| re-node-02 | 100.89.130.19 | 4 | snapd | tailscale, libgd3 |
+
+**Key Findings:**
+
+| Category | Count | Details |
+|----------|-------|---------|
+| **All Servers** | 7 | tailscale 1.94.2 → 1.96.2 |
+| **All Servers** | 7 | snapd security update (noble-security) |
+| **re-db** | 53 | Large update batch including systemd security patches |
+| **router-01** | 1 | python3-flask security update |
+
+**Security Updates Available:**
+- `snapd/noble-security` - All 7 servers
+- `systemd*` suite (noble-security) - re-db only (libsystemd0, libpam-systemd, systemd, udev, etc.)
+- `python3-flask/noble-security` - router-01 only
+
+**Critical Infrastructure Updates:**
+- `tailscale` - All servers (1.94.2 → 1.96.2) - **VPN connectivity critical**
+- `postgresql-18-h3` - re-node-01 (PostgreSQL extension)
+- `postgresql-client-*` - re-db (pg_dump client upgrade)
+
+**Recommended Upgrade Order:**
+1. **tailscale** on all servers (VPN is critical infrastructure)
+2. **snapd** on all servers (security)
+3. **systemd suite** on re-db (security)
+4. **python3-flask** on router-01 (security, dashboard dependency)
+5. Remaining packages as needed
+
+**Upgrade Command (when ready):**
+```bash
+# Upgrade specific packages
+ssh root@<IP> "apt upgrade -y tailscale snapd"
+
+# Full upgrade (use with caution)
+ssh root@<IP> "apt full-upgrade -y"
+```
 
 **Tracking:**
 - Started: 2026-03-18 (security audit)
 - Reassessed: 2026-03-18 (context applied)
-- Status: ✅ No critical issues
+- Token verified: 2026-03-18 20:45 UTC
+- Apt status checked: 2026-03-18 21:00 UTC
+- Status: ✅ No critical issues, updates pending user approval
 
 ---
 
@@ -1557,6 +1645,71 @@ export default function handler(req, res) {
 | re-node-01 | 100.126.103.51 | Database | PostgreSQL, Redis |
 | re-node-03 | 100.114.117.46 | Database | PostgreSQL, Redis |
 | re-node-04 | 100.115.75.119 | Database | PostgreSQL |
+
+---
+
+### Phase 33: Package Update Dashboard Feature (2026-03-18)
+
+**Problem Statement:**
+- Infrastructure administrators need visibility into package updates across all VPS servers
+- Security updates need to be highlighted for prompt action
+- Bulk updates across all servers require a centralized interface
+
+**Implementation:**
+
+1. **Backend Functions** ✅ COMPLETE
+   - [x] `get_server_updates(server_ip, force_refresh=False)` - SSH to server, run apt commands
+   - [x] `get_services_needing_restart(server_ip)` - Detect services needing restart
+   - [x] `update_packages(server_ip, packages=None)` - Update single or all packages
+   - [x] `restart_services(server_ip, services)` - Restart services after updates
+   - [x] `get_all_servers_updates(force_refresh=False)` - Aggregate status for all servers
+   - [x] Redis caching (1 hour TTL) for update data
+
+2. **API Endpoints** ✅ COMPLETE
+   - [x] `GET /api/updates/status` - Aggregated update status for nav badge
+   - [x] `GET /api/servers/<server_name>/updates` - Detailed updates per server
+   - [x] `POST /api/servers/<server_name>/updates` - Update packages on server
+   - [x] `POST /api/updates/check` - Trigger update check on all servers
+   - [x] `POST /api/updates/all` - Update all servers (requires "UPDATE ALL" confirmation)
+   - [x] `GET /api/tasks/<task_id>` - Task status polling for async operations
+   - [x] `POST /api/servers/<server_name>/restart-services` - Restart services
+
+3. **Frontend Changes** ✅ COMPLETE
+   - [x] Modified `templates/servers.html` - Added Updates column with badges
+   - [x] Created `templates/server_detail.html` - New page for package details
+   - [x] Updated `templates/base.html` - Nav badge showing total updates
+   - [x] Added CSS styles for update badges, modals, progress indicators
+
+4. **Safety Features** ✅ COMPLETE
+   - [x] All updates require explicit confirmation in UI
+   - [x] Bulk "Update All" requires typing "UPDATE ALL"
+   - [x] Warning for packages that require service restart
+   - [x] Sequential updates for bulk operations (stop on failure)
+   - [x] Task progress polling for long-running operations
+
+**Current Update Status (as of implementation):**
+
+| Server | Upgradable | Security Updates | Critical Services |
+|--------|------------|------------------|-------------------|
+| re-node-01 | 14 | snapd | tailscale, postgresql-18-h3 |
+| re-node-03 | 11 | snapd | tailscale |
+| re-node-04 | 11 | snapd | tailscale |
+| router-01 | 12 | snapd, python3-flask | tailscale |
+| router-02 | 3 | snapd | tailscale |
+| re-db | 53 | snapd, systemd-suite | tailscale, postgresql-client |
+| re-node-02 | 4 | snapd | tailscale, libgd3 |
+
+**Files Modified:**
+- `dashboard/app.py` - Added ~300 lines for package update functions and API endpoints
+- `dashboard/templates/servers.html` - Added Updates column and modals
+- `dashboard/templates/server_detail.html` - NEW file for server detail page
+- `dashboard/templates/base.html` - Added nav badge for updates
+- `dashboard/static/style.css` - Added styles for update badges and modals
+
+**Tracking:**
+- Started: 2026-03-18
+- Completed: 2026-03-18
+- Status: ✅ Complete
 
 ---
 

@@ -588,3 +588,134 @@ h3 {
     color: #ffb74d;
     border: 1px solid rgba(255, 183, 77, 0.3);
 }
+
+/* Package Update Badges */
+.update-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.update-badge.security {
+    background: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
+    border: 1px solid rgba(231, 76, 60, 0.3);
+}
+
+.update-badge.normal {
+    background: rgba(243, 156, 18, 0.2);
+    color: #f39c12;
+    border: 1px solid rgba(243, 156, 18, 0.3);
+}
+
+.update-badge.uptodate {
+    background: rgba(39, 174, 96, 0.2);
+    color: #27ae60;
+}
+
+.update-badge.error {
+    background: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
+}
+
+/* Nav badge for updates */
+.nav-badge {
+    background: #e74c3c;
+    color: white;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.7rem;
+    margin-left: 0.25rem;
+    vertical-align: middle;
+}
+
+/* Modal styles */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal.active {
+    display: flex;
+}
+
+.modal-content {
+    background: #16213e;
+    padding: 2rem;
+    border-radius: 12px;
+    max-width: 500px;
+    width: 90%;
+    border: 1px solid #2a3a5e;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.modal-content h3 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+}
+
+.modal-actions {
+    margin-top: 1.5rem;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+/* Clickable server rows */
+.server-table tbody tr.clickable-row {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.server-table tbody tr.clickable-row:hover {
+    background: rgba(0, 212, 255, 0.05);
+}
+
+.server-table td a {
+    color: inherit;
+    text-decoration: none;
+}
+
+/* Progress indicator */
+.progress-bar {
+    height: 4px;
+    background: #2a3a5e;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.progress-bar .fill {
+    height: 100%;
+    background: #00d4ff;
+    transition: width 0.3s ease;
+}
+
+/* Header actions */
+.header-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+/* Alert list styles */
+.alert ul {
+    margin: 0.5rem 0 0 1.5rem;
+    padding: 0;
+}
+
+.alert ul li {
+    margin: 0.25rem 0;
+}

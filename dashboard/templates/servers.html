@@ -2,7 +2,15 @@
 {% block title %}Servers - Quantyra Dashboard{% endblock %}
 
 {% block content %}
-<h1>Servers</h1>
+<div class="page-header">
+    <h1>Servers</h1>
+    <div class="header-actions">
+        <button onclick="checkAllUpdates()" class="btn btn-secondary btn-sm" id="checkUpdatesBtn">Check Updates</button>
+        {% if updates_status.total_updates > 0 %}
+        <button onclick="showUpdateAllModal()" class="btn btn-sm">Update All ({{ updates_status.total_updates }})</button>
+        {% endif %}
+    </div>
+</div>
 
 <div class="card">
     <h2>Database Servers</h2>
@@ -14,15 +22,34 @@
                     <th>Role</th>
                     <th>Tailscale IP</th>
                     <th>Public IP</th>
+                    <th>Updates</th>
                 </tr>
             </thead>
             <tbody>
                 {% for server in db_servers %}
-                <tr>
-                    <td><strong>{{ server.name }}</strong></td>
+                <tr onclick="window.location='/servers/{{ server.name }}'" class="clickable-row">
+                    <td><a href="/servers/{{ server.name }}"><strong>{{ server.name }}</strong></a></td>
                     <td>{{ server.role }}</td>
                     <td><code>{{ server.ip }}</code></td>
                     <td><code>{{ server.public_ip }}</code></td>
+                    <td>
+                        {% set server_updates = updates_status.servers.get(server.name, {}) %}
+                        {% if server_updates.total > 0 %}
+                            {% if server_updates.security > 0 %}
+                            <span class="update-badge security" title="{{ server_updates.security }} security updates">
+                                🔒 {{ server_updates.total }} updates ({{ server_updates.security }} security)
+                            </span>
+                            {% else %}
+                            <span class="update-badge normal" title="{{ server_updates.total }} updates available">
+                                {{ server_updates.total }} updates
+                            </span>
+                            {% endif %}
+                        {% elif server_updates.error %}
+                            <span class="update-badge error" title="{{ server_updates.error }}">Error</span>
+                        {% else %}
+                            <span class="update-badge uptodate">✓ Up to date</span>
+                        {% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -40,15 +67,34 @@
                     <th>Role</th>
                     <th>Tailscale IP</th>
                     <th>Public IP</th>
+                    <th>Updates</th>
                 </tr>
             </thead>
             <tbody>
                 {% for server in app_servers %}
-                <tr>
-                    <td><strong>{{ server.name }}</strong></td>
+                <tr onclick="window.location='/servers/{{ server.name }}'" class="clickable-row">
+                    <td><a href="/servers/{{ server.name }}"><strong>{{ server.name }}</strong></a></td>
                     <td>{{ server.role }}</td>
                     <td><code>{{ server.ip }}</code></td>
                     <td><code>{{ server.public_ip }}</code></td>
+                    <td>
+                        {% set server_updates = updates_status.servers.get(server.name, {}) %}
+                        {% if server_updates.total > 0 %}
+                            {% if server_updates.security > 0 %}
+                            <span class="update-badge security" title="{{ server_updates.security }} security updates">
+                                🔒 {{ server_updates.total }} updates ({{ server_updates.security }} security)
+                            </span>
+                            {% else %}
+                            <span class="update-badge normal" title="{{ server_updates.total }} updates available">
+                                {{ server_updates.total }} updates
+                            </span>
+                            {% endif %}
+                        {% elif server_updates.error %}
+                            <span class="update-badge error" title="{{ server_updates.error }}">Error</span>
+                        {% else %}
+                            <span class="update-badge uptodate">✓ Up to date</span>
+                        {% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -65,14 +111,33 @@
                     <th>Name</th>
                     <th>Tailscale IP</th>
                     <th>Public IP</th>
+                    <th>Updates</th>
                 </tr>
             </thead>
             <tbody>
                 {% for server in routers %}
-                <tr>
-                    <td><strong>{{ server.name }}</strong></td>
+                <tr onclick="window.location='/servers/{{ server.name }}'" class="clickable-row">
+                    <td><a href="/servers/{{ server.name }}"><strong>{{ server.name }}</strong></a></td>
                     <td><code>{{ server.ip }}</code></td>
                     <td><code>{{ server.public_ip }}</code></td>
+                    <td>
+                        {% set server_updates = updates_status.servers.get(server.name, {}) %}
+                        {% if server_updates.total > 0 %}
+                            {% if server_updates.security > 0 %}
+                            <span class="update-badge security" title="{{ server_updates.security }} security updates">
+                                🔒 {{ server_updates.total }} updates ({{ server_updates.security }} security)
+                            </span>
+                            {% else %}
+                            <span class="update-badge normal" title="{{ server_updates.total }} updates available">
+                                {{ server_updates.total }} updates
+                            </span>
+                            {% endif %}
+                        {% elif server_updates.error %}
+                            <span class="update-badge error" title="{{ server_updates.error }}">Error</span>
+                        {% else %}
+                            <span class="update-badge uptodate">✓ Up to date</span>
+                        {% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -111,4 +176,186 @@
         </table>
     </div>
 </div>
+
+<!-- Update All Modal -->
+<div id="updateAllModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <h3>Update All Servers</h3>
+        <p>This will update packages on all servers sequentially. This action cannot be undone.</p>
+        
+        <div class="alert alert-warning" style="margin: 1rem 0;">
+            <strong>⚠️ Warning:</strong> This may require service restarts and could cause temporary downtime.
+        </div>
+        
+        <div class="form-group">
+            <label for="confirmInput">Type "UPDATE ALL" to confirm:</label>
+            <input type="text" id="confirmInput" placeholder="UPDATE ALL" autocomplete="off">
+        </div>
+        
+        <div class="modal-actions">
+            <button onclick="closeUpdateAllModal()" class="btn btn-secondary">Cancel</button>
+            <button onclick="confirmUpdateAll()" class="btn btn-danger" id="confirmUpdateBtn" disabled>Update All</button>
+        </div>
+        
+        <div id="updateAllProgress" style="display: none; margin-top: 1rem;">
+            <div class="progress-bar">
+                <div class="fill" id="updateAllProgressBar" style="width: 0%;"></div>
+            </div>
+            <p id="updateAllStatus" style="margin-top: 0.5rem; font-size: 0.875rem;"></p>
+        </div>
+    </div>
+</div>
+
+<script>
+function checkAllUpdates() {
+    const btn = document.getElementById('checkUpdatesBtn');
+    const originalText = btn.textContent;
+    btn.textContent = 'Checking...';
+    btn.disabled = true;
+    
+    fetch('/api/updates/check', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            pollTaskStatus(data.task_id, function(result) {
+                btn.textContent = originalText;
+                btn.disabled = false;
+                if (result.status === 'complete') {
+                    window.location.reload();
+                }
+            });
+        } else {
+            btn.textContent = originalText;
+            btn.disabled = false;
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(err => {
+        btn.textContent = originalText;
+        btn.disabled = false;
+        alert('Error: ' + err);
+    });
+}
+
+function pollTaskStatus(taskId, callback) {
+    const poll = function() {
+        fetch('/api/tasks/' + taskId)
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'complete' || data.status === 'failed') {
+                callback(data);
+            } else {
+                setTimeout(poll, 2000);
+            }
+        })
+        .catch(err => {
+            console.error('Poll error:', err);
+            setTimeout(poll, 2000);
+        });
+    };
+    poll();
+}
+
+function showUpdateAllModal() {
+    document.getElementById('updateAllModal').style.display = 'flex';
+    document.getElementById('confirmInput').value = '';
+    document.getElementById('confirmUpdateBtn').disabled = true;
+    document.getElementById('updateAllProgress').style.display = 'none';
+}
+
+function closeUpdateAllModal() {
+    document.getElementById('updateAllModal').style.display = 'none';
+}
+
+document.getElementById('confirmInput').addEventListener('input', function(e) {
+    document.getElementById('confirmUpdateBtn').disabled = e.target.value !== 'UPDATE ALL';
+});
+
+function confirmUpdateAll() {
+    const btn = document.getElementById('confirmUpdateBtn');
+    btn.disabled = true;
+    btn.textContent = 'Starting...';
+    
+    document.getElementById('updateAllProgress').style.display = 'block';
+    
+    fetch('/api/updates/all', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            confirm: true,
+            confirmation_text: 'UPDATE ALL'
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            pollUpdateAllProgress(data.task_id);
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+            btn.disabled = false;
+            btn.textContent = 'Update All';
+        }
+    })
+    .catch(err => {
+        alert('Error: ' + err);
+        btn.disabled = false;
+        btn.textContent = 'Update All';
+    });
+}
+
+function pollUpdateAllProgress(taskId) {
+    const poll = function() {
+        fetch('/api/tasks/' + taskId)
+        .then(r => r.json())
+        .then(data => {
+            const progressBar = document.getElementById('updateAllProgressBar');
+            const statusText = document.getElementById('updateAllStatus');
+            
+            const percent = data.total > 0 ? (data.progress / data.total * 100) : 0;
+            progressBar.style.width = percent + '%';
+            
+            if (data.status === 'complete') {
+                statusText.textContent = 'Complete! Updated ' + (data.servers_completed || []).length + ' servers.';
+                setTimeout(function() {
+                    window.location.reload();
+                }, 2000);
+            } else if (data.status === 'failed') {
+                statusText.textContent = 'Update failed. Check logs for details.';
+            } else {
+                statusText.textContent = 'Updating ' + data.progress + '/' + data.total + ' servers...';
+                setTimeout(poll, 3000);
+            }
+        })
+        .catch(err => {
+            console.error('Poll error:', err);
+            setTimeout(poll, 3000);
+        });
+    };
+    poll();
+}
+</script>
+
+<style>
+.clickable-row {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.clickable-row:hover {
+    background: rgba(0, 212, 255, 0.05);
+}
+
+.server-table td a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.header-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+</style>
 {% endblock %}
