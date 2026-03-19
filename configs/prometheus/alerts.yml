@@ -244,13 +244,13 @@ groups:
           description: "Only {{ $value }} idle processes remaining"
 
       - alert: PHPFPMPoolBusy
-        expr: (phpfpm_processes_total{state="active"} / phpfpm_processes_total) * 100 > 80
+        expr: phpfpm_processes_total{state="idle"} < 5 and phpfpm_processes_total{state="idle"} >= 2
         for: 5m
         labels:
           severity: warning
         annotations:
           summary: "PHP-FPM pool busy on {{ $labels.node }}"
-          description: "{{ $value }}% of processes are active"
+          description: "Only {{ $value }} idle processes remaining (pool under load)"
 
       - alert: PHPFPMSlowRequests
         expr: rate(phpfpm_slow_requests_total[5m]) > 1
