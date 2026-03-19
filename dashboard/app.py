@@ -65,7 +65,7 @@ PG_PORT = int(os.environ.get("PG_PORT", 5000))
 PG_USER = os.environ.get("PG_USER", "patroni_superuser")
 PG_PASSWORD = os.environ.get("PG_PASSWORD", "2e7vBpaaVK4vTJzrKebC")
 
-REDIS_HOST = os.environ.get("REDIS_HOST", "100.102.220.16")
+REDIS_HOST = os.environ.get("REDIS_HOST", "100.126.103.51")
 REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
 REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD", "CcPUa3nvcxHtyNYjztbDyfCCuhgix78novmBDNGk")
 
@@ -139,7 +139,13 @@ def configure_laravel_nginx(app_name, server_ip, port):
     return result
 
 
-def configure_php_fpm_pool(app_name, server_ip):
+def configure_php_fpm_pool(app_name, server_ip, is_staging=False):
+    max_children = 40 if is_staging else 80
+    start_servers = 4 if is_staging else 8
+    min_spare = 2 if is_staging else 4
+    max_spare = 8 if is_staging else 16
+    max_requests = 500 if is_staging else 1000
+    
     pool_config = f"""[{app_name}]
 user = www-data
 group = www-data
@@ -147,11 +153,14 @@ listen = /run/php/php8.5-fpm-{app_name}.sock
 listen.owner = www-data
 listen.group = www-data
 pm = dynamic
-pm.max_children = 10
-pm.start_servers = 2
-pm.min_spare_servers = 1
-pm.max_spare_servers = 5
-pm.max_requests = 500
+pm.max_children = {max_children}
+pm.start_servers = {start_servers}
+pm.min_spare_servers = {min_spare}
+pm.max_spare_servers = {max_spare}
+pm.process_idle_timeout = 10s
+pm.max_requests = {max_requests}
+request_slowlog_timeout = 5s
+slowlog = /var/log/php8.5-fpm/{app_name}-slow.log
 php_admin_value[disable_functions] = exec,passthru,shell_exec,system
 php_admin_flag[log_errors] = on
 php_admin_value[error_log] = /var/log/php8.5-fpm/{app_name}-error.log
