@@ -4,14 +4,6 @@ server {
     root /opt/apps/rentalfixer/public;
     index index.php;
 
-    # Trust proxies (HAProxy and Cloudflare)
-    set_real_ip_from 100.92.26.38;
-    set_real_ip_from 100.101.39.22;
-    set_real_ip_from 100.102.220.16;
-    set_real_ip_from 100.116.175.9;
-    real_ip_header X-Forwarded-For;
-    real_ip_recursive on;
-
     add_header X-Frame-Options "SAMEORIGIN";
     add_header X-Content-Type-Options "nosniff";
 
@@ -24,10 +16,10 @@ server {
         fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
         include fastcgi_params;
         fastcgi_hide_header X-Powered-By;
-        fastcgi_param REMOTE_ADDR $realip_remote_addr;
     }
 
-    location ~ /\.ht {
+    location ~ /\.(?!well-known).* {
         deny all;
     }
 }
+

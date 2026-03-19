@@ -22,7 +22,7 @@ bootstrap:
       parameters:
         wal_level: replica
         hot_standby: "on"
-        max_connections: 300
+        max_connections: 200
         max_wal_senders: 10
         max_replication_slots: 10
         wal_keep_size: 8GB

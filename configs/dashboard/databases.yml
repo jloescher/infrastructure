@@ -1,1 +1,36 @@
-databases: {}
+databases:
+  rentalfixer:
+    name: rentalfixer
+    description: Rental Fixer
+    owner: rentalfixer_admin
+    users:
+    - name: rentalfixer_user
+      password: fYecKNq5ThfHM8KsqI-Cqw
+      password_hash: SCRAM-SHA-256$4096:UlGW6cFwj0bSXX4/TLGUNg==$wh+PDFQL0kIMAxQclA5uSBeQMR3rQMKRlayCv6pY3uM=:/vRgtRBnOE1b+J07kGbKCYucE8xwEP9SOv3OkeXlFCg=
+      roles: []
+    - name: rentalfixer_admin
+      password: bKjeDiaUa1hAept06AZnAg
+      password_hash: SCRAM-SHA-256$4096:m3KRDRa+7gY53norSA5seQ==$q7zYQmBb2vUKeufk9Lr0OTeEFfztCxe2yRP49f2kaBI=:iinzfvVdnNMym20ATi+hy3gTE9XNaepYuFPXd66bqLo=
+      roles:
+      - CREATEDB
+    pgbouncer_pool_size: 20
+    pgbouncer_max_clients: 200
+    app: rentalfixer
+  rentalfixer_staging:
+    name: rentalfixer_staging
+    description: rentalfixer staging database
+    owner: rentalfixer_staging_admin
+    users:
+    - name: rentalfixer_staging_user
+      password: 3pra0qaMGefSQZ7OEVNjHA
+      password_hash: SCRAM-SHA-256$4096:XVuifnElqsFWxsYP0OxQ4w==$HIbgC6tZJ0MMkQDtwVafR3ChnGGy5FWh74kEEUguwjs=:CmrcmRRrJyMCLyy+tHJD9lQDj71/jrs9TVF6pLVl9QU=
+      roles: []
+    - name: rentalfixer_staging_admin
+      password: XWkh0XZqIHu1uYCD0ssgdA
+      password_hash: SCRAM-SHA-256$4096:0JtkyEJCUS1D7pm6CA/hlQ==$Oogr8+oPq+NpwJBGOpgayZqeF111vFSF7lXtqNYDQyk=:3m1c5eeVzWwL9bkLGj5rT3IcDiB9dJH6H3+1F7ou10g=
+      roles:
+      - CREATEDB
+    pgbouncer_pool_size: 20
+    pgbouncer_max_clients: 200
+    app: rentalfixer
+    environment: staging

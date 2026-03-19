@@ -12,6 +12,7 @@ if [ "$1" == "--rebuild" ]; then
     https_cfg="/etc/haproxy/domains/web_https.cfg"
     backends_cfg="/etc/haproxy/domains/web_backends.cfg"
     registry_file="/etc/haproxy/domains/registry.conf"
+    htpasswd_dir="/etc/haproxy/htpasswd"
     
     [ ! -f "$registry_file" ] && touch "$registry_file"
     
@@ -65,7 +66,7 @@ frontend web_https
 
 EOF
 
-    while IFS='=' read -r reg_domain reg_app reg_port; do
+    while IFS='=' read -r reg_domain reg_app reg_port reg_password; do
         [ -z "$reg_domain" ] && continue
         acl_name=$(echo "$reg_domain" | tr '.' '_')
         
@@ -101,13 +102,28 @@ EOF
 EOF
 
     added_backends=""
-    while IFS='=' read -r reg_domain reg_app reg_port; do
+    while IFS='=' read -r reg_domain reg_app reg_port reg_password; do
         [ -z "$reg_domain" ] || [ -z "$reg_app" ] || [ -z "$reg_port" ] && continue
         [[ "$reg_domain" == www.* ]] && continue
         echo -e "$added_backends" | grep -q "^${reg_app}$" && continue
         added_backends="${added_backends}${reg_app}\n"
         
-        cat >> "$backends_cfg" << EOF
+        # Check if password protected
+        if [ -n "$reg_password" ] && [ -f "${htpasswd_dir}/${reg_app}.htpasswd" ]; then
+            cat >> "$backends_cfg" << EOF
+
+backend ${reg_app}_backend
+    mode http
+    balance roundrobin
+    option httpchk GET /
+    http-check expect status 200-499
+    option forwardfor
+    http-request auth realm "Staging Area" unless { http_auth(${reg_app}_users) }
+    server app1 ${APP_SERVER_1}:${reg_port} check
+    server app2 ${APP_SERVER_2}:${reg_port} check
+EOF
+        else
+            cat >> "$backends_cfg" << EOF
 
 backend ${reg_app}_backend
     mode http
@@ -118,6 +134,7 @@ backend ${reg_app}_backend
     server app1 ${APP_SERVER_1}:${reg_port} check
     server app2 ${APP_SERVER_2}:${reg_port} check
 EOF
+        fi
     done < "$registry_file"
     
     cat >> "$backends_cfg" << EOF
@@ -132,6 +149,19 @@ backend dashboard_webhook_backend
     server dashboard 100.102.220.16:8080 check
 EOF
 
+    # Build userlists for password-protected backends
+    while IFS='=' read -r reg_domain reg_app reg_port reg_password; do
+        [ -z "$reg_domain" ] || [ -z "$reg_app" ] || [ -z "$reg_password" ] && continue
+        [[ "$reg_domain" == www.* ]] && continue
+        [ ! -f "${htpasswd_dir}/${reg_app}.htpasswd" ] && continue
+        
+        cat >> "$backends_cfg" << EOF
+
+userlist ${reg_app}_users
+    user admin insecure-password ${reg_password}
+EOF
+    done < "$registry_file"
+    
     haproxy -c -f /etc/haproxy/haproxy.cfg -f /etc/haproxy/domains 2>&1
     systemctl reload haproxy
     echo "Config rebuilt successfully"
@@ -145,6 +175,7 @@ WWW_DOMAIN=""
 IS_STAGING=""
 GIT_REPO=""
 GIT_BRANCH="main"
+STAGING_PASSWORD=""
 EMAIL="jonathan@xotec.io"
 CLOUDFLARE_CREDS="/root/.secrets/cloudflare.ini"
 
@@ -168,6 +199,10 @@ while [[ $# -gt 0 ]]; do
             GIT_BRANCH="$2"
             shift 2
             ;;
+        --password)
+            STAGING_PASSWORD="$2"
+            shift 2
+            ;;
         *)
             shift
             ;;
@@ -175,15 +210,16 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ -z "$DOMAIN" ] || [ -z "$APP_NAME" ] || [ -z "$APP_PORT" ]; then
-    echo "Usage: $0 <domain> <app_name> <app_port> [--www www.domain] [--staging] [--repo url] [--branch name]"
+    echo "Usage: $0 <domain> <app_name> <app_port> [--www www.domain] [--staging] [--repo url] [--branch name] [--password password]"
     exit 1
 fi
 
 echo "Provisioning domain: $DOMAIN for app: $APP_NAME on port: $APP_PORT"
 [ -n "$WWW_DOMAIN" ] && echo "WWW redirect: $WWW_DOMAIN -> $DOMAIN"
 [ -n "$IS_STAGING" ] && echo "Staging environment: branch=$GIT_BRANCH"
+[ -n "$STAGING_PASSWORD" ] && echo "Password protection enabled"
 
-mkdir -p /etc/haproxy/certs /etc/haproxy/domains
+mkdir -p /etc/haproxy/certs /etc/haproxy/domains /etc/haproxy/htpasswd
 
 get_ssl_cert() {
     local domain="$1"
@@ -233,6 +269,7 @@ rebuild_haproxy_config() {
     local https_cfg="/etc/haproxy/domains/web_https.cfg"
     local backends_cfg="/etc/haproxy/domains/web_backends.cfg"
     local registry_file="/etc/haproxy/domains/registry.conf"
+    local htpasswd_dir="/etc/haproxy/htpasswd"
     
     # Collect all certificates
     local certs=""
@@ -276,7 +313,7 @@ frontend web_https
 EOF
 
     # Add ACLs for each registered domain
-    while IFS='=' read -r reg_domain reg_app reg_port; do
+    while IFS='=' read -r reg_domain reg_app reg_port reg_password; do
         [ -z "$reg_domain" ] && continue
         
         local acl_name=$(echo "$reg_domain" | tr '.' '_')
@@ -320,7 +357,7 @@ EOF
     # Track which backends we've added
     local added_backends=""
     
-    while IFS='=' read -r reg_domain reg_app reg_port; do
+    while IFS='=' read -r reg_domain reg_app reg_port reg_password; do
         [ -z "$reg_domain" ] || [ -z "$reg_app" ] || [ -z "$reg_port" ] && continue
         
         # Skip www redirects (they don't need backends)
@@ -330,7 +367,22 @@ EOF
         echo -e "$added_backends" | grep -q "^${reg_app}$" && continue
         added_backends="${added_backends}${reg_app}\n"
         
-        cat >> "$backends_cfg" << EOF
+        # Check if password protected
+        if [ -n "$reg_password" ] && [ -f "${htpasswd_dir}/${reg_app}.htpasswd" ]; then
+            cat >> "$backends_cfg" << EOF
+
+backend ${reg_app}_backend
+    mode http
+    balance roundrobin
+    option httpchk GET /
+    http-check expect status 200-499
+    option forwardfor
+    http-request auth realm "Staging Area" unless { http_auth(${reg_app}_users) }
+    server app1 ${APP_SERVER_1}:${reg_port} check
+    server app2 ${APP_SERVER_2}:${reg_port} check
+EOF
+        else
+            cat >> "$backends_cfg" << EOF
 
 backend ${reg_app}_backend
     mode http
@@ -341,6 +393,7 @@ backend ${reg_app}_backend
     server app1 ${APP_SERVER_1}:${reg_port} check
     server app2 ${APP_SERVER_2}:${reg_port} check
 EOF
+        fi
     done < "$registry_file"
     
     # Add not_found backend
@@ -350,17 +403,46 @@ backend not_found_backend
     mode http
     http-request deny deny_status 404
 EOF
+
+    # Build userlists for password-protected backends
+    while IFS='=' read -r reg_domain reg_app reg_port reg_password; do
+        [ -z "$reg_domain" ] || [ -z "$reg_app" ] || [ -z "$reg_password" ] && continue
+        [[ "$reg_domain" == www.* ]] && continue
+        [ ! -f "${htpasswd_dir}/${reg_app}.htpasswd" ] && continue
+        
+        cat >> "$backends_cfg" << EOF
+
+userlist ${reg_app}_users
+    user admin insecure-password ${reg_password}
+EOF
+    done < "$registry_file"
 }
 
 # Create registry if it doesn't exist
 REGISTRY_FILE="/etc/haproxy/domains/registry.conf"
 touch "$REGISTRY_FILE"
+mkdir -p /etc/haproxy/htpasswd
 
-# Register this domain (update if exists)
+# Create htpasswd file if password provided
+if [ -n "$STAGING_PASSWORD" ]; then
+    echo "admin:$(openssl passwd -apr1 "$STAGING_PASSWORD")" > /etc/haproxy/htpasswd/${APP_NAME}.htpasswd
+    chmod 600 /etc/haproxy/htpasswd/${APP_NAME}.htpasswd
+    echo "Created htpasswd file for $APP_NAME"
+fi
+
+# Register this domain (update if exists) - format: domain=app=port=password
 if grep -q "^${DOMAIN}=" "$REGISTRY_FILE" 2>/dev/null; then
-    sed -i "s|^${DOMAIN}=.*|${DOMAIN}=${APP_NAME}=${APP_PORT}|" "$REGISTRY_FILE"
+    if [ -n "$STAGING_PASSWORD" ]; then
+        sed -i "s|^${DOMAIN}=.*|${DOMAIN}=${APP_NAME}=${APP_PORT}=${STAGING_PASSWORD}|" "$REGISTRY_FILE"
+    else
+        sed -i "s|^${DOMAIN}=.*|${DOMAIN}=${APP_NAME}=${APP_PORT}|" "$REGISTRY_FILE"
+    fi
 else
-    echo "${DOMAIN}=${APP_NAME}=${APP_PORT}" >> "$REGISTRY_FILE"
+    if [ -n "$STAGING_PASSWORD" ]; then
+        echo "${DOMAIN}=${APP_NAME}=${APP_PORT}=${STAGING_PASSWORD}" >> "$REGISTRY_FILE"
+    else
+        echo "${DOMAIN}=${APP_NAME}=${APP_PORT}" >> "$REGISTRY_FILE"
+    fi
 fi
 
 # Register www domain if specified

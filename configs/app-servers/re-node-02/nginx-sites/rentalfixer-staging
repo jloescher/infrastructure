@@ -1,6 +1,6 @@
 server {
-    listen 8101;
-    server_name staging.rentalfixer.app _;
+    listen 9200;
+    server_name _;
     root /opt/apps/rentalfixer-staging/public;
     index index.php;
 
@@ -16,13 +16,10 @@ server {
         fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
         include fastcgi_params;
         fastcgi_hide_header X-Powered-By;
-        
-        fastcgi_param PHP_VALUE "max_execution_time=600\n memory_limit=256M";
-        
-        fastcgi_read_timeout 600;
     }
 
     location ~ /\.(?!well-known).* {
         deny all;
     }
 }
+

@@ -224,7 +224,7 @@ groups:
           description: "Connection rate is {{ $value }} per second"
 
       - alert: HAProxySessionLimit
-        expr: (haproxy_frontend_current_sessions{frontend!~"stats|haproxy_metrics"} / clamp_min(haproxy_frontend_max_sessions{frontend!~"stats|haproxy_metrics"}, 1)) * 100 > 80
+        expr: (haproxy_frontend_current_sessions / haproxy_frontend_max_sessions) * 100 > 80
         for: 5m
         labels:
           severity: warning
@@ -241,25 +241,16 @@ groups:
           severity: critical
         annotations:
           summary: "PHP-FPM pool nearly exhausted on {{ $labels.node }}"
-          description: "Only {{ $value }} idle workers remaining"
+          description: "Only {{ $value }} idle processes remaining"
 
       - alert: PHPFPMPoolBusy
-        expr: phpfpm_processes_total{state="idle"} < 5 and phpfpm_processes_total{state="idle"} >= 2
+        expr: (phpfpm_processes_total{state="active"} / phpfpm_processes_total) * 100 > 80
         for: 5m
         labels:
           severity: warning
         annotations:
           summary: "PHP-FPM pool busy on {{ $labels.node }}"
-          description: "Only {{ $value }} idle workers remaining (pool under load)"
-
-      - alert: PHPFPMMaxChildrenReached
-        expr: rate(phpfpm_max_children_reached_total[5m]) > 0
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "PHP-FPM max_children reached on {{ $labels.node }}"
-          description: "Workers hit max_children limit - consider increasing pool size"
+          description: "{{ $value }}% of processes are active"
 
       - alert: PHPFPMSlowRequests
         expr: rate(phpfpm_slow_requests_total[5m]) > 1
