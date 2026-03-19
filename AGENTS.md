@@ -417,6 +417,46 @@ ssh root@100.89.130.19 "systemctl status nginx php8.5-fpm"
 8. **HAProxy uses consolidated frontends** - never create per-domain frontend configs
 9. **Use registry.conf** to manage domains, then rebuild configs
 10. **SSL uses DNS-01 challenge** - works with Cloudflare proxy enabled
+11. **Always sync configs after server changes** - see Config Sync Workflow below
+
+## Config Sync Workflow
+
+**CRITICAL:** Every time a configuration change is made on any server, it MUST be synced to the local repository.
+
+### When to Sync
+
+Sync configs to local repo after:
+- Any HAProxy configuration changes
+- Any nginx configuration changes
+- Any PHP-FPM pool changes
+- Any PostgreSQL/Patroni configuration changes
+- Any Redis configuration changes
+- Any Prometheus/Grafana/Alertmanager changes
+- Any systemd service changes
+- Any changes to `/etc/` on any server
+
+### How to Sync
+
+```bash
+# From infrastructure/ root directory
+./scripts/sync-configs.sh
+```
+
+This script pulls all configuration files from all servers into the `configs/` directory.
+
+### After Syncing
+
+1. Review changes: `git status`
+2. Review diffs: `git diff`
+3. Commit changes: `git add -A && git commit -m "sync: description of changes"`
+4. Document significant changes in `docs/plan.md`
+
+### Why This Matters
+
+- **Disaster Recovery:** Local repo serves as backup of all server configurations
+- **Audit Trail:** Git history shows what changed and when
+- **Consistency:** Easier to detect configuration drift between servers
+- **Documentation:** Configs in repo serve as documentation of current state
 
 ## Framework Support
 
