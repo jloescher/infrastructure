@@ -956,9 +956,28 @@ REDIS_HOST = os.environ.get("REDIS_HOST", "100.126.103.51")  # re-node-01
 | Priority | Action | Status |
 |----------|--------|--------|
 | **HIGH** | Verify Tailscale ACLs only allow your devices | [ ] Check |
-| **HIGH** | Keep servers patched (apt update) | [ ] Ongoing |
-| **MEDIUM** | Verify Cloudflare API token is zone-scoped | [ ] Check |
+| **HIGH** | Keep servers patched (apt update) | ✅ Dashboard implemented (2026-03-19) |
+| **MEDIUM** | Verify Cloudflare API token is zone-scoped | ✅ Verified (2026-03-19) |
 | **LOW** | Annual credential rotation as hygiene | [ ] Optional |
+
+**Package Update Dashboard:** ✅ IMPLEMENTED (2026-03-19 03:31 UTC)
+- Nav badge shows total updates across all servers
+- Server detail page shows package list with current/available versions
+- Individual and bulk update actions with confirmation
+- Services requiring restart detection
+- Redis caching (1 hour TTL)
+
+**Current Update Status (2026-03-19):**
+| Server | Updates | Security |
+|--------|---------|----------|
+| re-db | 54 | 0 |
+| re-node-01 | 14 | 0 |
+| re-node-02 | 4 | 0 |
+| re-node-03 | 11 | 0 |
+| re-node-04 | 11 | 0 |
+| router-01 | 12 | 0 |
+| router-02 | 3 | 0 |
+| **Total** | **109** | **0** |
 
 **Tailscale ACL Verification:**
 ```bash
@@ -1139,53 +1158,37 @@ dashboard/
 
 **Performance analysis of synced configs:**
 
-#### Nginx Optimization
+#### Nginx Optimization ✅ COMPLETE (2026-03-19 03:27 UTC)
 
-**Current Issues:**
-- `worker_connections = 768` (too low for 12 vCPU servers)
-- No gzip optimization for MIME types
-- No static file caching
-- No buffer optimization
+**Implemented Changes:**
+- `worker_connections`: 768 → 4096 (5.3x increase)
+- `multi_accept on` - Accept multiple connections at once
+- `use epoll` - Explicit Linux event mechanism
+- `tcp_nodelay on` - Lower latency
+- `keepalive_timeout 65` - Connection reuse
+- `gzip_comp_level 5` - Balanced compression
+- `gzip_types` - All text-based MIME types
+- `open_file_cache` - Static file caching
+- `fastcgi_buffers` - 16 × 16k buffers
+- TLS: Removed deprecated TLSv1 and TLSv1.1
 
-**Recommended Changes:**
-```nginx
-events {
-    worker_connections 4096;     # Was 768
-    multi_accept on;
-    use epoll;
-}
+**Impact:**
+| Metric | Before | After | Improvement |
+|--------|--------|-------|-------------|
+| Max connections | 9,216 | 49,152 | 5.3x |
+| Memory per worker | ~4MB | ~8MB | +4MB |
 
-http {
-    # Buffers
-    client_body_buffer_size 16k;
-    fastcgi_buffer_size 32k;
-    fastcgi_buffers 16 16k;
-    
-    # Gzip
-    gzip_comp_level 5;
-    gzip_types text/plain text/css application/javascript application/json;
-    
-    # Static caching
-    location ~* \.(jpg|jpeg|png|gif|ico|css|js)$ {
-        expires 30d;
-        add_header Cache-Control "public, immutable";
-    }
-}
-```
+#### HAProxy Optimization ✅ COMPLETE (2026-03-19 03:30 UTC)
 
-#### HAProxy Optimization
+**Implemented Changes:**
+- Production backends: `maxconn 200` per server
+- Staging backends: `maxconn 100` per server
+- Dashboard webhook: `maxconn 50`
+- Added `on-error mark-down`, `error-limit 10`, `observe layer7`
 
-**Current Issues:**
-- No `maxconn` limits on backend servers
-- Health check uses `GET /` (invokes PHP)
-
-**Recommended Changes:**
-```haproxy
-backend rentalfixer_backend
-    # Add connection limits to protect backends
-    server app1 100.92.26.38:8100 check maxconn 200
-    server app2 100.89.130.19:8100 check maxconn 200
-```
+**Impact:**
+- Protects PHP-FPM from connection overload
+- Prevents cascade failures when backend is unhealthy
 
 #### PostgreSQL Optimization
 
@@ -1209,7 +1212,8 @@ effective_io_concurrency = 200   # SSD optimization
 
 **Tracking:**
 - Started: 2026-03-18 (analysis complete)
-- Status: ⏳ Pending implementation
+- nginx/HAProxy: 2026-03-19 03:30 UTC (complete)
+- Status: ✅ Primary optimizations complete, PostgreSQL optional
 
 ---
 
