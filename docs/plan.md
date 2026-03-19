@@ -825,6 +825,16 @@ ssh root@100.102.220.16 "git checkout /etc/prometheus/rules/alerts.yml && system
 - Fixed stale IP in nginx configs: `100.101.39.22` → `100.89.130.19` (re-node-02)
 - Fixed stale IP in cloudflare-api.sh: `100.101.39.22` → `100.89.130.19`
 
+**PHP-FPM Monitoring Fix (2026-03-19 03:45 UTC):**
+- Fixed PHP-FPM exporter to monitor `rentalfixer` pool instead of `www` pool
+- Added `pm.status_path = /status` to pool configs
+- Fixed PHPFPMPoolBusy alert expression (was using broken percentage calculation)
+- Alert now correctly checks `idle < 5` instead of percentage
+
+**Root Cause of False Alerts:**
+- PHP-FPM exporter was monitoring `www` pool (max_children=5) instead of `rentalfixer` pool (max_children=80)
+- Alert expression `(active / total) * 100` was matching labels incorrectly, always returning 100%
+
 ---
 
 ### Phase 32: Critical Infrastructure Issues from Config Sync (2026-03-18)
