@@ -1641,9 +1641,36 @@ def get_prometheus_alerts():
 
 def check_server(server):
     try:
+        server_ip = server['ip']
+        
+        # Check if we're checking the local server
+        local_ips = ["127.0.0.1", "localhost", "127.0.1.1"]
+        try:
+            result = subprocess.run(
+                ["ip", "addr", "show", "tailscale0"],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0:
+                import re
+                match = re.search(r'inet ([0-9.]+)/', result.stdout)
+                if match:
+                    local_ips.append(match.group(1))
+        except:
+            pass
+        
+        # Use local execution if on same server
+        if server_ip in local_ips:
+            result = subprocess.run(
+                ["uptime", "-p"],
+                capture_output=True, text=True, timeout=5
+            )
+            uptime = result.stdout.strip().replace("up ", "") if result.returncode == 0 else "unreachable"
+            return server["name"], {"ip": server["ip"], "public_ip": server.get("public_ip", ""), "uptime": uptime}
+        
+        # Use SSH for remote servers
         result = subprocess.run(
             ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=3",
-             "-o", "BatchMode=yes", f"root@{server['ip']}", "uptime -p 2>/dev/null || echo 'unreachable'"],
+             "-o", "BatchMode=yes", f"root@{server_ip}", "uptime -p 2>/dev/null || echo 'unreachable'"],
             capture_output=True, text=True, timeout=5
         )
         uptime = result.stdout.strip().replace("up ", "") if result.returncode == 0 else "unreachable"
