@@ -4,7 +4,110 @@
 
 ## Overview
 
-This document covers Python backend patterns, API design, SSH management, and job queue implementation for the enhanced PaaS dashboard.
+This document covers Python backend patterns, API design, SSH management, job queue implementation, and configuration sync for the portable PaaS dashboard.
+
+## SQLite Database Connection
+
+### Connection Pool for SQLite
+
+```python
+# services/database.py
+import sqlite3
+import threading
+from contextlib import contextmanager
+from typing import Optional
+import os
+
+class SQLiteConnectionPool:
+    """
+    Thread-safe SQLite connection pool.
+    
+    SQLite handles connections differently than PostgreSQL:
+    - Single file-based database
+    - WAL mode for concurrent read/write
+    - Connection per thread
+    """
+    
+    _instance = None
+    _lock = threading.Lock()
+    _local = threading.local()
+    
+    def __new__(cls):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+        return cls._instance
+    
+    def __init__(self):
+        self.db_path = os.environ.get('SQLITE_DB_PATH', '/data/paas.db')
+        self._ensure_database()
+    
+    def _ensure_database(self):
+        """Ensure database exists with proper settings."""
+        if not os.path.exists(self.db_path):
+            os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+            conn = sqlite3.connect(self.db_path)
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA foreign_keys=ON")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            conn.execute("PRAGMA cache_size=-64000")  # 64MB
+            conn.close()
+    
+    @contextmanager
+    def get_connection(self):
+        """Get thread-local connection."""
+        if not hasattr(self._local, 'connection') or self._local.connection is None:
+            self._local.connection = sqlite3.connect(
+                self.db_path,
+                check_same_thread=False
+            )
+            self._local.connection.execute("PRAGMA foreign_keys=ON")
+            self._local.connection.row_factory = sqlite3.Row
+        
+        try:
+            yield self._local.connection
+        except Exception:
+            # Rollback on error
+            self._local.connection.rollback()
+            raise
+    
+    def execute(self, query: str, params: tuple = None) -> sqlite3.Cursor:
+        """Execute query and return cursor."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            if params:
+                cursor.execute(query, params)
+            else:
+                cursor.execute(query)
+            conn.commit()
+            return cursor
+    
+    def fetchone(self, query: str, params: tuple = None) -> Optional[dict]:
+        """Execute query and return single row as dict."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            if params:
+                cursor.execute(query, params)
+            else:
+                cursor.execute(query)
+            row = cursor.fetchone()
+            return dict(row) if row else None
+    
+    def fetchall(self, query: str, params: tuple = None) -> list:
+        """Execute query and return all rows as dicts."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            if params:
+                cursor.execute(query, params)
+            else:
+                cursor.execute(query)
+            return [dict(row) for row in cursor.fetchall()]
+
+
+# Singleton instance
+db = SQLiteConnectionPool()
+```
 
 ## Action Class Pattern
 
@@ -1327,12 +1430,1006 @@ RestartSec=10
 WantedBy=multi-user.target
 ```
 
+## Configuration Export/Import
+
+### Export Service
+
+```python
+# services/config_export.py
+import json
+import hashlib
+import uuid
+from datetime import datetime
+from typing import Dict, Any, Optional
+from services.database import db
+from services.secrets.vault import SecretVault
+
+class ConfigExporter:
+    """Export all PaaS configuration to portable format."""
+    
+    def __init__(self, include_secrets: bool = True):
+        self.include_secrets = include_secrets
+        self.vault = SecretVault() if include_secrets else None
+    
+    def export_all(self) -> Dict[str, Any]:
+        """Export all configuration to dictionary."""
+        export = {
+            'version': '1.0',
+            'exported_at': datetime.utcnow().isoformat() + 'Z',
+            'checksum': None,  # Calculated at end
+            'data': {
+                'applications': self._export_applications(),
+                'domains': self._export_domains(),
+                'servers': self._export_servers(),
+                'databases': self._export_databases(),
+                'deployment_history': self._export_deployment_history(),
+                'secrets': self._export_secrets() if self.include_secrets else {}
+            }
+        }
+        
+        # Calculate checksum
+        export['checksum'] = self._calculate_checksum(export['data'])
+        
+        return export
+    
+    def _export_applications(self) -> list:
+        """Export all applications."""
+        apps = db.fetchall("""
+            SELECT * FROM applications ORDER BY created_at
+        """)
+        
+        for app in apps:
+            # Get environments
+            app['environments'] = db.fetchall("""
+                SELECT * FROM environments WHERE app_id = ?
+            """, (app['id'],))
+            
+            # Get environment variables (encrypted)
+            env_vars = db.fetchall("""
+                SELECT key_name, scope, is_sensitive, source, created_at
+                FROM environment_variables WHERE app_id = ?
+            """, (app['id'],))
+            
+            if self.include_secrets:
+                # Include encrypted values
+                env_vars_full = db.fetchall("""
+                    SELECT * FROM environment_variables WHERE app_id = ?
+                """, (app['id'],))
+                app['environment_variables'] = env_vars_full
+            else:
+                app['environment_variables'] = env_vars
+        
+        return apps
+    
+    def _export_domains(self) -> list:
+        """Export all domains."""
+        return db.fetchall("""
+            SELECT d.*, a.name as app_name
+            FROM domains d
+            JOIN applications a ON d.app_id = a.id
+            ORDER BY d.created_at
+        """)
+    
+    def _export_servers(self) -> list:
+        """Export all servers."""
+        return db.fetchall("""
+            SELECT * FROM servers ORDER BY name
+        """)
+    
+    def _export_databases(self) -> list:
+        """Export all database resources."""
+        return db.fetchall("""
+            SELECT r.*, rd.*, a.name as app_name
+            FROM resources r
+            JOIN resource_databases rd ON r.id = rd.resource_id
+            JOIN applications a ON r.app_id = a.id
+            WHERE r.type = 'database'
+            ORDER BY r.created_at
+        """)
+    
+    def _export_deployment_history(self, limit: int = 100) -> list:
+        """Export recent deployment history."""
+        return db.fetchall("""
+            SELECT d.*, a.name as app_name, s.name as server_name
+            FROM deployments d
+            JOIN applications a ON d.app_id = a.id
+            JOIN servers s ON d.server_id = s.id
+            ORDER BY d.created_at DESC
+            LIMIT ?
+        """, (limit,))
+    
+    def _export_secrets(self) -> Dict[str, Any]:
+        """Export encrypted secrets."""
+        if not self.vault:
+            return {}
+        
+        secrets = {}
+        apps = db.fetchall("SELECT name FROM applications")
+        
+        for app in apps:
+            app_secrets = self.vault.get_app_secrets(app['name'])
+            if app_secrets:
+                secrets[app['name']] = app_secrets
+        
+        return secrets
+    
+    def _calculate_checksum(self, data: Any) -> str:
+        """Calculate SHA-256 checksum of data."""
+        content = json.dumps(data, sort_keys=True, default=str)
+        return 'sha256:' + hashlib.sha256(content.encode()).hexdigest()
+    
+    def export_to_file(self, filepath: str) -> Dict[str, Any]:
+        """Export configuration to file."""
+        export = self.export_all()
+        
+        with open(filepath, 'w') as f:
+            json.dump(export, f, indent=2, default=str)
+        
+        # Record export in database
+        export_id = str(uuid.uuid4())
+        db.execute("""
+            INSERT INTO config_exports (id, export_type, file_path, checksum, 
+                                        size_bytes, includes_secrets, apps_count, 
+                                        domains_count, secrets_count)
+            VALUES (?, 'manual', ?, ?, ?, ?, 
+                   (SELECT COUNT(*) FROM applications),
+                   (SELECT COUNT(*) FROM domains),
+                   (SELECT COUNT(*) FROM environment_variables))
+        """, (
+            export_id,
+            filepath,
+            export['checksum'],
+            len(json.dumps(export)),
+            1 if self.include_secrets else 0
+        ))
+        
+        return {
+            'export_id': export_id,
+            'filepath': filepath,
+            'checksum': export['checksum'],
+            'apps_count': len(export['data']['applications']),
+            'domains_count': len(export['data']['domains'])
+        }
+```
+
+### Import Service
+
+```python
+# services/config_import.py
+import json
+import uuid
+from datetime import datetime
+from typing import Dict, Any, Optional, List
+from services.database import db
+from services.secrets.vault import SecretVault
+
+class ConfigImporter:
+    """Import configuration from export file."""
+    
+    def __init__(self):
+        self.vault = SecretVault()
+        self.errors = []
+        self.warnings = []
+    
+    def validate(self, export: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate export data without importing."""
+        errors = []
+        warnings = []
+        
+        # Check version
+        if export.get('version') != '1.0':
+            errors.append(f"Unsupported export version: {export.get('version')}")
+        
+        # Validate applications
+        for app in export.get('data', {}).get('applications', []):
+            if not app.get('name'):
+                errors.append("Application missing name")
+            if not app.get('git_repo'):
+                errors.append(f"Application {app.get('name', 'unknown')} missing git_repo")
+        
+        # Validate domains
+        for domain in export.get('data', {}).get('domains', []):
+            if not domain.get('domain_name'):
+                errors.append("Domain missing domain_name")
+        
+        # Check for conflicts
+        existing_apps = set(row['name'] for row in db.fetchall("SELECT name FROM applications"))
+        for app in export.get('data', {}).get('applications', []):
+            if app.get('name') in existing_apps:
+                warnings.append(f"Application '{app['name']}' already exists and will be updated")
+        
+        return {
+            'valid': len(errors) == 0,
+            'errors': errors,
+            'warnings': warnings,
+            'stats': {
+                'apps_count': len(export.get('data', {}).get('applications', [])),
+                'domains_count': len(export.get('data', {}).get('domains', [])),
+                'servers_count': len(export.get('data', {}).get('servers', [])),
+                'secrets_count': sum(len(s) for s in export.get('data', {}).get('secrets', {}).values())
+            }
+        }
+    
+    def import_config(self, export: Dict[str, Any], mode: str = 'merge') -> Dict[str, Any]:
+        """
+        Import configuration.
+        
+        Args:
+            export: Export data dictionary
+            mode: 'merge' (add new, update existing), 'replace' (clear all, then import)
+        
+        Returns:
+            Import results
+        """
+        import_id = str(uuid.uuid4())
+        started_at = datetime.utcnow().isoformat()
+        
+        # Record import start
+        db.execute("""
+            INSERT INTO config_imports (id, source, import_mode, validation_passed, import_status, started_at)
+            VALUES (?, 'file', ?, 1, 'running', ?)
+        """, (import_id, mode, started_at))
+        
+        results = {
+            'import_id': import_id,
+            'apps_imported': 0,
+            'apps_updated': 0,
+            'apps_skipped': 0,
+            'domains_imported': 0,
+            'secrets_imported': 0,
+            'errors': [],
+            'warnings': []
+        }
+        
+        try:
+            if mode == 'replace':
+                self._clear_all()
+            
+            data = export.get('data', {})
+            
+            # Import servers first
+            self._import_servers(data.get('servers', []))
+            
+            # Import applications
+            app_results = self._import_applications(data.get('applications', []), mode)
+            results['apps_imported'] = app_results['imported']
+            results['apps_updated'] = app_results['updated']
+            results['apps_skipped'] = app_results['skipped']
+            
+            # Import domains
+            results['domains_imported'] = self._import_domains(data.get('domains', []))
+            
+            # Import secrets
+            results['secrets_imported'] = self._import_secrets(data.get('secrets', {}))
+            
+            # Update import record
+            db.execute("""
+                UPDATE config_imports 
+                SET import_status = 'success',
+                    apps_imported = ?,
+                    apps_updated = ?,
+                    apps_skipped = ?,
+                    domains_imported = ?,
+                    secrets_imported = ?,
+                    completed_at = ?
+                WHERE id = ?
+            """, (
+                results['apps_imported'],
+                results['apps_updated'],
+                results['apps_skipped'],
+                results['domains_imported'],
+                results['secrets_imported'],
+                datetime.utcnow().isoformat(),
+                import_id
+            ))
+            
+        except Exception as e:
+            db.execute("""
+                UPDATE config_imports 
+                SET import_status = 'failed', error_message = ?, completed_at = ?
+                WHERE id = ?
+            """, (str(e), datetime.utcnow().isoformat(), import_id))
+            results['errors'].append(str(e))
+        
+        return results
+    
+    def _clear_all(self):
+        """Clear all configuration (for replace mode)."""
+        db.execute("DELETE FROM environment_variables")
+        db.execute("DELETE FROM domains")
+        db.execute("DELETE FROM deployments")
+        db.execute("DELETE FROM environments")
+        db.execute("DELETE FROM resource_databases")
+        db.execute("DELETE FROM resources")
+        db.execute("DELETE FROM applications")
+        # Keep servers - they're infrastructure
+    
+    def _import_servers(self, servers: list) -> int:
+        """Import servers."""
+        count = 0
+        for server in servers:
+            existing = db.fetchone(
+                "SELECT id FROM servers WHERE name = ?", 
+                (server['name'],)
+            )
+            if existing:
+                continue  # Don't update existing servers
+            
+            db.execute("""
+                INSERT INTO servers (id, name, hostname, tailscale_ip, public_ip,
+                                    server_type, location, cpu_cores, memory_gb, disk_gb, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
+            """, (
+                str(uuid.uuid4()),
+                server['name'],
+                server.get('hostname'),
+                server['tailscale_ip'],
+                server.get('public_ip'),
+                server['server_type'],
+                server.get('location'),
+                server.get('cpu_cores'),
+                server.get('memory_gb'),
+                server.get('disk_gb')
+            ))
+            count += 1
+        return count
+    
+    def _import_applications(self, apps: list, mode: str) -> dict:
+        """Import applications."""
+        results = {'imported': 0, 'updated': 0, 'skipped': 0}
+        
+        for app in apps:
+            existing = db.fetchone(
+                "SELECT id FROM applications WHERE name = ?",
+                (app['name'],)
+            )
+            
+            if existing and mode == 'merge':
+                # Update existing
+                db.execute("""
+                    UPDATE applications SET
+                        display_name = ?, description = ?, git_repo = ?,
+                        framework = ?, git_branch_production = ?,
+                        git_branch_staging = ?, port_production = ?,
+                        port_staging = ?, staging_enabled = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                """, (
+                    app.get('display_name'),
+                    app.get('description'),
+                    app['git_repo'],
+                    app.get('framework', 'laravel'),
+                    app.get('git_branch_production', 'main'),
+                    app.get('git_branch_staging', 'staging'),
+                    app.get('port_production'),
+                    app.get('port_staging'),
+                    app.get('staging_enabled', 1),
+                    datetime.utcnow().isoformat(),
+                    existing['id']
+                ))
+                results['updated'] += 1
+            elif not existing:
+                # Create new
+                app_id = str(uuid.uuid4())
+                db.execute("""
+                    INSERT INTO applications (id, name, display_name, description,
+                                             git_repo, framework, git_branch_production,
+                                             git_branch_staging, port_production, port_staging,
+                                             staging_enabled, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'created')
+                """, (
+                    app_id,
+                    app['name'],
+                    app.get('display_name'),
+                    app.get('description'),
+                    app['git_repo'],
+                    app.get('framework', 'laravel'),
+                    app.get('git_branch_production', 'main'),
+                    app.get('git_branch_staging', 'staging'),
+                    app.get('port_production'),
+                    app.get('port_staging'),
+                    app.get('staging_enabled', 1)
+                ))
+                results['imported'] += 1
+            else:
+                results['skipped'] += 1
+        
+        return results
+    
+    def _import_domains(self, domains: list) -> int:
+        """Import domains."""
+        count = 0
+        for domain in domains:
+            existing = db.fetchone(
+                "SELECT id FROM domains WHERE domain_name = ?",
+                (domain['domain_name'],)
+            )
+            
+            if existing:
+                continue
+            
+            # Get app_id
+            app = db.fetchone(
+                "SELECT id FROM applications WHERE name = ?",
+                (domain.get('app_name'),)
+            )
+            if not app:
+                continue
+            
+            db.execute("""
+                INSERT INTO domains (id, app_id, domain_name, domain_type,
+                                    ssl_status, auth_enabled, auth_password_encrypted, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+            """, (
+                str(uuid.uuid4()),
+                app['id'],
+                domain['domain_name'],
+                domain.get('domain_type', 'production'),
+                domain.get('ssl_status', 'pending'),
+                domain.get('auth_enabled', 0),
+                domain.get('auth_password_encrypted')
+            ))
+            count += 1
+        
+        return count
+    
+    def _import_secrets(self, secrets: Dict[str, Any]) -> int:
+        """Import secrets."""
+        count = 0
+        for app_name, app_secrets in secrets.items():
+            for scope, scoped_secrets in app_secrets.items():
+                self.vault.store_app_secrets(app_name, scoped_secrets, scope)
+                count += len(scoped_secrets)
+        return count
+```
+
+### API Endpoints
+
+```python
+# api/config.py
+from flask import Blueprint, request, jsonify, send_file
+from services.config_export import ConfigExporter
+from services.config_import import ConfigImporter
+import tempfile
+import os
+
+api_config = Blueprint('api_config', __name__, url_prefix='/api/config')
+
+@api_config.route('/export', methods=['POST'])
+def export_config():
+    """Export all configuration to JSON."""
+    data = request.get_json() or {}
+    include_secrets = data.get('include_secrets', True)
+    
+    exporter = ConfigExporter(include_secrets=include_secrets)
+    
+    # Export to temp file
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        filepath = f.name
+    
+    result = exporter.export_to_file(filepath)
+    
+    return jsonify({
+        'success': True,
+        'download_url': f'/api/config/download/{os.path.basename(filepath)}',
+        'checksum': result['checksum'],
+        'stats': {
+            'apps': result['apps_count'],
+            'domains': result['domains_count']
+        }
+    })
+
+@api_config.route('/download/<filename>', methods=['GET'])
+def download_export(filename):
+    """Download exported configuration file."""
+    filepath = os.path.join(tempfile.gettempdir(), filename)
+    return send_file(filepath, as_attachment=True, download_name='paas_config.json')
+
+@api_config.route('/import', methods=['POST'])
+def import_config():
+    """Import configuration from JSON file."""
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'error': 'No file provided'}), 400
+    
+    file = request.files['file']
+    mode = request.form.get('mode', 'merge')  # 'merge' or 'replace'
+    
+    # Parse JSON
+    try:
+        export = json.load(file)
+    except json.JSONDecodeError as e:
+        return jsonify({'success': False, 'error': f'Invalid JSON: {e}'}), 400
+    
+    importer = ConfigImporter()
+    
+    # Validate first
+    validation = importer.validate(export)
+    if not validation['valid']:
+        return jsonify({
+            'success': False,
+            'errors': validation['errors'],
+            'warnings': validation['warnings']
+        }), 400
+    
+    # Import
+    results = importer.import_config(export, mode)
+    
+    return jsonify({
+        'success': True,
+        'results': results,
+        'warnings': validation['warnings']
+    })
+
+@api_config.route('/validate', methods=['POST'])
+def validate_import():
+    """Validate import file without importing."""
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'error': 'No file provided'}), 400
+    
+    file = request.files['file']
+    
+    try:
+        export = json.load(file)
+    except json.JSONDecodeError as e:
+        return jsonify({'success': False, 'error': f'Invalid JSON: {e}'}), 400
+    
+    importer = ConfigImporter()
+    validation = importer.validate(export)
+    
+    return jsonify({
+        'success': validation['valid'],
+        'validation': validation
+    })
+```
+
+## GitHub Gist Sync
+
+### Gist Sync Service
+
+```python
+# services/gist_sync.py
+import requests
+import json
+import hashlib
+import uuid
+from datetime import datetime
+from typing import Optional, Dict, Any
+import os
+
+class GistSyncService:
+    """
+    Sync PaaS configuration to GitHub Gist for backup and version control.
+    
+    Features:
+    - Automatic sync on configuration changes
+    - Manual sync/restore via API
+    - Version history in Gist revisions
+    - Encrypted secrets in Gist
+    """
+    
+    GITHUB_API = "https://api.github.com"
+    
+    def __init__(self):
+        self.token = os.environ.get('GITHUB_TOKEN')
+        self.gist_id = os.environ.get('GIST_ID')
+        self.enabled = bool(self.token)
+    
+    def sync_to_gist(self, export: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Sync configuration to GitHub Gist.
+        
+        Returns:
+            Sync result with gist_id and version
+        """
+        if not self.enabled:
+            return {'success': False, 'error': 'Gist sync not configured'}
+        
+        event_id = str(uuid.uuid4())
+        start_time = datetime.utcnow()
+        
+        # Prepare gist content
+        content = json.dumps(export, indent=2, default=str)
+        filename = f"paas-config-{datetime.utcnow().strftime('%Y%m%d')}.json"
+        
+        # Build gist data
+        gist_data = {
+            'description': f'PaaS Configuration - {datetime.utcnow().isoformat()}',
+            'public': False,
+            'files': {
+                filename: {
+                    'content': content
+                },
+                'README.md': {
+                    'content': self._generate_readme(export)
+                }
+            }
+        }
+        
+        try:
+            if self.gist_id:
+                # Update existing gist
+                response = requests.patch(
+                    f"{self.GITHUB_API}/gists/{self.gist_id}",
+                    headers=self._headers(),
+                    json=gist_data,
+                    timeout=30
+                )
+            else:
+                # Create new gist
+                response = requests.post(
+                    f"{self.GITHUB_API}/gists",
+                    headers=self._headers(),
+                    json=gist_data,
+                    timeout=30
+                )
+                if response.status_code == 201:
+                    self.gist_id = response.json()['id']
+                    # Save gist_id for future use
+                    self._save_gist_id(self.gist_id)
+            
+            if response.status_code in (200, 201):
+                gist = response.json()
+                duration_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+                
+                # Record sync event
+                self._record_sync_event(
+                    event_id=event_id,
+                    sync_type='export',
+                    status='success',
+                    gist_version=gist.get('history', [{}])[0].get('version'),
+                    duration_ms=duration_ms
+                )
+                
+                # Update sync state
+                self._update_sync_state(
+                    gist_id=self.gist_id,
+                    gist_url=gist['html_url'],
+                    gist_version=gist.get('history', [{}])[0].get('version'),
+                    status='success'
+                )
+                
+                return {
+                    'success': True,
+                    'gist_id': self.gist_id,
+                    'gist_url': gist['html_url'],
+                    'version': gist.get('history', [{}])[0].get('version')
+                }
+            else:
+                error = response.json().get('message', 'Unknown error')
+                self._record_sync_event(
+                    event_id=event_id,
+                    sync_type='export',
+                    status='failed',
+                    error_message=error
+                )
+                return {'success': False, 'error': error}
+                
+        except requests.RequestException as e:
+            self._record_sync_event(
+                event_id=event_id,
+                sync_type='export',
+                status='failed',
+                error_message=str(e)
+            )
+            return {'success': False, 'error': str(e)}
+    
+    def restore_from_gist(self) -> Dict[str, Any]:
+        """
+        Restore configuration from GitHub Gist.
+        
+        Returns:
+            Export data from gist
+        """
+        if not self.enabled or not self.gist_id:
+            return {'success': False, 'error': 'Gist sync not configured'}
+        
+        event_id = str(uuid.uuid4())
+        start_time = datetime.utcnow()
+        
+        try:
+            response = requests.get(
+                f"{self.GITHUB_API}/gists/{self.gist_id}",
+                headers=self._headers(),
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                gist = response.json()
+                
+                # Find the config file
+                config_file = None
+                for filename, file_data in gist['files'].items():
+                    if filename.startswith('paas-config-') and filename.endswith('.json'):
+                        config_file = file_data
+                        break
+                
+                if not config_file:
+                    return {'success': False, 'error': 'No config file found in gist'}
+                
+                export = json.loads(config_file['content'])
+                duration_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+                
+                # Record sync event
+                self._record_sync_event(
+                    event_id=event_id,
+                    sync_type='import',
+                    status='success',
+                    gist_version=gist.get('history', [{}])[0].get('version'),
+                    duration_ms=duration_ms
+                )
+                
+                return {
+                    'success': True,
+                    'export': export,
+                    'gist_url': gist['html_url'],
+                    'updated_at': gist['updated_at']
+                }
+            else:
+                error = response.json().get('message', 'Unknown error')
+                self._record_sync_event(
+                    event_id=event_id,
+                    sync_type='import',
+                    status='failed',
+                    error_message=error
+                )
+                return {'success': False, 'error': error}
+                
+        except requests.RequestException as e:
+            self._record_sync_event(
+                event_id=event_id,
+                sync_type='import',
+                status='failed',
+                error_message=str(e)
+            )
+            return {'success': False, 'error': str(e)}
+    
+    def get_gist_history(self, limit: int = 10) -> list:
+        """Get gist version history."""
+        if not self.enabled or not self.gist_id:
+            return []
+        
+        try:
+            response = requests.get(
+                f"{self.GITHUB_API}/gists/{self.gist_id}/commits",
+                headers=self._headers(),
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                return response.json()[:limit]
+            return []
+        except requests.RequestException:
+            return []
+    
+    def _headers(self) -> dict:
+        """Get API headers with authentication."""
+        return {
+            'Authorization': f'token {self.token}',
+            'Accept': 'application/vnd.github.v3+json'
+        }
+    
+    def _generate_readme(self, export: Dict[str, Any]) -> str:
+        """Generate README content for gist."""
+        data = export.get('data', {})
+        return f"""# PaaS Configuration Backup
+
+**Exported:** {export.get('exported_at')}  
+**Checksum:** {export.get('checksum')}
+
+## Contents
+
+| Resource | Count |
+|----------|-------|
+| Applications | {len(data.get('applications', []))} |
+| Domains | {len(data.get('domains', []))} |
+| Servers | {len(data.get('servers', []))} |
+| Secrets | {sum(len(s) for s in data.get('secrets', {}).values())} |
+
+## Applications
+
+{chr(10).join(f"- {app['name']} ({app.get('framework', 'unknown')})" for app in data.get('applications', []))}
+
+---
+*This backup was automatically generated by the Quantyra PaaS Dashboard.*
+"""
+    
+    def _save_gist_id(self, gist_id: str):
+        """Save gist_id to database and environment."""
+        from services.database import db
+        
+        db.execute("""
+            UPDATE gist_sync_state SET gist_id = ?, gist_url = ?, updated_at = ?
+            WHERE id = 1
+        """, (gist_id, f"https://gist.github.com/{gist_id}", datetime.utcnow().isoformat()))
+        
+        self.gist_id = gist_id
+    
+    def _update_sync_state(self, gist_id: str, gist_url: str, gist_version: str, status: str):
+        """Update sync state in database."""
+        from services.database import db
+        
+        db.execute("""
+            UPDATE gist_sync_state SET
+                gist_id = ?,
+                gist_url = ?,
+                gist_version = ?,
+                last_sync_at = ?,
+                last_sync_status = ?,
+                total_syncs = total_syncs + 1,
+                updated_at = ?
+            WHERE id = 1
+        """, (
+            gist_id,
+            gist_url,
+            gist_version,
+            datetime.utcnow().isoformat(),
+            status,
+            datetime.utcnow().isoformat()
+        ))
+    
+    def _record_sync_event(self, event_id: str, sync_type: str, status: str,
+                           gist_version: str = None, duration_ms: int = None,
+                           error_message: str = None):
+        """Record sync event for audit log."""
+        from services.database import db
+        
+        db.execute("""
+            INSERT INTO gist_sync_events (id, sync_type, direction, status,
+                                         gist_version_after, duration_ms, error_message)
+            VALUES (?, ?, 'push', ?, ?, ?, ?)
+        """, (
+            event_id,
+            sync_type,
+            status,
+            gist_version,
+            duration_ms,
+            error_message
+        ))
+
+
+# Singleton instance
+gist_sync = GistSyncService()
+```
+
+### API Endpoints for Gist Sync
+
+```python
+# api/gist_sync.py
+from flask import Blueprint, jsonify, request
+from services.gist_sync import gist_sync
+from services.config_export import ConfigExporter
+from services.config_import import ConfigImporter
+
+api_gist = Blueprint('api_gist', __name__, url_prefix='/api/gist')
+
+@api_gist.route('/sync', methods=['POST'])
+def sync_to_gist():
+    """Manually sync configuration to GitHub Gist."""
+    data = request.get_json() or {}
+    include_secrets = data.get('include_secrets', True)
+    
+    # Export configuration
+    exporter = ConfigExporter(include_secrets=include_secrets)
+    export = exporter.export_all()
+    
+    # Sync to gist
+    result = gist_sync.sync_to_gist(export)
+    
+    return jsonify(result)
+
+@api_gist.route('/restore', methods=['POST'])
+def restore_from_gist():
+    """Restore configuration from GitHub Gist."""
+    data = request.get_json() or {}
+    mode = data.get('mode', 'merge')  # 'merge' or 'replace'
+    
+    # Get from gist
+    gist_result = gist_sync.restore_from_gist()
+    
+    if not gist_result['success']:
+        return jsonify(gist_result), 400
+    
+    # Import configuration
+    importer = ConfigImporter()
+    import_result = importer.import_config(gist_result['export'], mode)
+    
+    return jsonify({
+        'success': True,
+        'import_result': import_result,
+        'gist_url': gist_result['gist_url'],
+        'gist_updated_at': gist_result['updated_at']
+    })
+
+@api_gist.route('/status', methods=['GET'])
+def gist_status():
+    """Get gist sync status."""
+    from services.database import db
+    
+    state = db.fetchone("SELECT * FROM gist_sync_state WHERE id = 1")
+    recent_events = db.fetchall("""
+        SELECT * FROM gist_sync_events
+        ORDER BY created_at DESC
+        LIMIT 10
+    """)
+    
+    return jsonify({
+        'enabled': gist_sync.enabled,
+        'gist_id': gist_sync.gist_id,
+        'state': state,
+        'recent_events': recent_events
+    })
+
+@api_gist.route('/history', methods=['GET'])
+def gist_history():
+    """Get gist version history."""
+    limit = request.args.get('limit', 10, type=int)
+    history = gist_sync.get_gist_history(limit)
+    
+    return jsonify({
+        'success': True,
+        'history': history
+    })
+```
+
+### Auto-Sync on Configuration Changes
+
+```python
+# services/config_change_handler.py
+from functools import wraps
+from services.gist_sync import gist_sync
+from services.config_export import ConfigExporter
+from services.database import db
+
+def sync_on_change(func):
+    """
+    Decorator to automatically sync to Gist after configuration changes.
+    
+    Usage:
+        @sync_on_change
+        def create_application(...):
+            # Create application
+            pass
+    """
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        # Execute the function
+        result = func(*args, **kwargs)
+        
+        # Check if auto-sync is enabled
+        state = db.fetchone("SELECT auto_sync_enabled, sync_enabled FROM gist_sync_state WHERE id = 1")
+        
+        if state and state['sync_enabled'] and state['auto_sync_enabled']:
+            # Export and sync
+            exporter = ConfigExporter(include_secrets=True)
+            export = exporter.export_all()
+            gist_sync.sync_to_gist(export)
+        
+        return result
+    
+    return wrapper
+
+
+# Example usage in models/applications.py
+@sync_on_change
+def create_application(app_config: dict) -> dict:
+    """Create new application and auto-sync to gist."""
+    # ... create application logic ...
+    return {'success': True, 'app_id': app_id}
+
+@sync_on_change
+def delete_application(app_name: str) -> dict:
+    """Delete application and auto-sync to gist."""
+    # ... delete application logic ...
+    return {'success': True}
+```
+
 ## Next Steps
 
 1. **Phase 1**: Implement Action classes for existing deploy operations
-2. **Phase 2**: Set up Celery with Redis broker
+2. **Phase 2**: Migrate from YAML config to SQLite
 3. **Phase 3**: Add WebSocket support with flask-socketio
-4. **Phase 4**: Migrate YAML config to PostgreSQL
-5. **Phase 5**: Build API endpoints for dashboard
+4. **Phase 4**: Implement configuration export/import API
+5. **Phase 5**: Set up GitHub Gist sync for backup
+6. **Phase 6**: Build Docker container for portable deployment
 
 See [paas_roadmap.md](paas_roadmap.md) for implementation timeline.

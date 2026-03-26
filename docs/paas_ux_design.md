@@ -785,10 +785,555 @@ On mobile, use bottom navigation bar:
 </div>
 ```
 
+## Settings Page
+
+The Settings page provides configuration management, deployment instructions, and synchronization options for portable deployments.
+
+### Configuration Management Section
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Settings                                                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│ ┌─ Configuration Management ──────────────────────────────────────────┐ │
+│ │                                                                      │ │
+│ │ ┌─ Export Configuration ─────────────────────────────────────────┐  │ │
+│ │ │                                                                  │  │ │
+│ │ │ Export your complete PaaS configuration for backup or migration│  │ │
+│ │ │                                                                  │  │ │
+│ │ │ Includes:                                                        │  │ │
+│ │ │   • Applications and deployment configs                          │  │ │
+│ │ │   • Domains and SSL certificates                                 │  │ │
+│ │ │   • Secrets (encrypted)                                          │  │ │
+│ │ │   • Server inventory                                             │  │ │
+│ │ │   • Deployment history                                           │  │ │
+│ │ │                                                                  │  │ │
+│ │ │ Last exported: 2026-03-26 12:00 UTC                              │  │ │
+│ │ │                                                                  │  │ │
+│ │ │ [Export to File]    [Sync to Gist Now]                          │  │ │
+│ │ │                                                                  │  │ │
+│ │ └──────────────────────────────────────────────────────────────────┘  │ │
+│ │                                                                      │ │
+│ │ ┌─ Import Configuration ─────────────────────────────────────────┐  │ │
+│ │ │                                                                  │  │ │
+│ │ │ Restore configuration from a previously exported file           │  │ │
+│ │ │                                                                  │  │ │
+│ │ │ [Choose File...]                               [Import]         │  │ │
+│ │ │                                                                  │  │ │
+│ │ │ ⚠️ Import will merge with existing configuration                │  │ │
+│ │ │    Preview changes before applying                              │  │ │
+│ │ │                                                                  │  │ │
+│ │ └──────────────────────────────────────────────────────────────────┘  │ │
+│ │                                                                      │ │
+│ └──────────────────────────────────────────────────────────────────────┘ │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### GitHub Gist Sync Section
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Settings                                                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│ ┌─ GitHub Gist Sync ──────────────────────────────────────────────────┐ │
+│ │                                                                      │ │
+│ │ Automatically sync your configuration to a private GitHub Gist     │ │
+│ │ for backup and multi-instance synchronization.                      │ │
+│ │                                                                      │ │
+│ │ GitHub Personal Access Token                                        │ │
+│ │ ┌────────────────────────────────────────────────────────────────┐  │ │
+│ │ │ ghp_••••••••••••••••••••••••••••••••••••••••••••••••••••••    │  │ │
+│ │ └────────────────────────────────────────────────────────────────┘  │ │
+│ │ Required scopes: gist                                               │ │
+│ │                                                                      │ │
+│ │ Gist ID                                                              │ │
+│ │ ┌────────────────────────────────────────────────────────────────┐  │ │
+│ │ │ secret_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx                   │  │ │
+│ │ └────────────────────────────────────────────────────────────────┘  │ │
+│ │ [Create New Gist]                                                    │ │
+│ │                                                                      │ │
+│ │ ☑ Auto-sync on every change                                         │ │
+│ │   Configuration will be synced 5 seconds after any change          │ │
+│ │                                                                      │ │
+│ │ ┌─ Sync Status ─────────────────────────────────────────────────┐  │ │
+│ │ │                                                                  │  │ │
+│ │ │ Status: ✓ Synced                                                │  │ │
+│ │ │ Last sync: 2026-03-26 12:05 UTC                                 │  │ │
+│ │ │ Size: 24.5 KB                                                   │  │ │
+│ │ │                                                                  │  │ │
+│ │ └──────────────────────────────────────────────────────────────────┘  │ │
+│ │                                                                      │ │
+│ │ [View Gist on GitHub]    [Restore from Gist...]                     │ │
+│ │                                                                      │ │
+│ └──────────────────────────────────────────────────────────────────────┘ │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Restore from Gist Modal
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Restore from Gist                                                 [X]   │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│ Select a version to restore:                                            │
+│                                                                          │
+│ ┌──────────────────────────────────────────────────────────────────────┐│
+│ │ ○ 2026-03-26 12:05 UTC (latest)                                     ││
+│ │   5 applications, 12 domains, 3 servers                              ││
+│ │                                                                      ││
+│ │ ○ 2026-03-25 18:30 UTC                                              ││
+│ │   4 applications, 10 domains, 3 servers                              ││
+│ │                                                                      ││
+│ │ ○ 2026-03-24 09:15 UTC                                              ││
+│ │   4 applications, 8 domains, 3 servers                               ││
+│ │                                                                      ││
+│ │ ○ 2026-03-23 14:00 UTC                                              ││
+│ │   3 applications, 6 domains, 2 servers                               ││
+│ └──────────────────────────────────────────────────────────────────────┘│
+│                                                                          │
+│ ┌─ Preview Changes ───────────────────────────────────────────────────┐ │
+│ │                                                                      │ │
+│ │ Applications:                                                        │ │
+│ │   + rentalfixer (new)                                               │ │
+│ │   + myapp (new)                                                     │ │
+│ │   ~ api-server (updated secrets)                                    │ │
+│ │                                                                      │ │
+│ │ Domains:                                                             │ │
+│ │   + rentalfixer.app                                                 │ │
+│ │   + staging.rentalfixer.app                                         │ │
+│ │   + api.example.com                                                 │ │
+│ │                                                                      │ │
+│ │ Secrets: 15 new, 3 updated                                          │ │
+│ │                                                                      │ │
+│ └──────────────────────────────────────────────────────────────────────┘ │
+│                                                                          │
+│ ⚠️ This will merge with your current configuration.                    │
+│    Existing items with the same name will be updated.                   │
+│                                                                          │
+│                              [Cancel]    [Restore Selected]             │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Deployment Section
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Settings                                                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│ ┌─ Portable Deployment ───────────────────────────────────────────────┐ │
+│ │                                                                      │ │
+│ │ Deploy Quantyra PaaS to any Docker-compatible host:                 │ │
+│ │ • NAS devices (Synology, QNAP, etc.)                                │ │
+│ │ • VPS providers (DigitalOcean, Linode, etc.)                        │ │
+│ │ • Local servers                                                     │ │
+│ │ • Cloud VMs (AWS, GCP, Azure)                                       │ │
+│ │                                                                      │ │
+│ │ ┌─ Docker Run Command ────────────────────────────────────────────┐ │ │
+│ │ │                                                                  │ │ │
+│ │ │ docker run -d \                                                  │ │ │
+│ │ │   --name quantyra-paas \                                         │ │ │
+│ │ │   --restart unless-stopped \                                     │ │ │
+│ │ │   -p 8080:8080 \                                                 │ │ │
+│ │ │   -v quantyra-paas-data:/data \                                  │ │ │
+│ │ │   -e GITHUB_TOKEN=ghp_xxx \                                      │ │ │
+│ │ │   -e GIST_ID=secret_xxx \                                        │ │ │
+│ │ │   quantyra/paas:latest                                           │ │ │
+│ │ │                                                                  │ │ │
+│ │ └──────────────────────────────────────────────────────────────────┘ │ │
+│ │                                                                      │ │
+│ │ [Copy Command]    [Copy for Synology]    [Copy for Unraid]          │
+│ │                                                                      │ │
+│ │ ┌─ First Run Behavior ────────────────────────────────────────────┐ │ │
+│ │ │                                                                  │ │ │
+│ │ │ • Creates SQLite database at /data/paas.db                      │ │ │
+│ │ • Syncs configuration from Gist if GIST_ID is set                 │ │ │
+│ │ • Generates encryption key for secrets storage                    │ │ │
+│ │ • Starts web UI on port 8080                                      │ │ │
+│ │ │                                                                  │ │ │
+│ │ └──────────────────────────────────────────────────────────────────┘ │ │
+│ │                                                                      │ │
+│ │ ┌─ Docker Compose (Recommended) ──────────────────────────────────┐ │ │
+│ │ │                                                                  │ │ │
+│ │ │ version: '3.8'                                                   │ │ │
+│ │ │ services:                                                        │ │ │
+│ │ │   paas:                                                          │ │ │
+│ │ │     image: quantyra/paas:latest                                  │ │ │
+│ │ │     restart: unless-stopped                                      │ │ │
+│ │ │     ports:                                                       │ │ │
+│ │ │       - "8080:8080"                                              │ │ │
+│ │ │     volumes:                                                     │ │ │
+│ │ │       - paas-data:/data                                          │ │ │
+│ │ │     environment:                                                 │ │ │
+│ │ │       - GITHUB_TOKEN=${GITHUB_TOKEN}                             │ │ │
+│ │ │       - GIST_ID=${GIST_ID}                                       │ │ │
+│ │ │ volumes:                                                         │ │ │
+│ │ │   paas-data:                                                     │ │ │
+│ │ │                                                                  │ │ │
+│ │ └──────────────────────────────────────────────────────────────────┘ │ │
+│ │                                                                      │ │
+│ │ [Copy Compose File]                                                  │
+│ │                                                                      │ │
+│ └──────────────────────────────────────────────────────────────────────┘ │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Data Management Section
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Settings                                                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│ ┌─ Data Management ───────────────────────────────────────────────────┐ │
+│ │                                                                      │ │
+│ │ Database                                                             │ │
+│ │ ┌────────────────────────────────────────────────────────────────┐  │ │
+│ │ │ Type: SQLite                                                    │  │ │
+│ │ │ Location: /data/paas.db                                         │  │ │
+│ │ │ Size: 2.4 MB                                                    │  │ │
+│ │ │ Last vacuum: 2026-03-20 00:00 UTC                               │  │ │
+│ │ └────────────────────────────────────────────────────────────────┘  │ │
+│ │                                                                      │ │
+│ │ [Vacuum Database]    [Backup Now]    [Restore Backup...]            │
+│ │                                                                      │ │
+│ │ Secrets Encryption                                                   │ │
+│ │ ┌────────────────────────────────────────────────────────────────┐  │ │
+│ │ │ Algorithm: AES-256-GCM                                          │  │ │
+│ │ │ Key location: /data/vault.key                                   │  │ │
+│ │ │ Key rotated: Never                                              │  │ │
+│ │ └────────────────────────────────────────────────────────────────┘  │ │
+│ │                                                                      │ │
+│ │ [Export Encryption Key]    [Rotate Encryption Key]                  │
+│ │                                                                      │ │
+│ │ ⚠️ Rotating the encryption key will require re-encrypting all       │
+│ │    secrets. This operation cannot be undone.                          │
+│ │                                                                      │ │
+│ └──────────────────────────────────────────────────────────────────────┘ │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+## Import/Export User Flow
+
+### Export Configuration Flow
+
+```
+User clicks "Export to File"
+        │
+        ▼
+┌───────────────────┐
+│ Prepare Export    │
+│ • Collect apps    │
+│ • Collect domains │
+│ • Encrypt secrets │
+│ • Add metadata    │
+└─────────┬─────────┘
+          │
+          ▼
+┌───────────────────┐
+│ Generate JSON     │
+│ {                 │
+│   "version": "1.0"│
+│   "exported_at":..│
+│   "applications":[│
+│   ...             │
+│ }                 │
+└─────────┬─────────┘
+          │
+          ▼
+┌───────────────────┐
+│ Download File     │
+│ quantyra-paas-    │
+│ 2026-03-26.json   │
+└───────────────────┘
+```
+
+### Import Configuration Flow
+
+```
+User clicks "Choose File"
+        │
+        ▼
+┌───────────────────┐
+│ Validate JSON     │
+│ • Check version   │
+│ • Verify schema   │
+│ • Decrypt secrets │
+└─────────┬─────────┘
+          │
+          ▼
+┌───────────────────┐
+│ Show Preview      │
+│ • New items       │
+│ • Updated items   │
+│ • Conflicts       │
+└─────────┬─────────┘
+          │
+          ▼
+    ┌─────┴─────┐
+    │  Confirm? │
+    └─────┬─────┘
+          │
+    ┌─────┴─────┐
+    │           │
+   Yes         No
+    │           │
+    ▼           ▼
+┌───────────┐ ┌───────────┐
+│ Apply     │ │ Cancel    │
+│ Changes   │ │ Import    │
+└───────────┘ └───────────┘
+```
+
+### Gist Sync Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Gist Synchronization Flow                            │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Configuration Change (app/domain/secret update)
+        │
+        ▼
+┌───────────────────┐
+│ Debounce Timer    │
+│ Wait 5 seconds    │
+│ for more changes  │
+└─────────┬─────────┘
+          │
+          ▼
+┌───────────────────┐
+│ Prepare Payload   │
+│ • Full config     │
+│ • Encrypted       │
+│ • Timestamped     │
+└─────────┬─────────┘
+          │
+          ▼
+┌───────────────────┐     ┌───────────────────┐
+│ Push to Gist      │────▶│ Retry on failure  │
+│ (GitHub API)      │     │ 3 attempts with   │
+└─────────┬─────────┘     │ exponential backoff│
+          │               └───────────────────┘
+          ▼
+┌───────────────────┐
+│ Update Sync Status│
+│ • Last sync time  │
+│ • Success/error   │
+└───────────────────┘
+
+Conflict Resolution:
+┌───────────────────────────────────────────────────────────────────────┐
+│ Local is source of truth                                              │
+│                                                                       │
+│ If local is newer: Update Gist                                       │
+│ If Gist is newer: Show notification, user chooses to:                │
+│   • Keep local (ignore Gist)                                         │
+│   • Restore from Gist                                                │
+│   • Merge manually                                                   │
+└───────────────────────────────────────────────────────────────────────┘
+```
+
+## Portability Architecture
+
+### SQLite vs PostgreSQL Trade-offs
+
+| Aspect | SQLite | PostgreSQL |
+|--------|--------|------------|
+| **Setup** | Zero config, single file | Requires server, users, permissions |
+| **Portability** | Copy file to migrate | Requires dump/restore |
+| **Concurrency** | Single writer, multiple readers | Multiple writers |
+| **Scale** | Good for <100K operations/sec | Better for high write loads |
+| **Backup** | Copy file | pg_dump, PITR |
+| **Use Case** | PaaS internal state | External app databases |
+
+**Decision:** SQLite for PaaS internal state (applications, domains, secrets metadata), while PaaS still provisions and manages external PostgreSQL clusters for application databases.
+
+### Export File Format
+
+```json
+{
+  "version": "1.0",
+  "exported_at": "2026-03-26T12:00:00Z",
+  "exported_by": "admin",
+  "checksum": "sha256:abc123...",
+  "applications": [
+    {
+      "name": "rentalfixer",
+      "display_name": "Rental Fixer",
+      "framework": "laravel",
+      "repository": "https://github.com/owner/rentalfixer",
+      "production_branch": "main",
+      "staging_branch": "staging",
+      "created_at": "2026-03-01T00:00:00Z"
+    }
+  ],
+  "domains": [
+    {
+      "app_name": "rentalfixer",
+      "domain": "rentalfixer.app",
+      "environment": "production",
+      "ssl_enabled": true,
+      "ssl_expires_at": "2026-06-01T00:00:00Z"
+    }
+  ],
+  "servers": [
+    {
+      "name": "re-db",
+      "ip": "100.92.26.38",
+      "public_ip": "208.87.128.115",
+      "role": "app_server",
+      "specs": {
+        "cpu": 12,
+        "memory_gb": 48
+      }
+    }
+  ],
+  "secrets": {
+    "_encrypted": true,
+    "_algorithm": "AES-256-GCM",
+    "data": "base64-encoded-encrypted-blob..."
+  },
+  "deployment_history": [
+    {
+      "app_name": "rentalfixer",
+      "environment": "production",
+      "commit": "a1b2c3d",
+      "status": "success",
+      "deployed_at": "2026-03-26T10:00:00Z"
+    }
+  ]
+}
+```
+
+### Sync Events
+
+The following events trigger Gist sync (after 5-second debounce):
+
+| Event | Description |
+|-------|-------------|
+| `app.created` | New application created |
+| `app.updated` | Application settings changed |
+| `app.deleted` | Application deleted |
+| `domain.added` | Domain added to app |
+| `domain.removed` | Domain removed from app |
+| `domain.provisioned` | Domain SSL provisioned |
+| `secret.added` | Secret key added |
+| `secret.updated` | Secret value changed |
+| `secret.deleted` | Secret removed |
+| `server.added` | Server added to inventory |
+| `server.removed` | Server removed from inventory |
+
+## Setup Wizard for Portable Deployment
+
+### First-Run Experience
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Welcome to Quantyra PaaS                                          1/3  │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│                         🐳                                              │
+│                                                                          │
+│              Welcome to Quantyra PaaS!                                  │
+│                                                                          │
+│     Your portable infrastructure management platform.                   │
+│                                                                          │
+│     ┌─ Quick Setup ─────────────────────────────────────────────────┐  │
+│     │                                                                │  │
+│     │ This appears to be a fresh installation.                      │  │
+│     │                                                                │  │
+│     │ How would you like to proceed?                                │  │
+│     │                                                                │  │
+│     │ ○ Start fresh with empty configuration                        │  │
+│     │                                                                │  │
+│     │ ○ Import from existing configuration file                     │  │
+│     │   [Choose File...]                                            │  │
+│     │                                                                │  │
+│     │ ○ Restore from GitHub Gist                                    │  │
+│     │   Gist ID: [___________________________]                      │  │
+│     │   GitHub Token: [___________________________]                 │  │
+│     │                                                                │  │
+│     └────────────────────────────────────────────────────────────────┘  │
+│                                                                          │
+│                                              [Next Step →]              │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Setup Encryption                                                  2/3  │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│                         🔐                                              │
+│                                                                          │
+│              Secrets Encryption                                         │
+│                                                                          │
+│     Your secrets will be encrypted with AES-256-GCM.                   │
+│                                                                          │
+│     ┌─ Encryption Key ──────────────────────────────────────────────┐  │
+│     │                                                                │  │
+│     │ ○ Generate new encryption key (recommended)                   │  │
+│     │                                                                │  │
+│     │ ○ Import existing key (for restoring from backup)             │  │
+│     │   [Choose Key File...]                                        │  │
+│     │                                                                │  │
+│     └────────────────────────────────────────────────────────────────┘  │
+│                                                                          │
+│     ⚠️ Keep your encryption key safe! You'll need it to restore        │
+│        secrets from backups. Lost keys cannot decrypt secrets.          │
+│                                                                          │
+│                                              [← Back]  [Next Step →]    │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Setup Complete                                                    3/3  │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│                         🎉                                              │
+│                                                                          │
+│              Setup Complete!                                            │
+│                                                                          │
+│     ┌─ Summary ─────────────────────────────────────────────────────┐  │
+│     │                                                                │  │
+│     │ Configuration initialized successfully.                       │  │
+│     │                                                                │  │
+│     │ Database: /data/paas.db (SQLite)                              │  │
+│     │ Secrets: Encrypted with AES-256-GCM                           │  │
+│     │ Gist Sync: ☑ Enabled                                          │  │
+│     │                                                                │  │
+│     └────────────────────────────────────────────────────────────────┘  │
+│                                                                          │
+│     ┌─ Next Steps ──────────────────────────────────────────────────┐  │
+│     │                                                                │  │
+│     │ 1. Add your servers in Settings > Servers                     │  │
+│     │ 2. Create your first application                              │  │
+│     │ 3. Configure domains and SSL                                  │  │
+│     │                                                                │  │
+│     └────────────────────────────────────────────────────────────────┘  │
+│                                                                          │
+│                                    [Go to Dashboard]                    │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
 ## Next Steps
 
-1. **Phase 1**: Implement core UI components (cards, lists, forms)
-2. **Phase 2**: Build application detail view with tabs
+1. **Phase 0**: Implement portability layer (SQLite, export/import, Gist sync)
+2. **Phase 1**: Implement core UI components (cards, lists, forms)
+3. **Phase 2**: Build application detail view with tabs
 3. **Phase 3**: Add real-time deployment progress
 4. **Phase 4**: Implement framework auto-detection
 5. **Phase 5**: Add service templates

@@ -1099,6 +1099,96 @@ ssh root@<IP> "apt full-upgrade -y"
 
 ## Medium Priority
 
+### 0. PaaS Portability & Configuration Management
+
+**Goal:** Make the PaaS deployable anywhere (NAS, VPS, local server) with configuration backup/sync.
+
+**Why This Matters:**
+- **Disaster Recovery**: Deploy to any Docker host quickly
+- **Development**: Run PaaS locally for testing
+- **Flexibility**: Move between providers without lock-in
+- **Backup**: Export configuration for safety
+
+**Implementation Steps:**
+
+#### Phase A: SQLite Migration
+1. ⏳ Create SQLite schema for PaaS internal state
+2. ⏳ Migrate YAML configs (applications.yml, domains.yml, etc.) to SQLite
+3. ⏳ Update dashboard to use SQLite for reads/writes
+4. ⏳ Maintain backward compatibility with YAML for transition
+
+#### Phase B: Export/Import Configuration
+1. ⏳ Implement export to JSON file
+   - Applications, domains, servers, deployment history
+   - Secrets encrypted with AES-256-GCM
+   - Checksum for integrity
+2. ⏳ Implement import from JSON file
+   - Schema validation
+   - Preview changes before applying
+   - Merge with existing config
+3. ⏳ Add Settings page with Export/Import buttons
+
+#### Phase C: GitHub Gist Sync
+1. ⏳ Gist API integration
+   - Create/update private Gist
+   - Restore from Gist with version selection
+2. ⏳ Auto-sync on configuration changes
+   - Debounce 5 seconds after last change
+   - Retry with exponential backoff
+3. ⏳ Conflict resolution (local is source of truth)
+4. ⏳ Sync status indicator in UI
+
+#### Phase D: Docker Deployment
+1. ⏳ Single-container build with all dependencies
+2. ⏳ Persistent volume for SQLite data
+3. ⏳ First-run setup wizard
+4. ⏳ Environment variable configuration
+
+**Export File Format:**
+```json
+{
+  "version": "1.0",
+  "exported_at": "2026-03-26T12:00:00Z",
+  "checksum": "sha256:abc123...",
+  "applications": [...],
+  "domains": [...],
+  "servers": [...],
+  "secrets": {
+    "_encrypted": true,
+    "_algorithm": "AES-256-GCM",
+    "data": "base64-blob..."
+  }
+}
+```
+
+**Docker Run Command:**
+```bash
+docker run -d \
+  --name quantyra-paas \
+  -p 8080:8080 \
+  -v quantyra-paas-data:/data \
+  -e GITHUB_TOKEN=ghp_xxx \
+  -e GIST_ID=secret_xxx \
+  quantyra/paas:latest
+```
+
+**Design Decisions:**
+- SQLite for PaaS internal state (portable, zero-config)
+- PostgreSQL remains for application databases (managed by PaaS)
+- Secrets encrypted before export with separate key file
+- Local is source of truth for conflicts (Gist is backup)
+
+**Tracking:**
+- Status: ⏳ Planned
+- Estimated Effort: 20 hours total
+- **Documentation:**
+  - [paas_architecture.md](paas_architecture.md) - Updated with portability architecture
+  - [paas_database_schema.md](paas_database_schema.md) - SQLite schema with export/import tables
+  - [paas_backend_patterns.md](paas_backend_patterns.md) - Config sync and Gist integration patterns
+  - [paas_roadmap.md](paas_roadmap.md) - Phase 0 implementation plan
+
+---
+
 ### 1. Multi-Framework Deployment Support
 
 **Current Status:** Laravel fully working. Other frameworks need testing/implementation.

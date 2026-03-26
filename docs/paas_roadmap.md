@@ -17,11 +17,232 @@ This roadmap defines the implementation phases, timelines, and deliverables for 
 | Staging Environments | ✅ Working | Password protected |
 | Health Checks | ✅ Working | Deploy validation |
 | Monitoring | ✅ Working | Prometheus + Grafana |
+| Portability | ⏳ Needed | Docker deployment, SQLite |
+| Configuration Sync | ⏳ Needed | Export/Import, Gist sync |
 | Real-time Progress | ⏳ Needed | WebSocket support |
 | Background Jobs | ⏳ Needed | Celery for async deploys |
 | Multi-framework | ⏳ Partial | Laravel complete, others need testing |
 | Service Templates | ❌ Not Started | Add-on services |
 | Team Collaboration | ❌ Not Started | Multi-user support |
+
+---
+
+## Phase 0: Portability & Configuration Management (Week 0)
+
+**Goal:** Make the PaaS deployable anywhere and enable configuration backup/sync.
+
+### Why This Phase
+
+Portability is foundational for:
+- **Disaster recovery**: Deploy to any Docker host quickly
+- **Development**: Run PaaS locally for testing
+- **Flexibility**: Move between VPS providers, NAS devices, or cloud VMs
+- **Backup**: Configuration export/import for safety
+
+### Week 0: SQLite Migration + Export/Import
+
+#### Tasks
+
+| Task | Priority | Effort | Dependencies |
+|------|----------|--------|--------------|
+| Create SQLite schema | P0 | 2h | None |
+| Migrate YAML configs to SQLite | P0 | 4h | Schema |
+| Implement export to JSON | P0 | 3h | SQLite |
+| Implement import from JSON | P0 | 4h | Export |
+| Add preview before import | P1 | 2h | Import |
+| Docker container build | P0 | 4h | SQLite |
+| Single-container deployment | P0 | 2h | Docker |
+| Setup wizard for first run | P1 | 4h | Import |
+
+#### SQLite Schema
+
+```sql
+-- Core tables (simplified for portability)
+CREATE TABLE applications (
+    id TEXT PRIMARY KEY,
+    name TEXT UNIQUE NOT NULL,
+    display_name TEXT,
+    framework TEXT,
+    repository TEXT,
+    production_branch TEXT DEFAULT 'main',
+    staging_branch TEXT DEFAULT 'staging',
+    create_staging INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE domains (
+    id TEXT PRIMARY KEY,
+    app_id TEXT REFERENCES applications(id),
+    domain TEXT NOT NULL,
+    environment TEXT CHECK(environment IN ('production', 'staging')),
+    is_www INTEGER DEFAULT 0,
+    ssl_enabled INTEGER DEFAULT 1,
+    ssl_expires_at TEXT,
+    provisioned INTEGER DEFAULT 0,
+    password TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE secrets (
+    id TEXT PRIMARY KEY,
+    app_id TEXT REFERENCES applications(id),
+    key TEXT NOT NULL,
+    value_encrypted TEXT NOT NULL,
+    scope TEXT DEFAULT 'shared',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(app_id, key, scope)
+);
+
+CREATE TABLE servers (
+    id TEXT PRIMARY KEY,
+    name TEXT UNIQUE NOT NULL,
+    ip TEXT NOT NULL,
+    public_ip TEXT,
+    role TEXT,
+    specs_json TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE deployments (
+    id TEXT PRIMARY KEY,
+    app_id TEXT REFERENCES applications(id),
+    environment TEXT,
+    commit TEXT,
+    branch TEXT,
+    status TEXT,
+    results_json TEXT,
+    deployed_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE sync_status (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    last_sync_at TEXT,
+    last_sync_status TEXT,
+    gist_id TEXT,
+    gist_url TEXT,
+    auto_sync_enabled INTEGER DEFAULT 1
+);
+
+CREATE TABLE settings (
+    key TEXT PRIMARY KEY,
+    value TEXT,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### Export Format
+
+```json
+{
+  "version": "1.0",
+  "exported_at": "2026-03-26T12:00:00Z",
+  "exported_by": "admin",
+  "checksum": "sha256:abc123...",
+  "applications": [...],
+  "domains": [...],
+  "servers": [...],
+  "secrets": {
+    "_encrypted": true,
+    "_algorithm": "AES-256-GCM",
+    "data": "base64-blob..."
+  },
+  "deployment_history": [...]
+}
+```
+
+#### Deliverables
+
+- [ ] SQLite database working
+- [ ] YAML → SQLite migration script
+- [ ] Export to JSON file
+- [ ] Import from JSON with preview
+- [ ] Docker container with SQLite
+- [ ] Persistent volume configuration
+- [ ] First-run setup wizard
+
+### Week 0.5: GitHub Gist Sync
+
+#### Tasks
+
+| Task | Priority | Effort | Dependencies |
+|------|----------|--------|--------------|
+| Gist API integration | P0 | 3h | None |
+| Create/Update Gist | P0 | 2h | API |
+| Restore from Gist | P0 | 3h | API |
+| Version history picker | P1 | 2h | Restore |
+| Auto-sync on change | P0 | 4h | Update |
+| Debounce (5s delay) | P1 | 1h | Auto-sync |
+| Retry with backoff | P1 | 1h | Auto-sync |
+| Conflict resolution UI | P1 | 3h | Restore |
+| Sync status indicator | P1 | 2h | Auto-sync |
+
+#### Gist Sync Architecture
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant PaaS
+    participant Timer
+    participant GitHub
+    
+    User->>PaaS: Change config
+    PaaS->>Timer: Start 5s debounce
+    User->>PaaS: Another change
+    Note over Timer: Timer resets
+    Timer->>PaaS: Debounce complete
+    PaaS->>PaaS: Encrypt secrets
+    PaaS->>GitHub: PATCH /gists/{id}
+    GitHub->>PaaS: 200 OK
+    PaaS->>PaaS: Update sync_status
+    PaaS->>User: Show "Synced" badge
+```
+
+#### Deliverables
+
+- [ ] Gist API client
+- [ ] Create new Gist from PaaS
+- [ ] Update existing Gist
+- [ ] Restore from Gist with version selection
+- [ ] Auto-sync toggle in settings
+- [ ] Sync status indicator
+- [ ] Error handling with retry
+
+### Portability Decisions
+
+#### SQLite vs PostgreSQL
+
+| Aspect | SQLite | PostgreSQL |
+|--------|--------|------------|
+| Setup | Zero config | Requires cluster |
+| Portability | Copy file | Dump/restore |
+| Concurrency | Single writer | Multi-writer |
+| Backup | File copy | pg_dump |
+| Use for PaaS | **Internal state** | **App databases** |
+
+**Decision:** Use SQLite for PaaS internal state. The PaaS still provisions and manages external PostgreSQL clusters for application databases.
+
+#### Export Security
+
+- Secrets encrypted with AES-256-GCM before export
+- Encryption key stored separately (vault.key)
+- Key must be backed up separately for restore
+- Import validates checksum before applying
+
+#### Gist Sync Strategy
+
+| Event | Action |
+|-------|--------|
+| App created/updated/deleted | Debounce 5s → Sync |
+| Domain added/removed/provisioned | Debounce 5s → Sync |
+| Secret added/updated/deleted | Debounce 5s → Sync |
+| Server added/removed | Debounce 5s → Sync |
+| Manual sync button | Immediate sync |
+| First run with GIST_ID | Restore from Gist |
+
+**Conflict Resolution:** Local is source of truth. Gist is backup, not primary. If Gist is newer, show notification with restore option.
+
+---
 
 ## Phase 1: UX Foundation (Weeks 1-2)
 
@@ -565,6 +786,12 @@ docs/
 
 ```mermaid
 graph TB
+    subgraph Phase 0
+        Z1[SQLite Schema] --> Z2[Docker Container]
+        Z2 --> Z3[Export/Import]
+        Z3 --> Z4[Gist Sync]
+    end
+    
     subgraph Phase 1
         A1[Navigation] --> A2[WebSocket]
         A2 --> A3[Progress UI]
@@ -577,7 +804,7 @@ graph TB
     end
     
     subgraph Phase 3
-        C1[PostgreSQL Schema] --> C2[Action Pattern]
+        C1[SQLite Models] --> C2[Action Pattern]
         C2 --> C3[Service Templates]
         C4[Drift Detection] --> C5[Auto-Remediation]
     end
@@ -587,6 +814,7 @@ graph TB
         D2 --> D3[Testing]
     end
     
+    Z4 --> A1
     A3 --> B1
     B3 --> C1
     B5 --> C4
@@ -598,13 +826,23 @@ graph TB
 
 | Risk | Probability | Impact | Mitigation |
 |------|-------------|--------|------------|
+| SQLite concurrency limits | Low | Medium | WAL mode, connection pooling |
 | WebSocket scalability | Medium | High | Use Redis pub/sub, horizontal scaling |
 | Celery worker failures | Medium | Medium | Task retries, dead letter queue |
-| Database migration issues | Low | High | Backup before migration, rollback script |
+| YAML → SQLite migration | Medium | High | Backup before migration, rollback script |
 | Multi-framework complexity | Medium | Medium | Thorough testing per framework |
 | Performance degradation | Low | Medium | Load testing, caching |
+| Gist sync conflicts | Low | Medium | Local is source of truth, manual merge |
 
 ## Success Metrics
+
+### Phase 0 Success
+
+- [ ] PaaS deployable to any Docker host
+- [ ] SQLite database working with WAL mode
+- [ ] Export/import tested end-to-end
+- [ ] Gist sync working with auto-backup
+- [ ] Single command deployment
 
 ### Phase 1 Success
 
@@ -620,7 +858,7 @@ graph TB
 
 ### Phase 3 Success
 
-- [ ] Zero data loss during YAML → PostgreSQL migration
+- [ ] Zero data loss during YAML → SQLite migration
 - [ ] Action classes reduce code duplication by 40%
 - [ ] Drift detection catches all configuration changes
 
@@ -637,18 +875,20 @@ graph TB
 | Resource | Current | Required | Notes |
 |----------|---------|----------|-------|
 | Redis Memory | 2 GB | 4 GB | Message broker + pub/sub |
-| PostgreSQL | Existing | New DB | `quantyra_paas` database |
-| Celery Workers | None | 2 vCPU | On router-01 |
+| SQLite Database | None | ~50 MB | PaaS internal state |
+| Celery Workers | None | 2 vCPU | On router-01 or container |
+| Docker Host | Any | 2 vCPU, 4 GB | For portable deployment |
 
 ### Development Time
 
 | Phase | Duration | Effort |
 |-------|----------|--------|
+| Phase 0 | 2 weeks | 40 hours |
 | Phase 1 | 2 weeks | 40 hours |
 | Phase 2 | 4 weeks | 80 hours |
 | Phase 3 | 4 weeks | 80 hours |
 | Phase 4 | 2 weeks | 40 hours |
-| **Total** | **12 weeks** | **240 hours** |
+| **Total** | **14 weeks** | **280 hours** |
 
 ## Maintenance & Operations
 

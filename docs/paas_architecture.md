@@ -15,8 +15,73 @@ This document analyzes key architectural patterns from Coolify (an open-source P
 | Queue-Based Deployments | Background job processing | Celery + Redis for async deploys | HIGH |
 | Polymorphic Resources | Flexible resource types | Database, domain, service abstraction | MEDIUM |
 | WebSocket Progress | Real-time deployment status | flask-socketio + Redis pub/sub | HIGH |
+| **Portability** | Container-based deployment | Docker single-container with SQLite | HIGH |
 
-## Technology Stack Comparison
+## Portability Architecture
+
+### Overview
+
+The PaaS must be deployable to any Docker-compatible host (NAS, VPS, local machine) with zero external dependencies for its own operation. This enables:
+
+- **Disaster Recovery**: Deploy the PaaS anywhere with just the SQLite database and config export
+- **Development Flexibility**: Run the full PaaS locally for testing
+- **Vendor Independence**: No lock-in to specific hosting providers
+- **Simple Backup**: Single SQLite file + config export = complete backup
+
+### Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    PORTABLE PAAS CONTAINER                               │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │                     Flask Application                            │    │
+│  │  ├── Dashboard UI (Port 8080)                                   │    │
+│  │  ├── REST API                                                   │    │
+│  │  ├── WebSocket Server                                           │    │
+│  │  └── Background Workers (Celery)                                │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                              │                                           │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │                     SQLite Database                              │    │
+│  │  ├── /data/paas.db (Persistent Volume)                          │    │
+│  │  ├── Applications, Domains, Secrets                             │    │
+│  │  └── Deployment History, Server Configs                         │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                              │                                           │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │                   Config Sync Service                            │    │
+│  │  ├── Export to JSON/YAML                                        │    │
+│  │  ├── Import from File                                           │    │
+│  │  └── GitHub Gist Sync (Backup)                                  │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+        ┌──────────────────────────────────────────┐
+        │           MANAGED INFRASTRUCTURE          │
+        │  (PaaS MANAGES, not part of PaaS itself)  │
+        │                                          │
+        │  ┌─────────────┐    ┌─────────────────┐  │
+        │  │ PostgreSQL  │    │      Redis      │  │
+        │  │  (Patroni)  │    │   (Sentinel)    │  │
+        │  └─────────────┘    └─────────────────┘  │
+        │                                          │
+        │  ┌─────────────┐    ┌─────────────────┐  │
+        │  │   HAProxy   │    │   App Servers   │  │
+        │  │  (Routers)  │    │ (nginx + PHP)   │  │
+        │  └─────────────┘    └─────────────────┘  │
+        └──────────────────────────────────────────┘
+```
+
+### Key Design Principles
+
+1. **Self-Contained**: PaaS runs as a single Docker container with no external database dependencies
+2. **SQLite for State**: All PaaS configuration and state stored in SQLite within the container
+3. **Config Portability**: Full export/import to JSON/YAML for migration and backup
+4. **Gist Backup**: Automatic sync to private GitHub Gist for version-controlled backups
+5. **Infrastructure Agnostic**: PaaS manages any SSH-accessible servers, not tied to specific provider
+
+### Technology Stack Comparison
 
 ### Current Quantyra Stack
 
@@ -30,6 +95,30 @@ graph TB
         C --> F[Sentinel Failover]
         D --> G[Cloudflare CDN]
     end
+```
+
+### Portable PaaS Stack
+
+```mermaid
+graph TB
+    subgraph "Portable PaaS Container"
+        A[Flask 3.x + SocketIO] --> B[SQLite Database]
+        A --> C[Local Redis]
+        A --> D[Config Sync Service]
+        D --> E[GitHub Gist API]
+    end
+    
+    subgraph "Managed Infrastructure (External)"
+        F[PostgreSQL/Patroni]
+        G[Redis/Sentinel]
+        H[HAProxy Routers]
+        I[App Servers]
+    end
+    
+    A -.->|SSH| F
+    A -.->|SSH| G
+    A -.->|SSH| H
+    A -.->|SSH| I
 ```
 
 ### Recommended Enhancements
@@ -53,11 +142,232 @@ graph TB
 
 | Component | Purpose | Implementation |
 |-----------|---------|----------------|
+| SQLite | PaaS internal state | Applications, domains, secrets, deployment history |
 | Celery | Background job queue | Deploy, backup, SSL provisioning |
-| Redis (Message Broker) | Celery broker | Use existing Redis with dedicated DB |
+| Redis (Local) | Celery broker + cache | Within container, ephemeral |
 | flask-socketio | WebSocket support | Real-time deployment progress |
 | Eventlet/Gevent | Async workers | WebSocket async support |
-| PostgreSQL Schema | Resource tracking | New tables for PaaS entities |
+| Config Sync | Export/Import | JSON/YAML configuration backup |
+
+## Portability Implementation
+
+### Docker Container Structure
+
+```dockerfile
+# Dockerfile for portable PaaS
+FROM python:3.11-slim
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    sqlite3 \
+    redis-server \
+    openssh-client \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Application code
+COPY dashboard/ ./dashboard/
+COPY scripts/ ./scripts/
+
+# Create data directory for persistent SQLite
+RUN mkdir -p /data
+
+# Environment
+ENV SQLITE_DB_PATH=/data/paas.db
+ENV GIST_ID=""
+ENV GITHUB_TOKEN=""
+
+EXPOSE 8080
+
+# Start script (Flask + Redis + Celery)
+COPY docker/entrypoint.sh /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+```
+
+### Docker Compose for Deployment
+
+```yaml
+# docker-compose.yml for NAS/VPS deployment
+version: '3.8'
+
+services:
+  paas:
+    build: .
+    container_name: quantyra-paas
+    ports:
+      - "8080:8080"
+    volumes:
+      - paas-data:/data              # SQLite database persistence
+      - ./secrets:/app/secrets:ro    # SSH keys, AGE key
+      - ./config:/app/config:ro      # Optional config files
+    environment:
+      - SQLITE_DB_PATH=/data/paas.db
+      - GIST_ID=${GIST_ID}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - DASHBOARD_USER=${DASHBOARD_USER:-admin}
+      - DASHBOARD_PASS=${DASHBOARD_PASS}
+    restart: unless-stopped
+
+volumes:
+  paas-data:
+    driver: local
+```
+
+### SQLite Database Location
+
+| Path | Purpose | Persistence |
+|------|---------|-------------|
+| `/data/paas.db` | Main PaaS database | Docker volume (persistent) |
+| `/data/paas.db-wal` | Write-ahead log | Docker volume (persistent) |
+| `/data/backups/` | Automated backups | Docker volume (persistent) |
+
+### Configuration Export/Import
+
+#### Export Format
+
+```json
+{
+  "version": "1.0",
+  "exported_at": "2026-03-26T12:00:00Z",
+  "checksum": "sha256:abc123...",
+  "data": {
+    "applications": [
+      {
+        "name": "rentalfixer",
+        "display_name": "Rental Fixer",
+        "git_repo": "https://github.com/org/rentalfixer",
+        "framework": "laravel",
+        "production_branch": "main",
+        "staging_branch": "staging",
+        "port_production": 8100,
+        "port_staging": 9200,
+        "staging_enabled": true
+      }
+    ],
+    "domains": [
+      {
+        "app_name": "rentalfixer",
+        "domain_name": "rentalfixer.app",
+        "domain_type": "production",
+        "ssl_status": "active"
+      }
+    ],
+    "secrets": {
+      "rentalfixer": {
+        "encrypted": "age-encrypted-content...",
+        "scope": "shared"
+      }
+    },
+    "servers": [
+      {
+        "name": "re-db",
+        "tailscale_ip": "100.92.26.38",
+        "server_type": "app"
+      }
+    ],
+    "databases": [
+      {
+        "app_name": "rentalfixer",
+        "db_name": "rentalfixer",
+        "db_user": "rentalfixer_user"
+      }
+    ],
+    "deployment_history": [
+      {
+        "app_name": "rentalfixer",
+        "environment": "production",
+        "commit_sha": "abc123",
+        "status": "success",
+        "deployed_at": "2026-03-26T10:00:00Z"
+      }
+    ]
+  }
+}
+```
+
+#### Import Behavior
+
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| `merge` | Add new, update existing, keep unmatched | Incremental sync |
+| `replace` | Clear all, import everything | Full restore |
+| `validate` | Check import file, no changes | Pre-import validation |
+
+### GitHub Gist Sync
+
+#### Sync Architecture
+
+```mermaid
+sequenceDiagram
+    participant PaaS
+    participant SQLite
+    participant Gist API
+    
+    Note over PaaS: Configuration Change Detected
+    PaaS->>SQLite: Read all configuration
+    PaaS->>PaaS: Generate JSON export
+    PaaS->>PaaS: Encrypt sensitive secrets
+    PaaS->>Gist API: Update gist (or create)
+    Gist API-->>PaaS: Return gist ID
+    
+    Note over PaaS: Restore from Gist
+    PaaS->>Gist API: Fetch gist content
+    PaaS->>PaaS: Decrypt secrets
+    PaaS->>SQLite: Import configuration
+```
+
+#### Gist Sync Configuration
+
+```python
+# config/gist_sync.yml
+gist_sync:
+  enabled: true
+  gist_id: "abc123def456"  # Set via GIST_ID env var
+  sync_on_change: true     # Auto-sync when config changes
+  include_secrets: true    # Include encrypted secrets
+  retention_versions: 10   # Keep last 10 versions in gist history
+```
+
+#### Sync Triggers
+
+| Event | Sync? | Notes |
+|-------|-------|-------|
+| Application created | Yes | Full config export |
+| Application deleted | Yes | Full config export |
+| Domain provisioned | Yes | Full config export |
+| Secrets updated | Yes | Secrets encrypted before sync |
+| Deployment completed | No | History not synced to Gist |
+| Manual sync requested | Yes | User-triggered backup |
+
+#### Restore from Gist
+
+```bash
+# Via CLI
+docker exec quantyra-paas python -m services.gist_sync restore
+
+# Via API
+curl -X POST http://localhost:8080/api/config/restore-gist
+```
+
+### Migration from PostgreSQL to SQLite
+
+The PaaS uses SQLite for its own state, but **manages** the PostgreSQL cluster for application databases.
+
+| Data | Stored In | Purpose |
+|------|-----------|---------|
+| PaaS configuration | SQLite (container) | Applications, domains, secrets, servers |
+| PaaS deployment history | SQLite (container) | Rollback info, audit trail |
+| **Application databases** | PostgreSQL (external) | User data for deployed apps |
+
+This separation ensures:
+- PaaS can be deployed anywhere with just the SQLite file
+- Application databases remain on the high-availability PostgreSQL cluster
+- No external database dependency for PaaS operation
 
 ## Key Patterns to Adopt
 
