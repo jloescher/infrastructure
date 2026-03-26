@@ -3568,6 +3568,68 @@ def api_clear_cache(app_name):
     })
 
 
+@app.route("/api/apps/<app_name>/run-seeds", methods=["POST"])
+@requires_auth
+def api_run_seeds(app_name):
+    data = request.get_json() or {}
+    seeder_class = data.get("class", "")
+    environment = data.get("environment", "production")
+    
+    applications = load_applications()
+    if app_name not in applications:
+        return jsonify({"success": False, "error": "App not found"})
+    
+    app = applications[app_name]
+    framework = app.get("framework", "laravel")
+    
+    if framework != "laravel":
+        return jsonify({"success": False, "error": "Seeds only supported for Laravel apps"})
+    
+    target_servers = app.get("target_servers", [])
+    if not target_servers:
+        return jsonify({"success": False, "error": "No target servers configured"})
+    
+    app_dir = f"/opt/apps/{app_name}"
+    if environment == "staging" and app.get("staging_env"):
+        app_dir = f"/opt/apps/{app_name}-staging"
+    
+    seed_cmd = "php artisan db:seed --force"
+    if seeder_class:
+        seed_cmd += f" --class={seeder_class}"
+    
+    results = {}
+    all_success = True
+    
+    for server_name in target_servers:
+        server_ip = None
+        for s in APP_SERVERS:
+            if s["name"] == server_name:
+                server_ip = s["ip"]
+                break
+        
+        if not server_ip:
+            results[server_name] = {"success": False, "error": "Server not found"}
+            all_success = False
+            continue
+        
+        result = ssh_command(server_ip, f"cd {app_dir} && {seed_cmd}")
+        success = result.get("returncode", 1) == 0
+        results[server_name] = {
+            "success": success,
+            "stdout": result.get("stdout", ""),
+            "stderr": result.get("stderr", "")
+        }
+        if not success:
+            all_success = False
+    
+    return jsonify({
+        "success": all_success,
+        "results": results,
+        "command": seed_cmd,
+        "app_dir": app_dir
+    })
+
+
 def cf_api_request(method, endpoint, data=None):
     if not CLOUDFLARE_API_TOKEN:
         return {"success": False, "error": "Cloudflare API token not configured"}

@@ -154,8 +154,9 @@
         <button class="btn btn-secondary" onclick="reloadNginx('{{ server.ip }}')">Reload Nginx</button>
         {% if app.framework == 'laravel' %}
         <button class="btn btn-secondary" onclick="reloadPhpFpm('{{ server.ip }}')">Reload PHP-FPM</button>
-        {% endif %}
         <button class="btn btn-secondary" onclick="clearCache('{{ server.ip }}', '{{ app_name }}')">Clear Cache</button>
+        <button class="btn btn-secondary" onclick="showSeedModal('production')">Run Seeds</button>
+        {% endif %}
     </div>
     
     <h3>Commands</h3>
@@ -183,6 +184,14 @@
             <button class="btn btn-sm btn-secondary" onclick="copyCommand('migrate-{{ server.name }}')">Copy</button>
         </div>
         <pre id="migrate-{{ server.name }}" class="code-block">ssh root@{{ server.ip }} "cd /opt/apps/{{ app_name }} && php artisan migrate --force"</pre>
+    </div>
+    
+    <div class="command-box">
+        <div class="command-header">
+            <span>Run Seeds</span>
+            <button class="btn btn-sm btn-secondary" onclick="copyCommand('seed-{{ server.name }}')">Copy</button>
+        </div>
+        <pre id="seed-{{ server.name }}" class="code-block">ssh root@{{ server.ip }} "cd /opt/apps/{{ app_name }} && php artisan db:seed --force"</pre>
     </div>
     {% else %}
     <div class="command-box">
@@ -297,6 +306,29 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<!-- Seed Modal -->
+<div id="seed-modal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000;">
+    <div style="background:#1a1a2e; margin:100px auto; padding:20px; width:400px; border-radius:8px;">
+        <h3 style="margin-top:0;">Run Database Seeds</h3>
+        <div style="margin:15px 0;">
+            <label style="display:block; margin-bottom:5px;">Environment:</label>
+            <select id="seed-environment" style="width:100%; padding:8px; background:#2d2d44; color:#fff; border:1px solid #3d3d5c; border-radius:4px;">
+                <option value="production">Production</option>
+                {% if app.staging_env %}<option value="staging">Staging</option>{% endif %}
+            </select>
+        </div>
+        <div style="margin:15px 0;">
+            <label style="display:block; margin-bottom:5px;">Seeder Class (optional):</label>
+            <input type="text" id="seed-class" placeholder="e.g., UserSeeder (leave empty for default)" style="width:100%; padding:8px; background:#2d2d44; color:#fff; border:1px solid #3d3d5c; border-radius:4px;">
+        </div>
+        <div style="margin-top:20px; display:flex; gap:10px; justify-content:flex-end;">
+            <button class="btn btn-secondary" onclick="closeSeedModal()">Cancel</button>
+            <button class="btn" onclick="runSeeds()">Run Seeds</button>
+        </div>
+        <div id="seed-result" style="margin-top:15px; display:none;"></div>
+    </div>
+</div>
+
 <script>
 function copyCommand(id) {
     const text = document.getElementById(id).textContent;
@@ -450,6 +482,58 @@ function forceProvisionPendingDomains() {
             btn.disabled = false;
             btn.textContent = 'Force Provision Pending Domains';
         }
+    });
+}
+
+function showSeedModal(defaultEnv) {
+    document.getElementById('seed-environment').value = defaultEnv;
+    document.getElementById('seed-class').value = '';
+    document.getElementById('seed-result').style.display = 'none';
+    document.getElementById('seed-modal').style.display = 'block';
+}
+
+function closeSeedModal() {
+    document.getElementById('seed-modal').style.display = 'none';
+}
+
+function runSeeds() {
+    const environment = document.getElementById('seed-environment').value;
+    const seederClass = document.getElementById('seed-class').value.trim();
+    const resultDiv = document.getElementById('seed-result');
+    
+    resultDiv.innerHTML = '<span style="color:#888;">Running seeds...</span>';
+    resultDiv.style.display = 'block';
+    
+    fetch('/api/apps/{{ app_name }}/run-seeds', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            environment: environment,
+            class: seederClass
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            let html = '<span style="color:#48bb78;">✓ Seeds ran successfully</span><br>';
+            html += '<code style="font-size:12px;">' + data.command + '</code>';
+            for (const [server, result] of Object.entries(data.results)) {
+                if (result.success) {
+                    html += '<br><span style="color:#48bb78;">✓ ' + server + '</span>';
+                    if (result.stdout) {
+                        html += '<pre style="margin:5px 0; padding:5px; background:#2d2d44; font-size:11px; max-height:100px; overflow:auto;">' + result.stdout + '</pre>';
+                    }
+                } else {
+                    html += '<br><span style="color:#f56565;">✗ ' + server + ': ' + (result.stderr || result.error || 'Unknown error') + '</span>';
+                }
+            }
+            resultDiv.innerHTML = html;
+        } else {
+            resultDiv.innerHTML = '<span style="color:#f56565;">Error: ' + (data.error || 'Unknown error') + '</span>';
+        }
+    })
+    .catch(err => {
+        resultDiv.innerHTML = '<span style="color:#f56565;">Error: ' + err + '</span>';
     });
 }
 </script>
