@@ -627,6 +627,7 @@ def clone_repo_to_servers(app_name, git_repo, servers, github_token=None):
         
         check_result = ssh_command(server["ip"], f"test -d {app_dir} && echo exists")
         if "exists" in check_result.get("stdout", ""):
+            ssh_command(server["ip"], f"git config --global --add safe.directory {app_dir}")
             results.append({"server": server["name"], "status": "exists", "message": f"Directory {app_dir} already exists"})
             continue
         
@@ -641,6 +642,8 @@ def clone_repo_to_servers(app_name, git_repo, servers, github_token=None):
             results.append({"server": server["name"], "status": "error", "message": f"Failed to prepare app directory: {prep_result['stderr']}"})
             continue
 
+        ssh_command(server["ip"], f"git config --global --add safe.directory {app_dir}")
+        
         clone_cmd = run_as_app_user(f"cd {app_dir} && git clone {shlex.quote(clone_url)} .")
         clone_result = ssh_command(server["ip"], clone_cmd, timeout=120)
         if clone_result["success"]:
