@@ -3628,6 +3628,7 @@ def api_run_seeds(app_name):
     
     results = {}
     all_success = True
+    primary_server = target_servers[0] if target_servers else None
     
     for server_name in target_servers:
         server_ip = None
@@ -3639,6 +3640,14 @@ def api_run_seeds(app_name):
         if not server_ip:
             results[server_name] = {"success": False, "error": "Server not found"}
             all_success = False
+            continue
+        
+        if server_name != primary_server:
+            results[server_name] = {
+                "success": True,
+                "stdout": "Skipped (seeds run on primary server only to avoid duplicate key errors)",
+                "stderr": ""
+            }
             continue
         
         result = ssh_command(server_ip, f"cd {app_dir} && {seed_cmd}")
