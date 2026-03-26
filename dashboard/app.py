@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 import yaml
 import os
 import subprocess
+import time
 import psycopg2
 import redis
 import requests
@@ -2754,18 +2755,34 @@ def provision_pending_domains(app_name, app):
     return {"provisioned": provisioned, "errors": errors}
 
 
-def check_domain_http_health(domain_name, domain_type):
+def check_domain_http_health(domain_name, domain_type, max_retries=3, retry_delay=5):
     url = f"https://{domain_name}"
-    try:
-        resp = requests.get(url, timeout=15, allow_redirects=True)
-        status_code = resp.status_code
-        if domain_type == "staging":
-            healthy = status_code in [200, 401]
-        else:
-            healthy = status_code == 200
-        return {"success": healthy, "status_code": status_code, "url": url}
-    except Exception as e:
-        return {"success": False, "status_code": 0, "url": url, "error": str(e)}
+    last_status = 0
+    last_error = None
+    
+    for attempt in range(max_retries):
+        try:
+            resp = requests.get(url, timeout=15, allow_redirects=True)
+            status_code = resp.status_code
+            
+            if status_code == 403:
+                last_status = status_code
+                last_error = "Cloudflare WAF or SSL mode issue (403)"
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay)
+                    continue
+            
+            if domain_type == "staging":
+                healthy = status_code in [200, 401]
+            else:
+                healthy = status_code == 200
+            return {"success": healthy, "status_code": status_code, "url": url}
+        except Exception as e:
+            last_error = str(e)
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+    
+    return {"success": False, "status_code": last_status, "url": url, "error": last_error or f"HTTP {last_status}"}
 
 
 def check_local_app_health(server_ip, app_port):
