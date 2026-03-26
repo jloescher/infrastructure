@@ -517,8 +517,17 @@ def ssh_command(server_ip, command, timeout=30):
                     return fallback
                 fallback["stderr"] = f"Primary ({server_ip}) blocked by Tailscale check; fallback ({public_ip}) failed: {fallback.get('stderr', '').strip()}"
                 return fallback
-        if primary.get("success"):
+        
+        if primary.get("stdout"):
             return primary
+        
+        ssh_error_patterns = ["Connection refused", "Connection timed out", "No route to host", "Host key verification failed", "Permission denied"]
+        stderr_lower = (primary.get("stderr") or "").lower()
+        is_ssh_error = any(p.lower() in stderr_lower for p in ssh_error_patterns)
+        
+        if not is_ssh_error and primary.get("stderr"):
+            return primary
+        
         if public_ip:
             fallback = run_target(public_ip, timeout)
             if fallback.get("success"):
@@ -3633,7 +3642,7 @@ def api_run_seeds(app_name):
             continue
         
         result = ssh_command(server_ip, f"cd {app_dir} && {seed_cmd}")
-        success = result.get("returncode", 1) == 0
+        success = result.get("success", False)
         results[server_name] = {
             "success": success,
             "stdout": result.get("stdout", ""),
