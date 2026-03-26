@@ -132,6 +132,24 @@ infrastructure/
 - **Tailscale VPN**: All server-to-server communication uses encrypted Tailscale network (100.64.0.0/10).
 - **Separate Production/Staging Ports**: Production (8100-8199), Staging (9200-9299) to avoid conflicts with system services.
 
+### Port Allocation Scheme
+
+| Port Range | Purpose | Notes |
+|------------|---------|-------|
+| 5000-5001 | PostgreSQL (HAProxy) | 5000=RW, 5001=RO |
+| 6379 | Redis | Master/replica |
+| 8080 | Dashboard | Infrastructure management UI |
+| 8100-8199 | Production Apps | Laravel/nginx backends |
+| 8404 | HAProxy Stats | Admin interface |
+| 9090 | Prometheus | Metrics collection |
+| 9093 | Alertmanager | Alert routing |
+| 9113 | Prometheus Exporters | nginx exporter listen port (Tailscale IP) |
+| 9114 | nginx stub_status | Scraped by prometheus exporter (localhost) |
+| 9200-9299 | Staging Apps | Laravel/nginx backends |
+| 3000 | Grafana | Dashboards |
+
+**Important:** The nginx stub_status must listen on port **9114** (not 9113) to avoid conflict with the prometheus-nginx-exporter which listens on port 9113 (Tailscale IP).
+
 ### Traffic Flow
 1. **Cloudflare** terminates SSL at edge, routes to routers via DNS round-robin
 2. **HAProxy routers** (consolidated frontend) route by Host header to app backends
