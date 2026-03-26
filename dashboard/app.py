@@ -228,6 +228,13 @@ DB_SERVERS = [
 
 
 def grant_schema_permissions(db_name, db_user, db_admin):
+    """Grant schema-level permissions and set up default privileges for both admin and app users.
+    
+    This ensures that:
+    1. Both users have full access to the public schema
+    2. Future tables created by EITHER user will have proper permissions
+    3. All existing tables and sequences are accessible
+    """
     try:
         conn = psycopg2.connect(
             host=PG_HOST, port=PG_PORT, user=PG_USER,
@@ -236,10 +243,23 @@ def grant_schema_permissions(db_name, db_user, db_admin):
         conn.autocommit = True
         cur = conn.cursor()
         
+        # Grant schema access to both users
         cur.execute("GRANT ALL ON SCHEMA public TO {};".format(db_user))
         cur.execute("GRANT ALL ON SCHEMA public TO {};".format(db_admin))
+        
+        # Set default privileges for tables created by ADMIN user
         cur.execute("ALTER DEFAULT PRIVILEGES FOR ROLE {} IN SCHEMA public GRANT ALL ON TABLES TO {};".format(db_admin, db_user))
         cur.execute("ALTER DEFAULT PRIVILEGES FOR ROLE {} IN SCHEMA public GRANT ALL ON SEQUENCES TO {};".format(db_admin, db_user))
+        
+        # Set default privileges for tables created by APP user (migrations run as app user)
+        cur.execute("ALTER DEFAULT PRIVILEGES FOR ROLE {} IN SCHEMA public GRANT ALL ON TABLES TO {};".format(db_user, db_user))
+        cur.execute("ALTER DEFAULT PRIVILEGES FOR ROLE {} IN SCHEMA public GRANT ALL ON SEQUENCES TO {};".format(db_user, db_user))
+        
+        # Grant access to all existing tables and sequences
+        cur.execute("GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO {};".format(db_user))
+        cur.execute("GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO {};".format(db_user))
+        cur.execute("GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO {};".format(db_admin))
+        cur.execute("GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO {};".format(db_admin))
         
         cur.close()
         conn.close()
@@ -247,6 +267,56 @@ def grant_schema_permissions(db_name, db_user, db_admin):
     except Exception as e:
         print(f"Warning: Failed to grant schema permissions for {db_name}: {e}")
         return False
+
+
+def regrant_app_db_permissions(app_name, environment="production"):
+    """Re-grant permissions on all tables for an app's database user.
+    
+    This should be called after migrations run to ensure the app user has
+    access to any newly created tables. Called automatically during deployment
+    for Laravel apps via run_pull_deploy().
+    
+    Args:
+        app_name: The application name
+        environment: "production" or "staging"
+    
+    Returns:
+        dict with "success" bool and optional "message" or "error"
+    """
+    applications = load_applications()
+    if app_name not in applications:
+        return {"success": False, "error": "App not found"}
+    
+    app = applications[app_name]
+    
+    db_name = app.get("database")
+    db_user = app.get("db_user")
+    
+    if environment == "staging":
+        db_name = app.get("staging_database")
+        db_user = app.get("staging_db_user")
+    
+    if not db_name or not db_user:
+        return {"success": False, "error": "Database not configured for this app"}
+    
+    try:
+        conn = psycopg2.connect(
+            host=PG_HOST, port=PG_PORT, user=PG_USER,
+            password=PG_PASSWORD, database=db_name
+        )
+        conn.autocommit = True
+        cur = conn.cursor()
+        
+        cur.execute("GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO {};".format(db_user))
+        cur.execute("GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO {};".format(db_user))
+        
+        cur.close()
+        conn.close()
+        print(f"Re-granted permissions on {db_name} to {db_user}")
+        return {"success": True, "message": f"Granted permissions on all tables in {db_name} to {db_user}"}
+    except Exception as e:
+        print(f"Error re-granting permissions for {app_name}: {e}")
+        return {"success": False, "error": str(e)}
 
 
 def check_auth(username, password):
@@ -3052,6 +3122,16 @@ def run_pull_deploy(app_name, branch="main", rolling=True):
         results["phases"]["deploy"]["status"] = "failed"
     results["phases"]["deploy"]["completed_at"] = datetime.utcnow().isoformat()
 
+    # Re-grant database permissions after migrations for Laravel apps
+    # This ensures the app user has access to all newly created tables
+    if len(results["errors"]) == 0 and framework == "laravel":
+        regrant_result = regrant_app_db_permissions(app_name, deploy_environment)
+        if regrant_result.get("success"):
+            results["success"].append(f"Database permissions re-granted for {deploy_environment}")
+        else:
+            # Log warning but don't fail deployment - permissions were likely already correct
+            results["errors"].append(f"Database permissions warning: {regrant_result.get('error', 'unknown error')}")
+
     if len(results["errors"]) == 0:
         if deploy_environment == "production":
             domain_results = provision_pending_domains(app_name, app)
@@ -3174,6 +3254,20 @@ def api_rollback(app_name):
     results["success_flag"] = len(results["errors"]) == 0
     status = 200 if results["success_flag"] else 500
     return jsonify(results), status
+
+
+@app.route("/api/apps/<app_name>/regrant-permissions", methods=["POST"])
+@requires_auth
+def api_regrant_permissions(app_name):
+    """Manually re-grant database permissions for an app.
+    
+    Useful for fixing permission issues without redeploying.
+    Can target specific environment with ?environment=staging
+    """
+    environment = request.args.get("environment", "production")
+    result = regrant_app_db_permissions(app_name, environment=environment)
+    status = 200 if result.get("success") else 400
+    return jsonify(result), status
 
 
 @app.route("/api/apps/<app_name>/domains/force-provision", methods=["POST"])
