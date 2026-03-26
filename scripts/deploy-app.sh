@@ -59,6 +59,8 @@ ensure_app_permissions() {
 ensure_runtime_user
 ensure_app_permissions
 
+git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
+
 cd "$APP_DIR"
 
 BACKUP_FILE=""
