@@ -1231,7 +1231,7 @@
             secretsHtml += '<tr><td><code>DATABASE_URL</code></td><td>postgres://' + appName + '_admin:••••••••@100.102.220.16:6432/' + dbName + '</td><td><span class="status-badge status-healthy">Auto</span></td></tr>';
         }
         if (createRedis) {
-            secretsHtml += '<tr><td><code>REDIS_URL</code></td><td>redis://:••••••••@100.102.220.16:6379/0</td><td><span class="status-badge status-healthy">Auto</span></td></tr>';
+            secretsHtml += '<tr><td><code>REDIS_URL</code></td><td>redis://:••••••••@100.102.220.16:6379/&lt;assigned&gt;</td><td><span class="status-badge status-healthy">Auto (DB assigned)</span></td></tr>';
         }
         document.getElementById('secrets-output').innerHTML = secretsHtml;
 

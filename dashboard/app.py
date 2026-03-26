@@ -94,6 +94,27 @@ APP_SERVERS = [
 APP_PORT_RANGE = {"production": {"start": 8100, "end": 8199}, "staging": {"start": 9200, "end": 9299}}
 allocated_ports = {}
 
+def get_next_redis_db():
+    """
+    Get the next available Redis DB number.
+    DB 0 is reserved for system/monitoring.
+    Apps start from DB 1.
+    """
+    applications = load_applications()
+    used_dbs = set()
+    
+    for app_name, app in applications.items():
+        if app.get("redis_enabled") and app.get("redis_db") is not None:
+            used_dbs.add(app["redis_db"])
+    
+    # Start from DB 1 (DB 0 is reserved for system)
+    next_db = 1
+    while next_db in used_dbs:
+        next_db += 1
+    
+    return next_db
+
+
 def get_next_port(app_name):
     applications = load_applications()
     used_ports = set()
@@ -916,6 +937,8 @@ def run_framework_setup(app_name, framework, servers, db_config=None, redis_conf
                         "REDIS_PASSWORD": redis_config['password'],
                         "REDIS_PORT": redis_config['port'],
                     }
+                    if redis_config.get('db') is not None:
+                        redis_vars["REDIS_DB"] = str(redis_config['db'])
                     for var_name, var_value in redis_vars.items():
                         env_updates.append(f"sed -i 's/^{var_name}=.*/{var_name}={var_value}/' {app_dir}/.env")
                         env_updates.append(f"grep -q '^{var_name}=' {app_dir}/.env || echo '{var_name}={var_value}' >> {app_dir}/.env")
@@ -1021,7 +1044,8 @@ def get_framework_env_vars(framework, environment="production", app_url=None, db
         if framework == "laravel":
             pass
         else:
-            env_vars["REDIS_URL"] = f"redis://:{redis_config['password']}@{redis_config['host']}:{redis_config['port']}/0"
+            redis_db = redis_config.get('db', 0)
+            env_vars["REDIS_URL"] = f"redis://:{redis_config['password']}@{redis_config['host']}:{redis_config['port']}/{redis_db}"
     
     return {k: v for k, v in env_vars.items() if v is not None}
 
@@ -2402,6 +2426,8 @@ def create_app():
         
         pending_domains = build_domains_from_configs(domain_configs, enable_security)
         webhook_secret = secrets.token_urlsafe(32)
+        
+        redis_db = get_next_redis_db() if create_redis else None
 
         applications[app_name] = {
             "name": app_name,
@@ -2423,6 +2449,7 @@ def create_app():
             "staging_db_admin": results.get("staging_db_admin") if create_staging else None,
             "staging_db_admin_password": results.get("staging_db_admin_password") if create_staging else None,
             "redis_enabled": create_redis,
+            "redis_db": redis_db,
             "port": port if framework == "laravel" else None,
             "domains": pending_domains,
             "production_domain": production_domain,
@@ -3342,7 +3369,8 @@ def deploy_app(app_name):
                 redis_config = {
                     "host": REDIS_HOST,
                     "port": str(REDIS_PORT),
-                    "password": REDIS_PASSWORD
+                    "password": REDIS_PASSWORD,
+                    "db": app.get("redis_db", 0)
                 }
             
             app_url = None
