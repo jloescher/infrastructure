@@ -5,12 +5,12 @@ applications:
       install: composer install --no-dev --optimize-autoloader
       migrate: php artisan migrate --force
       start: php artisan config:cache && php artisan route:cache && php artisan view:cache
-    created_at: '2026-03-26T17:02:46.296589'
+    created_at: '2026-03-26T18:20:48.358246'
     database: jonathanloescher
     db_admin: jonathanloescher_admin
-    db_admin_password: IVH3x2pB0GC4R_-So75mYw
+    db_admin_password: zuWKPBWepvFUE9823TEGbg
     db_user: jonathanloescher_user
-    db_user_password: hMe9pnPuUZ2GpHVJNS4NCg
+    db_user_password: c6CsjUR9UlimGOykIjOZKw
     deploy_workflow: "name: Deploy jonathanloescher\n\non:\n  push:\n    branches:\n\
       \      - main\n      - staging\n\njobs:\n  build:\n    runs-on: ubuntu-latest\n\
       \    if: github.ref == 'refs/heads/main'\n    steps:\n      - uses: actions/checkout@v4\n\
@@ -54,11 +54,11 @@ applications:
     description: Jonathan Loescher
     domains:
     - base_domain: jonathanloescher.com
-      created_at: '2026-03-26T17:02:46.271517'
+      created_at: '2026-03-26T18:20:48.324440'
       dns_label: '@'
       dns_provisioned: true
       error: ''
-      last_attempt_at: '2026-03-26T17:30:38.953675'
+      last_attempt_at: '2026-03-26T18:24:56.268347'
       name: jonathanloescher.com
       production_mode: root
       provisioned: true
@@ -68,13 +68,13 @@ applications:
       type: production
       www_redirect: true
     - base_domain: jonathanloescher.com
-      created_at: '2026-03-26T17:02:46.271611'
+      created_at: '2026-03-26T18:20:48.324647'
       dns_label: staging
       dns_provisioned: true
       error: ''
-      last_attempt_at: '2026-03-26T17:30:38.953695'
+      last_attempt_at: '2026-03-26T18:25:19.370681'
       name: staging.jonathanloescher.com
-      password: LXEF0UplYsibCU2J
+      password: 8fD66Vc1wBBdJwKR
       provisioned: true
       security_enabled: true
       ssl_enabled: true
@@ -83,23 +83,23 @@ applications:
     enable_security: true
     framework: laravel
     git_repo: https://github.com/jloescher/jonathanloescher.git
-    github_webhook_secret: luhgCzm2H1ILafsijh3dScG5CCUF8aLcyokrx9ZKoQg
+    github_webhook_secret: dl-veea2siDEgPjGXpdTlEdQZkRhRS4QWhckNiX78t0
     last_deploy:
       aborted: false
-      at: '2026-03-26T17:30:38.953718'
-      branch: staging
-      environment: staging
+      at: '2026-03-26T18:29:18.369901'
+      branch: main
+      environment: production
       errors: []
       message: ''
       phases:
         deploy:
-          completed_at: '2026-03-26T17:30:38.953733'
-          started_at: '2026-03-26T17:30:38.953726'
+          status: success
+        domain_provisioning:
           status: success
       success: true
-    last_deploy_at: '2026-03-26T17:30:38.953708'
-    last_deploy_branch: staging
-    last_deploy_environment: staging
+    last_deploy_at: '2026-03-26T18:29:18.369875'
+    last_deploy_branch: main
+    last_deploy_environment: production
     last_deploy_status: success
     name: jonathanloescher
     port: 8101
@@ -108,13 +108,13 @@ applications:
     redis_db: 1
     redis_enabled: true
     server_commits:
-      re-node-02: ''
+      re-node-02: f87a7d36b2d0fba236baf150fdeaf92aaca22066
     staging_branch: staging
     staging_database: jonathanloescher_staging
     staging_db_admin: jonathanloescher_staging_admin
-    staging_db_admin_password: ddBZtnPz95qDhRwRbpQERg
+    staging_db_admin_password: 2oeHLE8hTWzG_GhmD4oaeg
     staging_db_user: jonathanloescher_staging_user
-    staging_db_user_password: tl5v_SZIMdJ66F5D9Knz6w
+    staging_db_user_password: 2Pz6o_mNRvuB5EUgnWUmUA
     staging_env: true
     target_servers:
     - re-db
