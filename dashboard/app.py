@@ -29,6 +29,28 @@ try:
     from gist_sync import GistSyncService, get_sync_service
     PAAS_DB_AVAILABLE = True
     paas_db.init_database()
+    
+    def seed_servers():
+        """Seed database with hardcoded servers if not already present."""
+        if not paas_db:
+            return
+        
+        default_servers = [
+            {"name": "router-01", "ip": "100.102.220.16", "public_ip": "172.93.54.112", "role": "router"},
+            {"name": "router-02", "ip": "100.116.175.9", "public_ip": "23.29.118.6", "role": "router"},
+            {"name": "re-db", "ip": "100.92.26.38", "public_ip": "208.87.128.115", "role": "app"},
+            {"name": "re-node-02", "ip": "100.89.130.19", "public_ip": "23.227.173.245", "role": "app"},
+            {"name": "re-node-01", "ip": "100.126.103.51", "public_ip": "104.225.216.26", "role": "database"},
+            {"name": "re-node-03", "ip": "100.114.117.46", "public_ip": "172.93.54.145", "role": "database"},
+            {"name": "re-node-04", "ip": "100.115.75.119", "public_ip": "172.93.54.122", "role": "database"},
+        ]
+        
+        for server in default_servers:
+            existing = paas_db.get_server_by_name(server["name"])
+            if not existing:
+                paas_db.upsert_server(server)
+    
+    seed_servers()
 except ImportError:
     PAAS_DB_AVAILABLE = False
 
@@ -2354,17 +2376,131 @@ def connection_string(db_name):
     return render_template("connection.html", db_name=db_name, db=databases[db_name], redis_password=REDIS_PASSWORD)
 
 
+def get_servers_by_role():
+    """Get servers from database, grouped by role."""
+    all_servers = paas_db.list_servers() if paas_db else []
+    
+    db_servers = [s for s in all_servers if s.get('role') == 'database']
+    app_servers = [s for s in all_servers if s.get('role') == 'app']
+    routers = [s for s in all_servers if s.get('role') == 'router']
+    monitoring = [s for s in all_servers if s.get('role') == 'monitoring']
+    
+    return db_servers, app_servers, routers, monitoring
+
+
 @app.route("/servers")
 @requires_auth
 def servers():
-    server_status = check_servers_async(DB_SERVERS + APP_SERVERS + ROUTERS)
+    db_servers, app_servers, routers, _ = get_servers_by_role()
+    
+    server_status = check_servers_async(db_servers + app_servers + routers)
     updates_status = get_all_servers_updates()
+    
+    message = request.args.get('message')
+    message_type = request.args.get('message_type', 'success')
+    
     return render_template("servers.html", 
         servers=server_status, 
-        db_servers=DB_SERVERS, 
-        app_servers=APP_SERVERS, 
-        routers=ROUTERS,
-        updates_status=updates_status)
+        db_servers=db_servers, 
+        app_servers=app_servers, 
+        routers=routers,
+        updates_status=updates_status,
+        message=message,
+        message_type=message_type)
+
+
+@app.route("/servers/add", methods=["GET", "POST"])
+@requires_auth
+def add_server():
+    if request.method == "GET":
+        return render_template("add_server.html")
+    
+    name = request.form.get("name", "").strip().lower()
+    ip = request.form.get("ip", "").strip()
+    public_ip = request.form.get("public_ip", "").strip() or None
+    role = request.form.get("role", "").strip()
+    
+    cpu_cores = request.form.get("cpu_cores")
+    ram_gb = request.form.get("ram_gb")
+    disk_gb = request.form.get("disk_gb")
+    location = request.form.get("location", "").strip() or None
+    
+    test_connection = "test_connection" in request.form
+    
+    if not name or not ip or not role:
+        return render_template("add_server.html", error="Name, IP, and role are required.")
+    
+    if not name.replace("-", "").replace("_", "").isalnum():
+        return render_template("add_server.html", error="Server name must be alphanumeric (hyphens allowed).")
+    
+    existing = paas_db.get_server_by_name(name) if paas_db else None
+    if existing:
+        return render_template("add_server.html", error=f"Server '{name}' already exists.")
+    
+    if test_connection:
+        result = ssh_command(ip, "echo 'connection test'", timeout=10)
+        if not result.get("success"):
+            return render_template("add_server.html", error=f"SSH connection failed: {result.get('stderr', 'Unknown error')}")
+    
+    specs = {}
+    if cpu_cores:
+        specs['cpu_cores'] = int(cpu_cores)
+    if ram_gb:
+        specs['ram_gb'] = int(ram_gb)
+    if disk_gb:
+        specs['disk_gb'] = int(disk_gb)
+    if location:
+        specs['location'] = location
+    
+    server_data = {
+        'name': name,
+        'ip': ip,
+        'public_ip': public_ip,
+        'role': role,
+        'specs': specs if specs else None
+    }
+    
+    if paas_db:
+        paas_db.upsert_server(server_data)
+    
+    return redirect(url_for('servers', message=f"Server '{name}' added successfully.", message_type='success'))
+
+
+@app.route("/api/servers/test-connection", methods=["POST"])
+@requires_auth
+def api_test_server_connection():
+    """Test SSH connection to a server IP."""
+    data = request.json
+    ip = data.get("ip", "").strip()
+    
+    if not ip:
+        return jsonify({"success": False, "error": "IP address required"})
+    
+    result = ssh_command(ip, "echo 'connection test'", timeout=10)
+    
+    if result.get("success"):
+        return jsonify({"success": True, "message": "Connection successful"})
+    else:
+        return jsonify({"success": False, "error": result.get("stderr", "Connection failed")})
+
+
+@app.route("/api/servers/<server_name>", methods=["DELETE"])
+@requires_auth
+def api_delete_server(server_name):
+    """Delete a server from the inventory."""
+    if not paas_db:
+        return jsonify({"success": False, "error": "Database not available"})
+    
+    server = paas_db.get_server_by_name(server_name)
+    if not server:
+        return jsonify({"success": False, "error": "Server not found"})
+    
+    deleted = paas_db.delete_server(server_name)
+    
+    if deleted:
+        return jsonify({"success": True, "message": f"Server '{server_name}' deleted"})
+    else:
+        return jsonify({"success": False, "error": "Failed to delete server"})
 
 
 @app.route("/api/generate-workflow", methods=["POST"])

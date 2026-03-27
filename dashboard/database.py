@@ -651,6 +651,14 @@ def get_server_by_name(server_name: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def delete_server(server_name: str) -> bool:
+    """Delete a server by name."""
+    with get_db() as conn:
+        cursor = conn.execute('DELETE FROM servers WHERE name = ?', (server_name,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+
 # Export/Import operations
 
 def export_configuration() -> Dict[str, Any]:

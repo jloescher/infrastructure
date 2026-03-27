@@ -5,12 +5,17 @@
 <div class="page-header">
     <h1>Servers</h1>
     <div class="header-actions">
+        <a href="/servers/add" class="btn btn-primary btn-sm">+ Add Server</a>
         <button onclick="checkAllUpdates()" class="btn btn-secondary btn-sm" id="checkUpdatesBtn">Check Updates</button>
         {% if updates_status.total_updates > 0 %}
         <button onclick="showUpdateAllModal()" class="btn btn-sm">Update All ({{ updates_status.total_updates }})</button>
         {% endif %}
     </div>
 </div>
+
+{% if message %}
+<div class="alert alert-{{ message_type }}">{{ message }}</div>
+{% endif %}
 
 <div class="card">
     <h2>Database Servers</h2>
@@ -23,15 +28,16 @@
                     <th>Tailscale IP</th>
                     <th>Public IP</th>
                     <th>Updates</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for server in db_servers %}
-                <tr onclick="window.location='/servers/{{ server.name }}'" class="clickable-row">
+                <tr class="clickable-row">
                     <td><a href="/servers/{{ server.name }}"><strong>{{ server.name }}</strong></a></td>
                     <td>{{ server.role }}</td>
                     <td><code>{{ server.ip }}</code></td>
-                    <td><code>{{ server.public_ip }}</code></td>
+                    <td><code>{{ server.public_ip or '-' }}</code></td>
                     <td>
                         {% set server_updates = updates_status.servers.get(server.name, {}) %}
                         {% if server_updates.total > 0 %}
@@ -49,6 +55,9 @@
                         {% else %}
                             <span class="update-badge uptodate">✓ Up to date</span>
                         {% endif %}
+                    </td>
+                    <td>
+                        <button onclick="event.stopPropagation(); deleteServer('{{ server.name }}')" class="btn btn-danger btn-sm">Delete</button>
                     </td>
                 </tr>
                 {% endfor %}
@@ -68,15 +77,16 @@
                     <th>Tailscale IP</th>
                     <th>Public IP</th>
                     <th>Updates</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for server in app_servers %}
-                <tr onclick="window.location='/servers/{{ server.name }}'" class="clickable-row">
+                <tr class="clickable-row">
                     <td><a href="/servers/{{ server.name }}"><strong>{{ server.name }}</strong></a></td>
                     <td>{{ server.role }}</td>
                     <td><code>{{ server.ip }}</code></td>
-                    <td><code>{{ server.public_ip }}</code></td>
+                    <td><code>{{ server.public_ip or '-' }}</code></td>
                     <td>
                         {% set server_updates = updates_status.servers.get(server.name, {}) %}
                         {% if server_updates.total > 0 %}
@@ -95,6 +105,9 @@
                             <span class="update-badge uptodate">✓ Up to date</span>
                         {% endif %}
                     </td>
+                    <td>
+                        <button onclick="event.stopPropagation(); deleteServer('{{ server.name }}')" class="btn btn-danger btn-sm">Delete</button>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -112,14 +125,15 @@
                     <th>Tailscale IP</th>
                     <th>Public IP</th>
                     <th>Updates</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for server in routers %}
-                <tr onclick="window.location='/servers/{{ server.name }}'" class="clickable-row">
+                <tr class="clickable-row">
                     <td><a href="/servers/{{ server.name }}"><strong>{{ server.name }}</strong></a></td>
                     <td><code>{{ server.ip }}</code></td>
-                    <td><code>{{ server.public_ip }}</code></td>
+                    <td><code>{{ server.public_ip or '-' }}</code></td>
                     <td>
                         {% set server_updates = updates_status.servers.get(server.name, {}) %}
                         {% if server_updates.total > 0 %}
@@ -137,6 +151,9 @@
                         {% else %}
                             <span class="update-badge uptodate">✓ Up to date</span>
                         {% endif %}
+                    </td>
+                    <td>
+                        <button onclick="event.stopPropagation(); deleteServer('{{ server.name }}')" class="btn btn-danger btn-sm">Delete</button>
                     </td>
                 </tr>
                 {% endfor %}
@@ -207,6 +224,28 @@
 </div>
 
 <script>
+function deleteServer(serverName) {
+    if (!confirm('Are you sure you want to delete server "' + serverName + '"?\n\nThis will remove it from the inventory but will not affect the actual server.')) {
+        return;
+    }
+    
+    fetch('/api/servers/' + serverName, {
+        method: 'DELETE',
+        headers: {'Content-Type': 'application/json'}
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            window.location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Failed to delete server'));
+        }
+    })
+    .catch(err => {
+        alert('Error: ' + err);
+    });
+}
+
 function checkAllUpdates() {
     const btn = document.getElementById('checkUpdatesBtn');
     const originalText = btn.textContent;
