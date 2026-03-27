@@ -71,10 +71,104 @@ if WEBSOCKET_AVAILABLE and socketio:
 AUTH_USER = os.environ.get("DASHBOARD_USER", "admin")
 AUTH_PASS = os.environ.get("DASHBOARD_PASS", "DbAdmin2026!")
 
-# Container-friendly paths - configurable via environment
-BASE_DIR = os.environ.get("BASE_DIR", "/opt/dashboard")
-SSH_KEY_PATH = os.environ.get("SSH_KEY_PATH", os.path.expanduser("~/.ssh/id_vps"))
-LOCAL_TAILSCALE_IP = os.environ.get("LOCAL_TAILSCALE_IP", "")
+
+def detect_tailscale_ip():
+    """Auto-detect local Tailscale IP address."""
+    # Method 1: Check environment variable
+    env_ip = os.environ.get("LOCAL_TAILSCALE_IP", "")
+    if env_ip:
+        return env_ip
+    
+    # Method 2: Try 'ip addr show tailscale0' command
+    try:
+        result = subprocess.run(
+            ["ip", "addr", "show", "tailscale0"],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            match = re.search(r'inet ([0-9.]+)/', result.stdout)
+            if match:
+                return match.group(1)
+    except:
+        pass
+    
+    # Method 3: Check /sys/class/net (Linux)
+    try:
+        if os.path.exists('/sys/class/net/ts0'):
+            with open('/sys/class/net/ts0/address', 'r') as f:
+                # Tailscale creates ts0 on some systems
+                pass
+    except:
+        pass
+    
+    # Method 4: Try hostname -I and filter for Tailscale range
+    try:
+        result = subprocess.run(
+            ["hostname", "-I"],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            for ip in result.stdout.strip().split():
+                if ip.startswith('100.'):
+                    return ip
+    except:
+        pass
+    
+    # Method 5: Check Tailscale status file
+    try:
+        status_file = '/run/tailscale/tailscaled.state'
+        if os.path.exists(status_file):
+            # Tailscale stores state here, we can't easily parse it
+            # but its presence means Tailscale is running
+            pass
+    except:
+        pass
+    
+    return ""
+
+
+def detect_ssh_key_path():
+    """Auto-detect SSH key path."""
+    # Check environment variable first
+    env_path = os.environ.get("SSH_KEY_PATH", "")
+    if env_path and os.path.exists(env_path):
+        return env_path
+    
+    # Check common locations in order
+    possible_paths = [
+        os.path.expanduser("~/.ssh/id_vps"),
+        "/root/.ssh/id_vps",
+        os.path.expanduser("~/.ssh/id_ed25519"),
+        os.path.expanduser("~/.ssh/id_rsa"),
+    ]
+    
+    for path in possible_paths:
+        if os.path.exists(path):
+            return path
+    
+    # Default to id_vps even if it doesn't exist yet
+    return os.path.expanduser("~/.ssh/id_vps")
+
+
+def detect_base_dir():
+    """Auto-detect base directory."""
+    # Check environment variable first
+    env_dir = os.environ.get("BASE_DIR", "")
+    if env_dir:
+        return env_dir
+    
+    # Check if we're in a container
+    if os.path.exists("/.dockerenv") or os.path.exists("/app/app.py"):
+        return "/app"
+    
+    # Default to server path
+    return "/opt/dashboard"
+
+
+# Auto-detected paths
+BASE_DIR = detect_base_dir()
+SSH_KEY_PATH = detect_ssh_key_path()
+LOCAL_TAILSCALE_IP = detect_tailscale_ip()
 
 ENV_FILE = os.path.join(BASE_DIR, "config", ".env")
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")

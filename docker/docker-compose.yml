@@ -1,5 +1,18 @@
 version: "3.8"
 
+# Quantyra PaaS Dashboard
+# 
+# Deployment Options:
+# 1. On Tailscale network (recommended): No environment variables required
+#    - Uses auto-detected SSH key (~/.ssh/id_vps)
+#    - Connects to infrastructure services via Tailscale IPs
+#    - Run with: docker-compose up -d dashboard
+#
+# 2. Outside Tailscale network: Set environment variables
+#    - SSH_KEY_PATH: Path to SSH key for server access
+#    - PG_HOST, REDIS_HOST: Server IPs
+#    - All other services reachable via those hosts
+
 services:
   # Infrastructure Dashboard
   dashboard:
@@ -8,37 +21,41 @@ services:
       dockerfile: Dockerfile
     container_name: infrastructure-dashboard
     hostname: infrastructure-dashboard
-    # Use host network for Tailscale access
+    # Use host network for Tailscale access (required for auto-detection)
     network_mode: host
     environment:
+      # Database connections (defaults work on Tailscale)
       - PG_HOST=${PG_HOST:-100.102.220.16}
       - PG_PORT=${PG_PORT:-5000}
       - PG_USER=${PG_USER:-patroni_superuser}
-      - PG_PASSWORD=${PG_PASSWORD}
+      - PG_PASSWORD=${PG_PASSWORD:-}
       - REDIS_HOST=${REDIS_HOST:-100.126.103.51}
       - REDIS_PORT=${REDIS_PORT:-6379}
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      # Monitoring (defaults work on Tailscale)
       - PROMETHEUS_URL=${PROMETHEUS_URL:-http://100.102.220.16:9090}
       - GRAFANA_URL=${GRAFANA_URL:-http://100.102.220.16:3000}
+      # Auth (optional, has defaults)
       - DASHBOARD_USER=${DASHBOARD_USER:-admin}
       - DASHBOARD_PASS=${DASHBOARD_PASS:-DbAdmin2026!}
       - SECRET_KEY=${SECRET_KEY:-}
+      # Integrations (optional)
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - CLOUDFLARE_API_TOKEN=${CF_API_TOKEN:-}
       - CLOUDFLARE_ZONE_ID=${CF_ZONE_ID:-}
       - CLOUDFLARE_ZONE_NAME=${CF_ZONE_NAME:-}
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-}
       - WEBHOOK_PUBLIC_HOST=${WEBHOOK_PUBLIC_HOST:-hooks.quantyralabs.cc}
-      - BASE_DIR=/app
-      - SSH_KEY_PATH=/root/.ssh/id_vps
-      - LOCAL_TAILSCALE_IP=${LOCAL_TAILSCALE_IP:-}
-      - PAAS_DATABASE_PATH=/data/paas.db
-      - PAAS_KEY_PATH=/data/vault.key
+      # Paths (auto-detected, only set if needed)
+      # - SSH_KEY_PATH=/root/.ssh/id_vps
+      # - LOCAL_TAILSCALE_IP=100.x.x.x
+      # - BASE_DIR=/app
     volumes:
       # Persistent data (SQLite database + encryption key)
       - dashboard-data:/data
-      # SSH key for server access (read-only)
-      - ${SSH_KEY_PATH:-/root/.ssh/id_vps}:/root/.ssh/id_vps:ro
+      # SSH key for server access (auto-detected if at ~/.ssh/id_vps)
+      # Mount explicitly if using a different path
+      - ${HOME}/.ssh/id_vps:/root/.ssh/id_vps:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/"]

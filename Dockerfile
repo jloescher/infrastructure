@@ -3,15 +3,13 @@ FROM python:3.11-slim
 LABEL maintainer="Quantyra"
 LABEL description="Quantyra PaaS - Portable infrastructure management"
 
-# Set environment variables
+# Set environment variables with auto-detection defaults
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PAAS_DATABASE_PATH=/data/paas.db
 ENV PAAS_KEY_PATH=/data/vault.key
-ENV BASE_DIR=/app
-ENV SSH_KEY_PATH=/root/.ssh/id_vps
 
-# Install system dependencies
+# Install system dependencies (including openssh-client for SSH access)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libpq-dev \
@@ -19,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev \
     curl \
     openssh-client \
+    iproute2 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app directory
@@ -43,5 +42,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
-# Run the application
+# Run the application (no env vars required on Tailscale network)
 CMD ["python", "app.py"]
