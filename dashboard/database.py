@@ -171,7 +171,7 @@ def init_database():
                 id TEXT PRIMARY KEY,
                 app_id TEXT NOT NULL,
                 environment TEXT NOT NULL,
-                commit TEXT,
+                "commit" TEXT,
                 branch TEXT,
                 status TEXT DEFAULT 'pending',
                 results_json TEXT,
