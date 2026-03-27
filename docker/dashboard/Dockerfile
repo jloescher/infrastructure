@@ -33,9 +33,13 @@ COPY tasks/ tasks/
 COPY services/ services/
 COPY actions/ actions/
 COPY api/ api/
+COPY docker-entrypoint.sh .
 
 # Create directories
 RUN mkdir -p /data /app/config /app/docs
+
+# Make entrypoint executable
+RUN chmod +x /app/docker-entrypoint.sh
 
 # Expose port
 EXPOSE 8080
@@ -56,5 +60,5 @@ ENV GRAFANA_URL=http://100.102.220.16:3000
 ENV PAAS_DATABASE_PATH=/data/paas.db
 ENV PAAS_KEY_PATH=/data/vault.key
 
-# Run (no environment variables required on Tailscale network)
-CMD ["python", "app.py"]
+# Run with entrypoint (shows connection instructions on startup)
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
