@@ -6389,6 +6389,46 @@ def api_setup_complete():
     return jsonify({"success": True})
 
 
+# ============================================================================
+# Phase 3: Add-on Services
+# ============================================================================
+
+@app.route("/apps/<app_name>/services")
+@requires_auth
+def app_services_page(app_name):
+    """Services management page for an application."""
+    if not PAAS_DB_AVAILABLE:
+        flash("PaaS database module not available", "error")
+        return redirect(url_for("apps"))
+    
+    app = paas_db.get_application(name=app_name)
+    if not app:
+        flash("Application not found", "error")
+        return redirect(url_for("apps"))
+    
+    # Get services for this app
+    try:
+        from services import get_service_manager
+        manager = get_service_manager()
+        services = manager.get_services_for_app(app_name)
+    except ImportError:
+        services = []
+    
+    return render_template("app_services.html",
+        app_name=app_name,
+        app=app,
+        services=services
+    )
+
+
+# Register Phase 3 Services API routes
+try:
+    from api.services_routes import register_services_routes
+    register_services_routes(app)
+except ImportError as e:
+    print(f"Warning: Could not register services routes: {e}")
+
+
 if __name__ == "__main__":
     if WEBSOCKET_AVAILABLE and socketio:
         socketio.run(app, host="0.0.0.0", port=8080, debug=True, allow_unsafe_werkzeug=True)

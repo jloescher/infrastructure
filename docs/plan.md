@@ -29,6 +29,7 @@ This document tracks current tasks, priorities, and future improvements for the 
 | PaaS Portability (Phase 0) | ✅ Complete | SQLite backend, export/import, Gist sync, setup wizard |
 | UX Foundation (Phase 1) | ✅ Complete | WebSocket, Celery, real-time progress, toast notifications |
 | Feature Parity (Phase 2) | ✅ Complete | Multi-framework, blue-green, hooks, notifications, database UX |
+| Advanced Features (Phase 3) | ✅ Complete | Action pattern, service templates, drift detection |
 
 **Note:** All application and database state is now stored in SQLite at `/data/paas.db` instead of YAML files. The YAML files are still supported as a fallback for backward compatibility.
 
@@ -1402,6 +1403,115 @@ docker run -d \
 **Tracking:**
 - Started: 2026-03-26
 - Completed: 2026-03-26
+- Status: ✅ Complete
+
+---
+
+### 0.7. Phase 3: Advanced Features ✅ COMPLETE (2026-03-27)
+
+**Goal:** Add sophisticated PaaS features like action patterns, service templates, and drift detection.
+
+#### Action Pattern Implementation
+
+| Action | Description | Status |
+|--------|-------------|--------|
+| BaseAction | Base class with validation, progress, rollback | ✅ Complete |
+| DeployAction | Deploy apps to multiple servers | ✅ Complete |
+| RollbackAction | Rollback to previous deployment | ✅ Complete |
+| ProvisionAction | Provision domains with SSL | ✅ Complete |
+| BackupAction | Create/restore database backups | ✅ Complete |
+| ActionChain | Sequential/parallel execution | ✅ Complete |
+
+**Action Usage:**
+```python
+from actions import DeployAction
+
+action = DeployAction('myapp', 'production', 'main')
+result = action.execute()
+if result.success:
+    print(f"Deployed in {result.duration_seconds}s")
+```
+
+#### Service Templates
+
+| Service | Port Range | Description |
+|---------|------------|-------------|
+| Redis | 6379-6399 | In-memory caching |
+| Valkey | 16379-16499 | Redis-compatible OSS |
+| Meilisearch | 7700-7799 | Search engine |
+| Elasticsearch | 9200-9299 | Search & analytics |
+| MinIO | 9000-9099 | S3-compatible storage |
+| RabbitMQ | 5672-5699 | Message broker |
+| PostgreSQL | 5433-5499 | Additional databases |
+| MongoDB | 27017-27099 | NoSQL database |
+
+**Service Creation:**
+```bash
+# Create Redis for an app
+curl -X POST http://localhost:8080/api/apps/myapp/services \
+  -d '{"type": "redis", "environment": "production"}'
+```
+
+#### Configuration Drift Detection
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Expected configurations | ✅ Complete | nginx, PHP-FPM, PostgreSQL, Redis, HAProxy, system |
+| Drift detector | ✅ Complete | SSH-based config collection and comparison |
+| Drift reporter | ✅ Complete | Reports, history, alerts |
+| Scheduled checks | ✅ Complete | Hourly via Celery Beat |
+| Drift UI | ✅ Complete | Dashboard with filtering and trends |
+
+**Services Monitored:**
+- nginx (worker_processes, worker_connections, gzip, etc.)
+- PHP-FPM (pm.max_children, memory_limit, etc.)
+- PostgreSQL (max_connections, shared_buffers, etc.)
+- Redis (maxmemory, maxmemory-policy)
+- HAProxy (maxconn, timeouts)
+- System (sysctl parameters)
+
+#### Files Created
+
+**Actions (`dashboard/actions/`):**
+- `__init__.py`, `base.py`, `deploy.py`, `rollback.py`, `provision.py`, `backup.py`
+
+**Services:**
+- `services/templates.py` - Service template definitions
+- `services/service_manager.py` - Service lifecycle management
+
+**Drift Detection (`dashboard/services/drift/`):**
+- `configurations.py` - Expected configurations
+- `detector.py` - Drift detection logic
+- `reporter.py` - Reporting and alerting
+
+**API Routes:**
+- `api/services_routes.py` - Services API
+- `api/drift_routes.py` - Drift API
+
+**Templates:**
+- `templates/app_services.html` - Services UI
+- `templates/drift.html` - Drift dashboard
+
+**Tasks:**
+- `tasks/drift.py` - Scheduled drift checks
+
+#### New API Endpoints
+
+**Services:**
+- `GET /api/services/templates` - List service templates
+- `GET/POST /api/apps/<app>/services` - List/create services
+- `POST /api/services/<id>/start|stop|restart` - Lifecycle
+- `POST /api/services/<id>/backup` - Backup service
+
+**Drift:**
+- `POST /api/drift/check` - Run drift detection
+- `GET /api/drift/results` - Current drift results
+- `GET /api/drift/history` - Historical checks
+- `GET /api/drift/trend` - Trend analysis
+
+**Tracking:**
+- Started: 2026-03-27
+- Completed: 2026-03-27
 - Status: ✅ Complete
 
 ---

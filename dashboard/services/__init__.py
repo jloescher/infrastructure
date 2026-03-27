@@ -6,6 +6,7 @@ This module provides:
 - Blue-green deployment management
 - Deployment hooks execution
 - Notification services
+- Add-on service management (Phase 3)
 """
 
 from .framework import (
@@ -17,6 +18,18 @@ from .framework import (
     get_all_frameworks,
     validate_framework,
     FrameworkDetectionError,
+)
+
+# Phase 3: Add-on Services
+from .templates import (
+    SERVICE_TEMPLATES,
+    get_service_template,
+    list_service_templates,
+    get_services_by_category,
+    generate_service_config,
+    validate_service_config,
+    get_connection_string,
+    get_environment_variables,
 )
 
 # Optional imports for services that may not be implemented yet
@@ -35,6 +48,12 @@ try:
 except ImportError:
     NotificationService = None
 
+try:
+    from .service_manager import ServiceManager, get_service_manager
+except ImportError:
+    ServiceManager = None
+    get_service_manager = None
+
 __all__ = [
     # Framework services
     "FRAMEWORK_CONFIGS",
@@ -45,6 +64,17 @@ __all__ = [
     "get_all_frameworks",
     "validate_framework",
     "FrameworkDetectionError",
+    # Phase 3: Add-on Services
+    "SERVICE_TEMPLATES",
+    "get_service_template",
+    "list_service_templates",
+    "get_services_by_category",
+    "generate_service_config",
+    "validate_service_config",
+    "get_connection_string",
+    "get_environment_variables",
+    "ServiceManager",
+    "get_service_manager",
     # Optional services
     "BlueGreenDeploy",
     "HookExecutor",

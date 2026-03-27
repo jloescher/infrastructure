@@ -1,0 +1,612 @@
+{% extends "base.html" %}
+{% block title %}Services - {{ app.display_name or app.name }} - Quantyra Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>
+        <a href="/apps/{{ app.name }}" class="link">{{ app.display_name or app.name }}</a>
+        <span class="breadcrumb-sep">›</span>
+        Services
+    </h1>
+    <button class="btn" onclick="openAddServiceModal()">+ Add Service</button>
+</div>
+
+<div class="card">
+    <h2>Add-on Services</h2>
+    <p class="hint">Managed services for your application. Each service runs in its own Docker container.</p>
+    
+    {% if services %}
+    <div class="table-container">
+        <table class="server-table">
+            <thead>
+                <tr>
+                    <th>Service</th>
+                    <th>Environment</th>
+                    <th>Port</th>
+                    <th>Status</th>
+                    <th>Server</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for service in services %}
+                <tr>
+                    <td>
+                        <strong>{{ service.type | title }}</strong>
+                        <br><small class="hint">{{ service.memory_limit }} RAM, {{ service.cpu_limit }} CPU</small>
+                    </td>
+                    <td>
+                        <span class="status-badge {% if service.environment == 'production' %}status-healthy{% else %}status-warning{% endif %}">
+                            {{ service.environment }}
+                        </span>
+                    </td>
+                    <td>
+                        <code>{{ service.port }}</code>
+                        <br><small class="hint">{{ service.server_ip }}</small>
+                    </td>
+                    <td>
+                        {% set container_status = service.container_status or {} %}
+                        <span class="status-badge {% if container_status.running %}status-healthy{% else %}status-error{% endif %}">
+                            {{ container_status.status or service.status }}
+                        </span>
+                    </td>
+                    <td>{{ service.server_name or service.server_ip }}</td>
+                    <td>
+                        <button class="btn btn-secondary btn-sm" onclick="viewServiceDetails('{{ service.id }}')">Details</button>
+                        <button class="btn btn-secondary btn-sm" onclick="restartService('{{ service.id }}')">Restart</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteService('{{ service.id }}', '{{ service.type }}')">Delete</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <p>No services configured yet.</p>
+        <button class="btn" onclick="openAddServiceModal()">Add Your First Service</button>
+    </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>Connection Strings</h2>
+    <p class="hint">Use these connection strings to connect your application to the services.</p>
+    
+    {% if services %}
+    <div class="code-blocks">
+        {% for service in services %}
+        {% if service.connection_string %}
+        <div class="code-block-wrapper">
+            <div class="code-block-header">
+                <span>{{ service.type | title }} ({{ service.environment }})</span>
+                <button class="btn btn-sm" onclick="copyToClipboard('{{ service.connection_string }}')">Copy</button>
+            </div>
+            <pre class="code-block">{{ service.connection_string }}</pre>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="hint">Add services to see connection strings here.</p>
+    {% endif %}
+</div>
+
+<!-- Add Service Modal -->
+<div id="add-service-modal" class="modal" style="display: none;">
+    <div class="modal-backdrop" onclick="closeAddServiceModal()"></div>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Add Service</h3>
+            <button class="modal-close" onclick="closeAddServiceModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="add-service-form">
+                <div class="form-group">
+                    <label for="service-type">Service Type</label>
+                    <select id="service-type" name="type" required onchange="updateServiceDescription()">
+                        <option value="">Select a service...</option>
+                        <optgroup label="Caching">
+                            <option value="redis">📦 Redis - In-memory data store</option>
+                            <option value="valkey">🗝️ Valkey - Redis-compatible store</option>
+                        </optgroup>
+                        <optgroup label="Search">
+                            <option value="meilisearch">🔍 Meilisearch - Search engine</option>
+                            <option value="elasticsearch">🔎 Elasticsearch - Search & analytics</option>
+                        </optgroup>
+                        <optgroup label="Storage">
+                            <option value="minio">🪣 MinIO - S3-compatible storage</option>
+                        </optgroup>
+                        <optgroup label="Messaging">
+                            <option value="rabbitmq">🐰 RabbitMQ - Message broker</option>
+                        </optgroup>
+                        <optgroup label="Database">
+                            <option value="postgresql">🐘 PostgreSQL - Relational database</option>
+                            <option value="mongodb">🍃 MongoDB - NoSQL database</option>
+                        </optgroup>
+                    </select>
+                </div>
+                
+                <div id="service-description" class="hint" style="margin-bottom: 1rem;"></div>
+                
+                <div class="form-group">
+                    <label for="service-environment">Environment</label>
+                    <select id="service-environment" name="environment" required>
+                        <option value="production">Production</option>
+                        <option value="staging">Staging</option>
+                    </select>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="memory-limit">Memory Limit</label>
+                        <select id="memory-limit" name="memory_limit">
+                            <option value="256M">256 MB</option>
+                            <option value="512M" selected>512 MB</option>
+                            <option value="1G">1 GB</option>
+                            <option value="2G">2 GB</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="cpu-limit">CPU Limit</label>
+                        <select id="cpu-limit" name="cpu_limit">
+                            <option value="0.5">0.5 CPU</option>
+                            <option value="1" selected>1 CPU</option>
+                            <option value="2">2 CPU</option>
+                        </select>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeAddServiceModal()">Cancel</button>
+            <button class="btn" onclick="createService()">Create Service</button>
+        </div>
+    </div>
+</div>
+
+<!-- Service Details Modal -->
+<div id="service-details-modal" class="modal" style="display: none;">
+    <div class="modal-backdrop" onclick="closeServiceDetailsModal()"></div>
+    <div class="modal-content modal-large">
+        <div class="modal-header">
+            <h3 id="service-details-title">Service Details</h3>
+            <button class="modal-close" onclick="closeServiceDetailsModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="service-details-content">
+                <!-- Filled by JavaScript -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+    position: relative;
+    background: var(--card-bg);
+    border-radius: 8px;
+    width: 90%;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.modal-large {
+    max-width: 800px;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: var(--text-muted);
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+}
+
+.form-group select,
+.form-group input {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--input-bg, #fff);
+    color: var(--text-color);
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.code-block-wrapper {
+    margin-bottom: 1rem;
+}
+
+.code-block-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    background: var(--code-header-bg, #2d3748);
+    color: #fff;
+    border-radius: 4px 4px 0 0;
+    font-size: 0.875rem;
+}
+
+.code-block {
+    margin: 0;
+    padding: 1rem;
+    background: var(--code-bg, #1a202c);
+    color: #e2e8f0;
+    border-radius: 0 0 4px 4px;
+    overflow-x: auto;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.875rem;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 3rem;
+    color: var(--text-muted);
+}
+
+.empty-state p {
+    margin-bottom: 1rem;
+}
+
+#service-details-content .detail-row {
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    gap: 1rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+#service-details-content .detail-label {
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+#service-details-content .detail-value {
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.875rem;
+}
+
+#service-details-content .credentials-section {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    background: var(--code-bg, #1a202c);
+    border-radius: 4px;
+}
+
+#service-details-content .credentials-section h4 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    color: var(--text-color);
+}
+
+#service-details-content .credential-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+#service-details-content .credential-key {
+    color: #e2e8f0;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.875rem;
+}
+
+#service-details-content .credential-value {
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.875rem;
+    color: #68d391;
+    background: rgba(104, 211, 145, 0.1);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+}
+</style>
+
+<script>
+const SERVICE_DESCRIPTIONS = {
+    'redis': 'Fast in-memory data store for caching and session storage. Perfect for improving application performance.',
+    'valkey': 'Redis-compatible open-source alternative. Same functionality as Redis with open licensing.',
+    'meilisearch': 'Powerful, fast search engine with typo tolerance and customizable ranking. Great for user-facing search.',
+    'elasticsearch': 'Distributed search and analytics engine. Best for log analytics and full-text search at scale.',
+    'minio': 'S3-compatible object storage. Perfect for storing files, images, and backups with standard S3 APIs.',
+    'rabbitmq': 'Message broker for async processing. Handles background jobs, notifications, and service communication.',
+    'postgresql': 'Additional PostgreSQL database instance. Separate from the main cluster for isolated workloads.',
+    'mongodb': 'NoSQL document database. Best for flexible schemas and document-oriented data.'
+};
+
+let currentServices = {{ services | tojson }};
+
+function updateServiceDescription() {
+    const select = document.getElementById('service-type');
+    const descDiv = document.getElementById('service-description');
+    const selected = select.value;
+    
+    if (selected && SERVICE_DESCRIPTIONS[selected]) {
+        descDiv.textContent = SERVICE_DESCRIPTIONS[selected];
+    } else {
+        descDiv.textContent = '';
+    }
+}
+
+function openAddServiceModal() {
+    document.getElementById('add-service-modal').style.display = 'flex';
+}
+
+function closeAddServiceModal() {
+    document.getElementById('add-service-modal').style.display = 'none';
+    document.getElementById('add-service-form').reset();
+    document.getElementById('service-description').textContent = '';
+}
+
+function createService() {
+    const form = document.getElementById('add-service-form');
+    const type = form.querySelector('#service-type').value;
+    const environment = form.querySelector('#service-environment').value;
+    const memoryLimit = form.querySelector('#memory-limit').value;
+    const cpuLimit = form.querySelector('#cpu-limit').value;
+    
+    if (!type) {
+        showToast('Please select a service type', 'error');
+        return;
+    }
+    
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = 'Creating...';
+    
+    fetch('/api/apps/{{ app.name }}/services', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            type: type,
+            environment: environment,
+            config: {
+                memory_limit: memoryLimit,
+                cpu_limit: parseFloat(cpuLimit)
+            }
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showToast(data.message || 'Service created successfully', 'success');
+            closeAddServiceModal();
+            setTimeout(() => window.location.reload(), 1500);
+        } else {
+            showToast(data.error || 'Failed to create service', 'error');
+        }
+    })
+    .catch(err => {
+        showToast('Failed to create service: ' + err.message, 'error');
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.textContent = 'Create Service';
+    });
+}
+
+function viewServiceDetails(serviceId) {
+    fetch(`/api/services/${serviceId}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showServiceDetailsModal(data.service);
+            } else {
+                showToast(data.error || 'Failed to load service details', 'error');
+            }
+        })
+        .catch(err => {
+            showToast('Failed to load service details', 'error');
+        });
+}
+
+function showServiceDetailsModal(service) {
+    const title = document.getElementById('service-details-title');
+    const content = document.getElementById('service-details-content');
+    
+    title.textContent = `${service.type.charAt(0).toUpperCase() + service.type.slice(1)} Details`;
+    
+    let html = `
+        <div class="detail-row">
+            <span class="detail-label">Service ID</span>
+            <span class="detail-value">${service.id}</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-label">Environment</span>
+            <span class="detail-value">${service.environment}</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-label">Port</span>
+            <span class="detail-value">${service.port}</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-label">Server</span>
+            <span class="detail-value">${service.server_name || service.server_ip}</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-label">Container</span>
+            <span class="detail-value">${service.container_name}</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-label">Status</span>
+            <span class="detail-value">${service.container_status?.status || service.status}</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-label">Memory</span>
+            <span class="detail-value">${service.memory_limit}</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-label">CPU</span>
+            <span class="detail-value">${service.cpu_limit}</span>
+        </div>
+    `;
+    
+    if (service.connection_string) {
+        html += `
+            <div class="detail-row">
+                <span class="detail-label">Connection</span>
+                <span class="detail-value" style="word-break: break-all;">${service.connection_string}</span>
+            </div>
+        `;
+    }
+    
+    if (service.credentials && Object.keys(service.credentials).length > 0) {
+        html += `
+            <div class="credentials-section">
+                <h4>Credentials</h4>
+        `;
+        
+        for (const [key, value] of Object.entries(service.credentials)) {
+            html += `
+                <div class="credential-item">
+                    <span class="credential-key">${key}:</span>
+                    <span class="credential-value">${value}</span>
+                </div>
+            `;
+        }
+        
+        html += `</div>`;
+    }
+    
+    content.innerHTML = html;
+    document.getElementById('service-details-modal').style.display = 'flex';
+}
+
+function closeServiceDetailsModal() {
+    document.getElementById('service-details-modal').style.display = 'none';
+}
+
+function restartService(serviceId) {
+    if (!confirm('Are you sure you want to restart this service?')) {
+        return;
+    }
+    
+    showToast('Restarting service...', 'info');
+    
+    fetch(`/api/services/${serviceId}/restart`, {
+        method: 'POST'
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Service restarted successfully', 'success');
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            showToast(data.error || 'Failed to restart service', 'error');
+        }
+    })
+    .catch(err => {
+        showToast('Failed to restart service', 'error');
+    });
+}
+
+function deleteService(serviceId, serviceType) {
+    const removeData = confirm(`Delete ${serviceType} service?\n\nClick "OK" to delete the service (data preserved).\nClick "Cancel" to cancel.`);
+    
+    if (!removeData) {
+        return;
+    }
+    
+    const removeDataVolumes = confirm(`Also delete all data for ${serviceType}?\n\nThis cannot be undone!`);
+    
+    fetch(`/api/services/${serviceId}?remove_data=${removeDataVolumes}`, {
+        method: 'DELETE'
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Service deleted successfully', 'success');
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            showToast(data.error || 'Failed to delete service', 'error');
+        }
+    })
+    .catch(err => {
+        showToast('Failed to delete service', 'error');
+    });
+}
+
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('Copied to clipboard', 'success');
+    }).catch(err => {
+        showToast('Failed to copy', 'error');
+    });
+}
+
+function showToast(message, type) {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
+}
+</script>
+{% endblock %}

@@ -223,11 +223,46 @@ def init_database():
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             );
             
+            -- Services table (Phase 3 - add-on services)
+            CREATE TABLE IF NOT EXISTS services (
+                id TEXT PRIMARY KEY,
+                app_id TEXT NOT NULL,
+                type TEXT NOT NULL,
+                environment TEXT NOT NULL,
+                port INTEGER NOT NULL,
+                server_ip TEXT,
+                server_name TEXT,
+                container_id TEXT,
+                container_name TEXT,
+                credentials_encrypted TEXT,
+                volumes_json TEXT,
+                memory_limit TEXT DEFAULT '256M',
+                cpu_limit REAL DEFAULT 0.5,
+                status TEXT DEFAULT 'pending',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (app_id) REFERENCES applications(id) ON DELETE CASCADE
+            );
+            
+            -- Service backups table
+            CREATE TABLE IF NOT EXISTS service_backups (
+                id TEXT PRIMARY KEY,
+                service_id TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                backup_path TEXT,
+                success INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
+            );
+            
             -- Create indexes
             CREATE INDEX IF NOT EXISTS idx_domains_app ON domains(app_id);
             CREATE INDEX IF NOT EXISTS idx_secrets_app ON secrets(app_id);
             CREATE INDEX IF NOT EXISTS idx_deployments_app ON deployments(app_id);
             CREATE INDEX IF NOT EXISTS idx_deployment_steps_deployment ON deployment_steps(deployment_id);
+            CREATE INDEX IF NOT EXISTS idx_services_app ON services(app_id);
+            CREATE INDEX IF NOT EXISTS idx_services_type ON services(type);
+            CREATE INDEX IF NOT EXISTS idx_service_backups_service ON service_backups(service_id);
             
             -- Initialize sync_status
             INSERT OR IGNORE INTO sync_status (id, auto_sync_enabled) VALUES (1, 1);
@@ -363,6 +398,51 @@ def get_domains_for_app(app_id: str) -> List[Dict[str, Any]]:
     with get_db() as conn:
         rows = conn.execute('SELECT * FROM domains WHERE app_id = ? ORDER BY environment, domain', (app_id,)).fetchall()
         return [dict(row) for row in rows]
+
+
+def get_domain(domain_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Get a domain by ID.
+    
+    Args:
+        domain_id: The domain ID
+        
+    Returns:
+        Domain dictionary or None
+    """
+    with get_db() as conn:
+        row = conn.execute('SELECT * FROM domains WHERE id = ?', (domain_id,)).fetchone()
+        if row:
+            return dict(row)
+    return None
+
+
+def get_domain_by_name(domain: str, environment: str = None) -> Optional[Dict[str, Any]]:
+    """
+    Get a domain by name and environment.
+    
+    Args:
+        domain: Domain name
+        environment: Optional environment filter
+        
+    Returns:
+        Domain dictionary or None
+    """
+    with get_db() as conn:
+        if environment:
+            row = conn.execute(
+                'SELECT * FROM domains WHERE domain = ? AND environment = ?',
+                (domain, environment)
+            ).fetchone()
+        else:
+            row = conn.execute(
+                'SELECT * FROM domains WHERE domain = ?',
+                (domain,)
+            ).fetchone()
+        
+        if row:
+            return dict(row)
+    return None
 
 
 def update_domain(domain_id: str, updates: Dict[str, Any]) -> bool:
@@ -547,6 +627,28 @@ def list_servers() -> List[Dict[str, Any]]:
             del server['specs_json']
             servers.append(server)
     return servers
+
+
+def get_server_by_name(server_name: str) -> Optional[Dict[str, Any]]:
+    """
+    Get a server by name.
+    
+    Args:
+        server_name: Server name
+        
+    Returns:
+        Server dictionary or None if not found
+    """
+    with get_db() as conn:
+        row = conn.execute('SELECT * FROM servers WHERE name = ?', (server_name,)).fetchone()
+        
+        if row:
+            server = dict(row)
+            if server.get('specs_json'):
+                server['specs'] = json.loads(server['specs_json'])
+            del server['specs_json']
+            return server
+    return None
 
 
 # Export/Import operations
@@ -1903,6 +2005,272 @@ def get_upcoming_deployments(hours: int = 24) -> List[Dict[str, Any]]:
             AND datetime(d.scheduled_at) BETWEEN datetime(?) AND datetime(?)
             ORDER BY d.scheduled_at ASC
         ''', (now.isoformat(), cutoff.isoformat())).fetchall()
+        
+        return [dict(row) for row in rows]
+
+
+# ============================================================================
+# Phase 3: Add-on Services CRUD Operations
+# ============================================================================
+
+def create_service(service_data: Dict[str, Any]) -> str:
+    """
+    Create a new service.
+    
+    Args:
+        service_data: Service configuration dict
+        
+    Returns:
+        Service ID
+    """
+    service_id = service_data.get('id', generate_id())
+    now = datetime.utcnow().isoformat()
+    
+    with get_db() as conn:
+        conn.execute('''
+            INSERT INTO services 
+            (id, app_id, type, environment, port, server_ip, server_name,
+             container_id, container_name, credentials_encrypted, volumes_json,
+             memory_limit, cpu_limit, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            service_id,
+            service_data.get('app_id'),
+            service_data.get('type'),
+            service_data.get('environment'),
+            service_data.get('port'),
+            service_data.get('server_ip'),
+            service_data.get('server_name'),
+            service_data.get('container_id'),
+            service_data.get('container_name'),
+            service_data.get('credentials_encrypted'),
+            service_data.get('volumes_json', '[]'),
+            service_data.get('memory_limit', '256M'),
+            service_data.get('cpu_limit', 0.5),
+            service_data.get('status', 'pending'),
+            now,
+            now
+        ))
+        conn.commit()
+    
+    return service_id
+
+
+def get_service(service_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Get a service by ID.
+    
+    Args:
+        service_id: Service ID
+        
+    Returns:
+        Service dict or None
+    """
+    with get_db() as conn:
+        row = conn.execute('''
+            SELECT s.*, a.name as app_name
+            FROM services s
+            JOIN applications a ON s.app_id = a.id
+            WHERE s.id = ?
+        ''', (service_id,)).fetchone()
+        
+        if row:
+            service = dict(row)
+            return service
+    
+    return None
+
+
+def get_services_for_app(app_id: str, environment: str = None) -> List[Dict[str, Any]]:
+    """
+    Get all services for an application.
+    
+    Args:
+        app_id: Application ID
+        environment: Optional environment filter
+        
+    Returns:
+        List of service dicts
+    """
+    with get_db() as conn:
+        if environment:
+            rows = conn.execute('''
+                SELECT s.*, a.name as app_name
+                FROM services s
+                JOIN applications a ON s.app_id = a.id
+                WHERE s.app_id = ? AND s.environment = ?
+                ORDER BY s.type, s.environment
+            ''', (app_id, environment)).fetchall()
+        else:
+            rows = conn.execute('''
+                SELECT s.*, a.name as app_name
+                FROM services s
+                JOIN applications a ON s.app_id = a.id
+                WHERE s.app_id = ?
+                ORDER BY s.type, s.environment
+            ''', (app_id,)).fetchall()
+        
+        return [dict(row) for row in rows]
+
+
+def get_all_services() -> List[Dict[str, Any]]:
+    """
+    Get all services.
+    
+    Returns:
+        List of all service dicts
+    """
+    with get_db() as conn:
+        rows = conn.execute('''
+            SELECT s.*, a.name as app_name
+            FROM services s
+            JOIN applications a ON s.app_id = a.id
+            ORDER BY s.created_at DESC
+        ''').fetchall()
+        
+        return [dict(row) for row in rows]
+
+
+def get_services_by_type(service_type: str) -> List[Dict[str, Any]]:
+    """
+    Get all services of a specific type.
+    
+    Args:
+        service_type: Service type (redis, meilisearch, etc.)
+        
+    Returns:
+        List of service dicts
+    """
+    with get_db() as conn:
+        rows = conn.execute('''
+            SELECT s.*, a.name as app_name
+            FROM services s
+            JOIN applications a ON s.app_id = a.id
+            WHERE s.type = ?
+            ORDER BY s.created_at DESC
+        ''', (service_type,)).fetchall()
+        
+        return [dict(row) for row in rows]
+
+
+def update_service(service_id: str, updates: Dict[str, Any]) -> bool:
+    """
+    Update a service.
+    
+    Args:
+        service_id: Service ID
+        updates: Dict of fields to update
+        
+    Returns:
+        True if successful
+    """
+    updates['updated_at'] = datetime.utcnow().isoformat()
+    
+    allowed_fields = [
+        'status', 'container_id', 'container_name', 'server_ip', 
+        'server_name', 'memory_limit', 'cpu_limit', 'credentials_encrypted',
+        'updated_at'
+    ]
+    
+    updates = {k: v for k, v in updates.items() if k in allowed_fields}
+    
+    if not updates:
+        return False
+    
+    set_clause = ', '.join(f'{k} = ?' for k in updates.keys())
+    values = list(updates.values()) + [service_id]
+    
+    with get_db() as conn:
+        conn.execute(f'UPDATE services SET {set_clause} WHERE id = ?', values)
+        conn.commit()
+    
+    return True
+
+
+def delete_service(service_id: str) -> bool:
+    """
+    Delete a service.
+    
+    Args:
+        service_id: Service ID
+        
+    Returns:
+        True if successful
+    """
+    with get_db() as conn:
+        conn.execute('DELETE FROM services WHERE id = ?', (service_id,))
+        conn.commit()
+    
+    return True
+
+
+def record_service_backup(backup_data: Dict[str, Any]) -> str:
+    """
+    Record a service backup.
+    
+    Args:
+        backup_data: Backup metadata
+        
+    Returns:
+        Backup ID
+    """
+    backup_id = generate_id()
+    now = datetime.utcnow().isoformat()
+    
+    with get_db() as conn:
+        conn.execute('''
+            INSERT INTO service_backups 
+            (id, service_id, timestamp, backup_path, success, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (
+            backup_id,
+            backup_data.get('service_id'),
+            backup_data.get('timestamp', now),
+            backup_data.get('backup_path'),
+            1 if backup_data.get('success') else 0,
+            now
+        ))
+        conn.commit()
+    
+    return backup_id
+
+
+def get_service_backups(service_id: str, limit: int = 10) -> List[Dict[str, Any]]:
+    """
+    Get backup history for a service.
+    
+    Args:
+        service_id: Service ID
+        limit: Maximum number of backups to return
+        
+    Returns:
+        List of backup dicts
+    """
+    with get_db() as conn:
+        rows = conn.execute('''
+            SELECT * FROM service_backups
+            WHERE service_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+        ''', (service_id, limit)).fetchall()
+        
+        return [dict(row) for row in rows]
+
+
+def get_services_for_export() -> List[Dict[str, Any]]:
+    """
+    Get all services for configuration export.
+    
+    Returns:
+        List of service dicts (with credentials encrypted)
+    """
+    with get_db() as conn:
+        rows = conn.execute('''
+            SELECT s.*, a.name as app_name
+            FROM services s
+            JOIN applications a ON s.app_id = a.id
+            ORDER BY s.app_id, s.type, s.environment
+        ''').fetchall()
         
         return [dict(row) for row in rows]
 

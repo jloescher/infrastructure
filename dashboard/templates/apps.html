@@ -47,6 +47,7 @@
                     <td>
                         <a href="/apps/{{ app_key }}/status" class="btn btn-secondary btn-sm">Status</a>
                         <a href="/apps/{{ app_key }}/domains" class="btn btn-secondary btn-sm">Domains</a>
+                        <a href="/apps/{{ app_key }}/services" class="btn btn-secondary btn-sm">Services</a>
                         <a href="/apps/{{ app_key }}/deploy" class="btn btn-secondary btn-sm">Deploy</a>
                         <form action="/apps/{{ app_key }}/delete" method="POST" style="display:inline;" onsubmit="return confirm('Delete {{ app.name }}?{% if app.database %} This will also delete the database {{ app.database }}.{% endif %}');">
                             <input type="hidden" name="delete_database" value="{% if app.database %}true{% else %}false{% endif %}">

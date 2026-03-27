@@ -1,0 +1,715 @@
+{% extends "base.html" %}
+
+{% block title %}Configuration Drift - Quantyra PaaS{% endblock %}
+
+{% block head %}
+<style>
+.drift-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.drift-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    background: var(--card-bg);
+    border-radius: 8px;
+    padding: 1.5rem;
+    text-align: center;
+    border: 1px solid var(--border-color);
+}
+
+.stat-card.critical {
+    border-left: 4px solid var(--danger-color);
+}
+
+.stat-card.warning {
+    border-left: 4px solid var(--warning-color);
+}
+
+.stat-card.info {
+    border-left: 4px solid var(--info-color);
+}
+
+.stat-value {
+    font-size: 2.5rem;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+}
+
+.stat-label {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.drift-actions {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.btn {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+.btn-secondary {
+    background: var(--secondary-color);
+    color: white;
+}
+
+.btn-danger {
+    background: var(--danger-color);
+    color: white;
+}
+
+.btn:hover {
+    opacity: 0.9;
+}
+
+.drift-filters {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.filter-select {
+    padding: 0.5rem;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    background: var(--input-bg);
+    color: var(--text-color);
+}
+
+.drift-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--card-bg);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.drift-table th,
+.drift-table td {
+    padding: 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.drift-table th {
+    background: var(--header-bg);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    font-size: 0.8rem;
+}
+
+.drift-table tr:hover {
+    background: var(--hover-bg);
+}
+
+.severity-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.severity-critical {
+    background: rgba(220, 53, 69, 0.1);
+    color: var(--danger-color);
+}
+
+.severity-warning {
+    background: rgba(255, 193, 7, 0.1);
+    color: var(--warning-color);
+}
+
+.severity-info {
+    background: rgba(23, 162, 184, 0.1);
+    color: var(--info-color);
+}
+
+.service-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    background: var(--secondary-color);
+    color: white;
+    font-size: 0.8rem;
+}
+
+.drift-empty {
+    text-align: center;
+    padding: 3rem;
+    color: var(--text-muted);
+}
+
+.drift-empty-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}
+
+.trend-chart {
+    background: var(--card-bg);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    border: 1px solid var(--border-color);
+}
+
+.trend-chart h3 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+}
+
+.chart-container {
+    height: 200px;
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+}
+
+.chart-bar {
+    flex: 1;
+    background: var(--primary-color);
+    border-radius: 2px 2px 0 0;
+    min-height: 2px;
+    transition: height 0.3s;
+}
+
+.chart-bar:hover {
+    opacity: 0.8;
+}
+
+.chart-bar.critical {
+    background: var(--danger-color);
+}
+
+.loading {
+    text-align: center;
+    padding: 2rem;
+}
+
+.spinner {
+    border: 3px solid var(--border-color);
+    border-top: 3px solid var(--primary-color);
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.by-server-section,
+.by-service-section {
+    margin-bottom: 2rem;
+}
+
+.section-title {
+    font-size: 1.2rem;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.server-group,
+.service-group {
+    background: var(--card-bg);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+}
+
+.group-header {
+    padding: 1rem;
+    background: var(--header-bg);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+}
+
+.group-header:hover {
+    background: var(--hover-bg);
+}
+
+.group-count {
+    background: var(--secondary-color);
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+}
+
+.group-content {
+    padding: 1rem;
+}
+
+.drift-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+    background: var(--hover-bg);
+}
+
+.drift-item:last-child {
+    margin-bottom: 0;
+}
+
+.drift-key {
+    font-family: monospace;
+    font-weight: 500;
+}
+
+.drift-values {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.drift-expected,
+.drift-actual {
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.85rem;
+}
+
+.drift-expected {
+    background: rgba(40, 167, 69, 0.1);
+    color: var(--success-color);
+}
+
+.drift-actual {
+    background: rgba(220, 53, 69, 0.1);
+    color: var(--danger-color);
+}
+
+.last-checked {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="drift-header">
+    <h1>⚙️ Configuration Drift Detection</h1>
+    <div class="drift-actions">
+        <button class="btn btn-primary" onclick="runDriftCheck()">
+            ▶️ Run Check
+        </button>
+        <button class="btn btn-secondary" onclick="loadDriftResults()">
+            🔄 Refresh
+        </button>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="drift-stats">
+    <div class="stat-card critical">
+        <div class="stat-value" id="critical-count">-</div>
+        <div class="stat-label">Critical</div>
+    </div>
+    <div class="stat-card warning">
+        <div class="stat-value" id="warning-count">-</div>
+        <div class="stat-label">Warnings</div>
+    </div>
+    <div class="stat-card info">
+        <div class="stat-value" id="info-count">-</div>
+        <div class="stat-label">Info</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="servers-checked">-</div>
+        <div class="stat-label">Servers Checked</div>
+    </div>
+</div>
+
+<!-- Last Checked -->
+<div class="last-checked" id="last-checked">
+    Last checked: Never
+</div>
+
+<!-- Filters -->
+<div class="drift-filters">
+    <select class="filter-select" id="filter-server" onchange="filterResults()">
+        <option value="">All Servers</option>
+    </select>
+    <select class="filter-select" id="filter-service" onchange="filterResults()">
+        <option value="">All Services</option>
+    </select>
+    <select class="filter-select" id="filter-severity" onchange="filterResults()">
+        <option value="">All Severities</option>
+        <option value="critical">Critical</option>
+        <option value="warning">Warning</option>
+        <option value="info">Info</option>
+    </select>
+</div>
+
+<!-- Drift by Server -->
+<div class="by-server-section">
+    <h2 class="section-title">🖥️ By Server</h2>
+    <div id="drift-by-server">
+        <div class="loading">
+            <div class="spinner"></div>
+            <p>Loading drift results...</p>
+        </div>
+    </div>
+</div>
+
+<!-- Drift by Service -->
+<div class="by-service-section">
+    <h2 class="section-title">🔧 By Service</h2>
+    <div id="drift-by-service">
+        <!-- Populated by JavaScript -->
+    </div>
+</div>
+
+<!-- Trend Chart -->
+<div class="trend-chart">
+    <h3>📈 Drift Trend (Last 7 Days)</h3>
+    <div class="chart-container" id="trend-chart">
+        <!-- Populated by JavaScript -->
+    </div>
+</div>
+
+<script>
+let driftData = {
+    total_drifts: 0,
+    critical: 0,
+    warning: 0,
+    info: 0,
+    servers_checked: 0,
+    by_server: {},
+    by_service: {},
+    checked_at: null
+};
+
+// Load drift results on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadDriftResults();
+    loadDriftTrend();
+});
+
+function loadDriftResults() {
+    fetch('/api/drift/results')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayDriftResults(data.results);
+            } else {
+                console.error('Failed to load drift results:', data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading drift results:', error);
+        });
+}
+
+function loadDriftTrend() {
+    fetch('/api/drift/trend?days=7')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayTrendChart(data.trend);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading drift trend:', error);
+        });
+}
+
+function runDriftCheck() {
+    const btn = event.target;
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Checking...';
+    
+    fetch('/api/drift/check', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = '▶️ Run Check';
+            
+            if (data.success) {
+                driftData = data.report;
+                updateStats();
+                displayDriftByServer();
+                displayDriftByService();
+                updateLastChecked();
+                
+                // Reload trend
+                loadDriftTrend();
+                
+                if (driftData.critical > 0) {
+                    alert(`⚠️ Configuration drift detected!\n\nCritical: ${driftData.critical}\nWarnings: ${driftData.warning}\n\nCheck the details below.`);
+                } else {
+                    alert('✅ No critical drift detected!');
+                }
+            } else {
+                alert('Failed to run drift check: ' + data.error);
+            }
+        })
+        .catch(error => {
+            btn.disabled = false;
+            btn.innerHTML = '▶️ Run Check';
+            console.error('Error running drift check:', error);
+            alert('Error running drift check');
+        });
+}
+
+function displayDriftResults(results) {
+    // Group by server and service
+    const byServer = {};
+    const byService = {};
+    
+    results.forEach(drift => {
+        // By server
+        if (!byServer[drift.server]) {
+            byServer[drift.server] = [];
+        }
+        byServer[drift.server].push(drift);
+        
+        // By service
+        if (!byService[drift.service]) {
+            byService[drift.service] = [];
+        }
+        byService[drift.service].push(drift);
+    });
+    
+    driftData.by_server = byServer;
+    driftData.by_service = byService;
+    driftData.total_drifts = results.length;
+    driftData.critical = results.filter(r => r.severity === 'critical').length;
+    driftData.warning = results.filter(r => r.severity === 'warning').length;
+    driftData.info = results.filter(r => r.severity === 'info').length;
+    
+    // Update filter dropdowns
+    updateFilterDropdowns(byServer, byService);
+    
+    updateStats();
+    displayDriftByServer();
+    displayDriftByService();
+}
+
+function updateFilterDropdowns(byServer, byService) {
+    const serverSelect = document.getElementById('filter-server');
+    const serviceSelect = document.getElementById('filter-service');
+    
+    // Clear existing options (except first)
+    serverSelect.innerHTML = '<option value="">All Servers</option>';
+    serviceSelect.innerHTML = '<option value="">All Services</option>';
+    
+    // Add server options
+    Object.keys(byServer).sort().forEach(server => {
+        const option = document.createElement('option');
+        option.value = server;
+        option.textContent = server;
+        serverSelect.appendChild(option);
+    });
+    
+    // Add service options
+    Object.keys(byService).sort().forEach(service => {
+        const option = document.createElement('option');
+        option.value = service;
+        option.textContent = service;
+        serviceSelect.appendChild(option);
+    });
+}
+
+function updateStats() {
+    document.getElementById('critical-count').textContent = driftData.critical;
+    document.getElementById('warning-count').textContent = driftData.warning;
+    document.getElementById('info-count').textContent = driftData.info;
+    document.getElementById('servers-checked').textContent = Object.keys(driftData.by_server).length;
+}
+
+function updateLastChecked() {
+    const elem = document.getElementById('last-checked');
+    if (driftData.checked_at) {
+        const date = new Date(driftData.checked_at);
+        elem.textContent = `Last checked: ${date.toLocaleString()}`;
+    } else {
+        elem.textContent = 'Last checked: Never';
+    }
+}
+
+function displayDriftByServer() {
+    const container = document.getElementById('drift-by-server');
+    const byServer = driftData.by_server;
+    
+    if (Object.keys(byServer).length === 0) {
+        container.innerHTML = `
+            <div class="drift-empty">
+                <div class="drift-empty-icon">✅</div>
+                <h3>No Configuration Drift</h3>
+                <p>All servers are configured according to baseline.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    
+    Object.keys(byServer).sort().forEach(server => {
+        const drifts = byServer[server];
+        const criticalCount = drifts.filter(d => d.severity === 'critical').length;
+        
+        html += `
+            <div class="server-group">
+                <div class="group-header" onclick="toggleGroup(this)">
+                    <span>${server}</span>
+                    <span class="group-count ${criticalCount > 0 ? 'severity-critical' : ''}">${drifts.length} drifts</span>
+                </div>
+                <div class="group-content" style="display: none;">
+                    ${drifts.map(d => `
+                        <div class="drift-item">
+                            <div>
+                                <span class="service-badge">${d.service}</span>
+                                <span class="drift-key">${d.config_key}</span>
+                                <span class="severity-badge severity-${d.severity}">${d.severity}</span>
+                            </div>
+                            <div class="drift-values">
+                                <span class="drift-expected">${d.expected}</span>
+                                <span>→</span>
+                                <span class="drift-actual">${d.actual}</span>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+function displayDriftByService() {
+    const container = document.getElementById('drift-by-service');
+    const byService = driftData.by_service;
+    
+    if (Object.keys(byService).length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    let html = '';
+    
+    Object.keys(byService).sort().forEach(service => {
+        const drifts = byService[service];
+        const criticalCount = drifts.filter(d => d.severity === 'critical').length;
+        
+        html += `
+            <div class="service-group">
+                <div class="group-header" onclick="toggleGroup(this)">
+                    <span>${service}</span>
+                    <span class="group-count ${criticalCount > 0 ? 'severity-critical' : ''}">${drifts.length} drifts</span>
+                </div>
+                <div class="group-content" style="display: none;">
+                    ${drifts.map(d => `
+                        <div class="drift-item">
+                            <div>
+                                <span class="service-badge">${d.server}</span>
+                                <span class="drift-key">${d.config_key}</span>
+                                <span class="severity-badge severity-${d.severity}">${d.severity}</span>
+                            </div>
+                            <div class="drift-values">
+                                <span class="drift-expected">${d.expected}</span>
+                                <span>→</span>
+                                <span class="drift-actual">${d.actual}</span>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+function displayTrendChart(trend) {
+    const container = document.getElementById('trend-chart');
+    const data = trend.data || [];
+    
+    if (data.length === 0) {
+        container.innerHTML = '<p style="text-align: center; color: var(--text-muted);">No historical data available</p>';
+        return;
+    }
+    
+    // Find max for scaling
+    const maxTotal = Math.max(...data.map(d => d.total), 1);
+    
+    let html = '';
+    data.forEach(day => {
+        const height = (day.total / maxTotal) * 180;
+        const criticalHeight = (day.critical / maxTotal) * 180;
+        
+        html += `
+            <div class="chart-bar ${day.critical > 0 ? 'critical' : ''}" 
+                 style="height: ${Math.max(height, 2)}px"
+                 title="${day.date}: ${day.total} drifts (${day.critical} critical)">
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+function toggleGroup(header) {
+    const content = header.nextElementSibling;
+    content.style.display = content.style.display === 'none' ? 'block' : 'none';
+}
+
+function filterResults() {
+    const server = document.getElementById('filter-server').value;
+    const service = document.getElementById('filter-service').value;
+    const severity = document.getElementById('filter-severity').value;
+    
+    // Build query params
+    const params = new URLSearchParams();
+    if (server) params.append('server', server);
+    if (service) params.append('service', service);
+    if (severity) params.append('severity', severity);
+    
+    // Fetch filtered results
+    fetch('/api/drift/results?' + params.toString())
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayDriftResults(data.results);
+            }
+        });
+}
+</script>
+{% endblock %}
