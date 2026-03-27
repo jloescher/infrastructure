@@ -473,25 +473,28 @@ def requires_auth(f):
 
 
 def load_databases():
+    # Try SQLite first
     if PAAS_DB_AVAILABLE:
         try:
             with paas_db.get_db() as conn:
                 rows = conn.execute('SELECT * FROM databases ORDER BY name').fetchall()
-                databases = {}
-                for row in rows:
-                    db = dict(row)
-                    databases[db['name']] = {
-                        'name': db['name'],
-                        'description': db.get('description', ''),
-                        'owner': db.get('owner', 'app_admin'),
-                        'environment': db.get('environment', 'shared'),
-                        'app_name': db.get('app_id'),
-                        'pool_size': db.get('pool_size', 20)
-                    }
-                return databases
+                if rows:
+                    databases = {}
+                    for row in rows:
+                        db = dict(row)
+                        databases[db['name']] = {
+                            'name': db['name'],
+                            'description': db.get('description', ''),
+                            'owner': db.get('owner', 'app_admin'),
+                            'environment': db.get('environment', 'shared'),
+                            'app_name': db.get('app_id'),
+                            'pool_size': db.get('pool_size', 20)
+                        }
+                    return databases
         except Exception:
             pass
     
+    # Fall back to YAML config
     if os.path.exists(DB_CONFIG_PATH):
         with open(DB_CONFIG_PATH, "r") as f:
             data = yaml.safe_load(f)
@@ -521,49 +524,52 @@ def save_databases(databases):
 
 
 def load_applications():
+    # Try SQLite first
     if PAAS_DB_AVAILABLE:
         try:
             apps = paas_db.list_applications()
-            applications = {}
-            for app in apps:
-                app_name = app['name']
-                applications[app_name] = {
-                    'name': app_name,
-                    'display_name': app.get('display_name', app_name),
-                    'description': app.get('description', ''),
-                    'framework': app.get('framework', 'laravel'),
-                    'git_repo': app.get('repository', ''),
-                    'production_branch': app.get('production_branch', 'main'),
-                    'staging_branch': app.get('staging_branch', 'staging'),
-                    'staging_env': bool(app.get('create_staging', 1)),
-                    'target_servers': json.loads(app.get('target_servers', '[]')),
-                    'port': app.get('port'),
-                    'redis_enabled': bool(app.get('redis_enabled', 0)),
-                    'redis_db': app.get('redis_db'),
-                    'domains': [],
-                    'server_commits': {},
-                    'created_at': app.get('created_at', '')
-                }
+            if apps:
+                applications = {}
+                for app in apps:
+                    app_name = app['name']
+                    applications[app_name] = {
+                        'name': app_name,
+                        'display_name': app.get('display_name', app_name),
+                        'description': app.get('description', ''),
+                        'framework': app.get('framework', 'laravel'),
+                        'git_repo': app.get('repository', ''),
+                        'production_branch': app.get('production_branch', 'main'),
+                        'staging_branch': app.get('staging_branch', 'staging'),
+                        'staging_env': bool(app.get('create_staging', 1)),
+                        'target_servers': json.loads(app.get('target_servers', '[]')),
+                        'port': app.get('port'),
+                        'redis_enabled': bool(app.get('redis_enabled', 0)),
+                        'redis_db': app.get('redis_db'),
+                        'domains': [],
+                        'server_commits': {},
+                        'created_at': app.get('created_at', '')
+                    }
+                    
+                    domains = paas_db.get_domains_for_app(app['id'])
+                    for d in domains:
+                        applications[app_name]['domains'].append({
+                            'name': d['domain'],
+                            'type': d['environment'],
+                            'base_domain': d['domain'],
+                            'dns_label': d.get('dns_label', '@'),
+                            'www_redirect': bool(d.get('is_www', 0)),
+                            'ssl_enabled': bool(d.get('ssl_enabled', 1)),
+                            'provisioned': bool(d.get('provisioned', 0)),
+                            'status': d.get('status', 'pending'),
+                            'password': d.get('password'),
+                            'error': d.get('error', '')
+                        })
                 
-                domains = paas_db.get_domains_for_app(app['id'])
-                for d in domains:
-                    applications[app_name]['domains'].append({
-                        'name': d['domain'],
-                        'type': d['environment'],
-                        'base_domain': d['domain'],
-                        'dns_label': d.get('dns_label', '@'),
-                        'www_redirect': bool(d.get('is_www', 0)),
-                        'ssl_enabled': bool(d.get('ssl_enabled', 1)),
-                        'provisioned': bool(d.get('provisioned', 0)),
-                        'status': d.get('status', 'pending'),
-                        'password': d.get('password'),
-                        'error': d.get('error', '')
-                    })
-            
-            return applications
+                return applications
         except Exception as e:
             print(f"Error loading from SQLite: {e}")
     
+    # Fall back to YAML config
     if os.path.exists(APPS_CONFIG_PATH):
         with open(APPS_CONFIG_PATH, "r") as f:
             data = yaml.safe_load(f)
