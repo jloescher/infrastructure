@@ -35,6 +35,9 @@ ssh root@100.102.220.16 "cat /etc/systemd/system/dashboard.service" > configs/da
 # SQLite database backup
 scp -q root@100.102.220.16:/data/paas.db configs/dashboard/paas.db 2>/dev/null || echo "  Warning: Could not sync paas.db"
 
+# Encryption key backup (DO NOT COMMIT TO GIT)
+scp -q root@100.102.220.16:/data/vault.key configs/dashboard/vault.key 2>/dev/null || echo "  Warning: Could not sync vault.key"
+
 echo "Dashboard configs synced"
 
 # ==================== Provision Scripts ====================
