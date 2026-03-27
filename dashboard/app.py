@@ -700,9 +700,14 @@ def ssh_command(server_ip, command, timeout=30):
         return {"success": result.returncode == 0, "stdout": result.stdout, "stderr": result.stderr}
     
     def run_target(target_ip, run_timeout):
+        ssh_key = os.path.expanduser("~/.ssh/id_vps")
+        ssh_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5",
+                   "-o", "BatchMode=yes"]
+        if os.path.exists(ssh_key):
+            ssh_cmd.extend(["-i", ssh_key])
+        ssh_cmd.extend([f"root@{target_ip}", command])
         result = subprocess.run(
-            ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5",
-             "-o", "BatchMode=yes", f"root@{target_ip}", command],
+            ssh_cmd,
             capture_output=True, text=True, timeout=run_timeout
         )
         return {"success": result.returncode == 0, "stdout": result.stdout, "stderr": result.stderr}

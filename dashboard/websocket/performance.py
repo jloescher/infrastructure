@@ -5,6 +5,7 @@ This module provides SSH connection pooling and progress batching
 to optimize real-time deployment progress updates.
 """
 
+import os
 import paramiko
 import threading
 import time
@@ -47,7 +48,12 @@ class SSHConnectionPool:
         self._pools: Dict[str, List[Dict]] = {}  # server_ip -> [connection_info, ...]
         self._locks: Dict[str, threading.Lock] = {}  # Per-server locks
         self._global_lock = threading.Lock()
-        self._ssh_key_path = '/root/.ssh/id_vps'
+        
+        # SSH key path - check both server and local paths
+        if os.path.exists('/root/.ssh/id_vps'):
+            self._ssh_key_path = '/root/.ssh/id_vps'
+        else:
+            self._ssh_key_path = os.path.expanduser('~/.ssh/id_vps')
         
         # Start health check thread
         self._health_check_thread = threading.Thread(
