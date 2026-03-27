@@ -24,8 +24,27 @@ try:
 except ImportError:
     PYNACL_AVAILABLE = False
 
+try:
+    import database as paas_db
+    from gist_sync import GistSyncService, get_sync_service
+    PAAS_DB_AVAILABLE = True
+    paas_db.init_database()
+except ImportError:
+    PAAS_DB_AVAILABLE = False
+
+try:
+    from websocket import init_socketio, emit_progress, socketio
+    from tasks.deploy import deploy_application_task
+    WEBSOCKET_AVAILABLE = True
+except ImportError:
+    WEBSOCKET_AVAILABLE = False
+    socketio = None
+
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
+
+if WEBSOCKET_AVAILABLE and socketio:
+    init_socketio(app)
 
 AUTH_USER = os.environ.get("DASHBOARD_USER", "admin")
 AUTH_PASS = os.environ.get("DASHBOARD_PASS", "DbAdmin2026!")
@@ -334,6 +353,25 @@ def requires_auth(f):
 
 
 def load_databases():
+    if PAAS_DB_AVAILABLE:
+        try:
+            with paas_db.get_db() as conn:
+                rows = conn.execute('SELECT * FROM databases ORDER BY name').fetchall()
+                databases = {}
+                for row in rows:
+                    db = dict(row)
+                    databases[db['name']] = {
+                        'name': db['name'],
+                        'description': db.get('description', ''),
+                        'owner': db.get('owner', 'app_admin'),
+                        'environment': db.get('environment', 'shared'),
+                        'app_name': db.get('app_id'),
+                        'pool_size': db.get('pool_size', 20)
+                    }
+                return databases
+        except Exception:
+            pass
+    
     if os.path.exists(DB_CONFIG_PATH):
         with open(DB_CONFIG_PATH, "r") as f:
             data = yaml.safe_load(f)
@@ -342,6 +380,20 @@ def load_databases():
 
 
 def save_databases(databases):
+    if PAAS_DB_AVAILABLE:
+        try:
+            with paas_db.get_db() as conn:
+                for name, db in databases.items():
+                    conn.execute('''
+                        INSERT OR REPLACE INTO databases (id, name, description, owner, environment, pool_size)
+                        VALUES ((SELECT id FROM databases WHERE name = ?), ?, ?, ?, ?, ?)
+                    ''', (name, name, db.get('description', ''), db.get('owner', 'app_admin'), 
+                          db.get('environment', 'shared'), db.get('pool_size', 20)))
+                conn.commit()
+            return
+        except Exception:
+            pass
+    
     os.makedirs(os.path.dirname(DB_CONFIG_PATH), exist_ok=True)
     data = {"databases": databases}
     with open(DB_CONFIG_PATH, "w") as f:
@@ -349,6 +401,49 @@ def save_databases(databases):
 
 
 def load_applications():
+    if PAAS_DB_AVAILABLE:
+        try:
+            apps = paas_db.list_applications()
+            applications = {}
+            for app in apps:
+                app_name = app['name']
+                applications[app_name] = {
+                    'name': app_name,
+                    'display_name': app.get('display_name', app_name),
+                    'description': app.get('description', ''),
+                    'framework': app.get('framework', 'laravel'),
+                    'git_repo': app.get('repository', ''),
+                    'production_branch': app.get('production_branch', 'main'),
+                    'staging_branch': app.get('staging_branch', 'staging'),
+                    'staging_env': bool(app.get('create_staging', 1)),
+                    'target_servers': json.loads(app.get('target_servers', '[]')),
+                    'port': app.get('port'),
+                    'redis_enabled': bool(app.get('redis_enabled', 0)),
+                    'redis_db': app.get('redis_db'),
+                    'domains': [],
+                    'server_commits': {},
+                    'created_at': app.get('created_at', '')
+                }
+                
+                domains = paas_db.get_domains_for_app(app['id'])
+                for d in domains:
+                    applications[app_name]['domains'].append({
+                        'name': d['domain'],
+                        'type': d['environment'],
+                        'base_domain': d['domain'],
+                        'dns_label': d.get('dns_label', '@'),
+                        'www_redirect': bool(d.get('is_www', 0)),
+                        'ssl_enabled': bool(d.get('ssl_enabled', 1)),
+                        'provisioned': bool(d.get('provisioned', 0)),
+                        'status': d.get('status', 'pending'),
+                        'password': d.get('password'),
+                        'error': d.get('error', '')
+                    })
+            
+            return applications
+        except Exception as e:
+            print(f"Error loading from SQLite: {e}")
+    
     if os.path.exists(APPS_CONFIG_PATH):
         with open(APPS_CONFIG_PATH, "r") as f:
             data = yaml.safe_load(f)
@@ -367,6 +462,53 @@ def load_applications():
 
 
 def save_applications(applications):
+    if PAAS_DB_AVAILABLE:
+        try:
+            for app_name, app in applications.items():
+                existing = paas_db.get_application(name=app_name)
+                
+                app_data = {
+                    'name': app_name,
+                    'display_name': app.get('display_name', app_name),
+                    'description': app.get('description', ''),
+                    'framework': app.get('framework', 'laravel'),
+                    'repository': app.get('git_repo', ''),
+                    'production_branch': app.get('production_branch', 'main'),
+                    'staging_branch': app.get('staging_branch', 'staging'),
+                    'create_staging': app.get('staging_env', True),
+                    'target_servers': app.get('target_servers', []),
+                    'port': app.get('port'),
+                    'redis_enabled': app.get('redis_enabled', False),
+                    'redis_db': app.get('redis_db')
+                }
+                
+                if existing:
+                    paas_db.update_application(existing['id'], app_data)
+                    app_id = existing['id']
+                else:
+                    app_id = paas_db.create_application(app_data)
+                
+                for domain in app.get('domains', []):
+                    domain_data = {
+                        'app_id': app_id,
+                        'domain': domain.get('name', domain.get('domain')),
+                        'environment': domain.get('type', 'production'),
+                        'is_www': domain.get('www_redirect', False),
+                        'dns_label': domain.get('dns_label', '@'),
+                        'ssl_enabled': domain.get('ssl_enabled', True),
+                        'provisioned': domain.get('provisioned', False),
+                        'status': domain.get('status', 'pending'),
+                        'password': domain.get('password')
+                    }
+                    existing_domain = paas_db.get_domains_for_app(app_id)
+                    domain_exists = any(d['domain'] == domain_data['domain'] for d in existing_domain)
+                    if not domain_exists:
+                        paas_db.create_domain(domain_data)
+            
+            return
+        except Exception as e:
+            print(f"Error saving to SQLite: {e}")
+    
     os.makedirs(os.path.dirname(APPS_CONFIG_PATH), exist_ok=True)
     data = {"applications": applications}
     with open(APPS_CONFIG_PATH, "w") as f:
@@ -3256,6 +3398,134 @@ def api_rollback(app_name):
     return jsonify(results), status
 
 
+@app.route("/api/apps/<app_name>/deploy-async", methods=["POST"])
+@requires_auth
+def api_deploy_async(app_name):
+    """Start an async deployment with real-time progress tracking."""
+    if not WEBSOCKET_AVAILABLE:
+        return jsonify({"success": False, "error": "WebSocket support not available"}), 503
+    
+    if not PAAS_DB_AVAILABLE:
+        return jsonify({"success": False, "error": "PaaS database not available"}), 503
+    
+    applications = load_applications()
+    app = applications.get(app_name)
+    if not app:
+        return jsonify({"success": False, "error": "Application not found"}), 404
+    
+    data = request.json or {}
+    branch = data.get("branch", "main")
+    environment = data.get("environment", "production")
+    commit = data.get("commit")
+    
+    app_id = paas_db.get_setting(f'app_id_{app_name}')
+    if not app_id:
+        app_id = paas_db.generate_id()
+        paas_db.set_setting(f'app_id_{app_name}', app_id)
+    
+    deployment_id = paas_db.create_deployment(app_id, environment, branch, commit)
+    
+    for server in APP_SERVERS:
+        for step_info in paas_db.DEPLOYMENT_STEPS if hasattr(paas_db, 'DEPLOYMENT_STEPS') else []:
+            paas_db.create_deployment_step(deployment_id, server["name"], step_info)
+    
+    task = deploy_application_task.delay(deployment_id, app_name, environment, branch, commit)
+    
+    return jsonify({
+        "success": True,
+        "deployment_id": deployment_id,
+        "task_id": task.id,
+        "message": f"Deployment started for {app_name}",
+        "websocket_room": f"deployment:{deployment_id}"
+    }), 202
+
+
+@app.route("/api/deployments/<deployment_id>")
+@requires_auth
+def api_get_deployment_status(deployment_id):
+    """Get deployment status and progress."""
+    if not PAAS_DB_AVAILABLE:
+        return jsonify({"success": False, "error": "PaaS database not available"}), 503
+    
+    deployment = paas_db.get_deployment(deployment_id)
+    if not deployment:
+        return jsonify({"success": False, "error": "Deployment not found"}), 404
+    
+    progress = paas_db.get_deployment_progress(deployment_id) if hasattr(paas_db, 'get_deployment_progress') else {}
+    steps = paas_db.get_deployment_steps(deployment_id) if hasattr(paas_db, 'get_deployment_steps') else []
+    
+    return jsonify({
+        "success": True,
+        "deployment": deployment,
+        "progress": progress,
+        "steps": steps
+    })
+
+
+@app.route("/api/deployments/<deployment_id>/cancel", methods=["POST"])
+@requires_auth
+def api_cancel_deployment(deployment_id):
+    """Cancel a running deployment."""
+    if not PAAS_DB_AVAILABLE:
+        return jsonify({"success": False, "error": "PaaS database not available"}), 503
+    
+    deployment = paas_db.get_deployment(deployment_id)
+    if not deployment:
+        return jsonify({"success": False, "error": "Deployment not found"}), 404
+    
+    if deployment.get("status") not in ["pending", "running"]:
+        return jsonify({"success": False, "error": "Deployment already completed"}), 400
+    
+    paas_db.update_deployment(deployment_id, {
+        "status": "cancelled",
+        "finished_at": datetime.utcnow().isoformat()
+    })
+    
+    if WEBSOCKET_AVAILABLE:
+        emit_progress(deployment_id, "deployment_cancelled", {
+            "timestamp": datetime.utcnow().isoformat()
+        })
+    
+    return jsonify({"success": True, "message": "Deployment cancelled"})
+
+
+@app.route("/api/deployments/<deployment_id>/logs")
+@requires_auth
+def api_deployment_logs(deployment_id):
+    """Get deployment logs."""
+    if not PAAS_DB_AVAILABLE:
+        return jsonify({"success": False, "error": "PaaS database not available"}), 503
+    
+    steps = paas_db.get_deployment_steps(deployment_id) if hasattr(paas_db, 'get_deployment_steps') else []
+    
+    logs = []
+    for step in steps:
+        logs.append({
+            "server": step.get("server"),
+            "step": step.get("step"),
+            "status": step.get("status"),
+            "output": step.get("output", ""),
+            "started_at": step.get("started_at"),
+            "finished_at": step.get("finished_at")
+        })
+    
+    return jsonify({
+        "success": True,
+        "deployment_id": deployment_id,
+        "logs": logs
+    })
+
+
+@app.route("/api/websocket/health")
+def api_websocket_health():
+    """WebSocket health check endpoint."""
+    return jsonify({
+        "websocket_available": WEBSOCKET_AVAILABLE,
+        "paas_db_available": PAAS_DB_AVAILABLE,
+        "status": "healthy" if WEBSOCKET_AVAILABLE else "unavailable"
+    })
+
+
 @app.route("/api/apps/<app_name>/regrant-permissions", methods=["POST"])
 @requires_auth
 def api_regrant_permissions(app_name):
@@ -4775,6 +5045,12 @@ def api_health():
     })
 
 
+@app.route("/api/apps")
+def api_apps():
+    applications = load_applications()
+    return jsonify({"applications": list(applications.keys()), "apps": list(applications.keys())})
+
+
 @app.route("/api/alerts")
 def api_alerts():
     alerts = get_prometheus_alerts()
@@ -4785,6 +5061,341 @@ def api_alerts():
 @requires_auth
 def api_databases():
     return jsonify({"databases": load_databases(), "postgres_databases": get_pg_databases()})
+
+
+@app.route("/databases/<db_name>")
+@requires_auth
+def database_detail(db_name):
+    databases = load_databases()
+    db_info = databases.get(db_name)
+    return render_template("database_detail.html", 
+        db_name=db_name, 
+        db_info=db_info,
+        pg_host=PG_HOST,
+        pg_port=PG_PORT)
+
+
+@app.route("/api/databases/<db_name>/metrics")
+@requires_auth
+def api_database_metrics(db_name):
+    try:
+        conn = psycopg2.connect(
+            host=PG_HOST, port=PG_PORT, database=db_name,
+            user=PG_USER, password=PG_PASSWORD, connect_timeout=5
+        )
+        cur = conn.cursor()
+        
+        cur.execute("SELECT pg_database_size(%s)", (db_name,))
+        size = cur.fetchone()[0]
+        
+        cur.execute("SELECT count(*) FROM pg_stat_activity WHERE datname = %s", (db_name,))
+        connections = cur.fetchone()[0]
+        
+        cur.execute("SELECT setting FROM pg_settings WHERE name = 'max_connections'")
+        max_connections = int(cur.fetchone()[0])
+        
+        cur.execute("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'")
+        table_count = cur.fetchone()[0]
+        
+        try:
+            cur.execute("""
+                SELECT count(*) FROM pg_stat_statements 
+                WHERE mean_exec_time > 100 AND dbid = (SELECT oid FROM pg_database WHERE datname = %s)
+            """, (db_name,))
+            slow_queries = cur.fetchone()[0]
+        except:
+            slow_queries = 0
+        
+        cur.close()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "size": size,
+            "connections": connections,
+            "max_connections": max_connections,
+            "table_count": table_count,
+            "slow_queries": slow_queries
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+@app.route("/api/databases/<db_name>/tables")
+@requires_auth
+def api_database_tables(db_name):
+    try:
+        conn = psycopg2.connect(
+            host=PG_HOST, port=PG_PORT, database=db_name,
+            user=PG_USER, password=PG_PASSWORD, connect_timeout=5
+        )
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT 
+                schemaname, relname as name,
+                n_live_tup as rows,
+                pg_relation_size(schemaname || '.' || relname) as size,
+                (SELECT count(*) FROM pg_indexes WHERE tablename = relname) as indexes,
+                last_vacuum, last_analyze
+            FROM pg_stat_user_tables
+            ORDER BY n_live_tup DESC
+        """)
+        
+        tables = []
+        for row in cur.fetchall():
+            tables.append({
+                "schema": row[0],
+                "name": row[1],
+                "rows": row[2] or 0,
+                "size": row[3] or 0,
+                "indexes": row[4] or 0,
+                "last_vacuum": row[5].isoformat() if row[5] else None,
+                "last_analyze": row[6].isoformat() if row[6] else None
+            })
+        
+        cur.close()
+        conn.close()
+        
+        return jsonify({"success": True, "tables": tables})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e), "tables": []})
+
+
+@app.route("/api/databases/<db_name>/query-stats")
+@requires_auth
+def api_database_query_stats(db_name):
+    try:
+        conn = psycopg2.connect(
+            host=PG_HOST, port=PG_PORT, database=db_name,
+            user=PG_USER, password=PG_PASSWORD, connect_timeout=5
+        )
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT query, calls, total_exec_time, mean_exec_time, rows
+            FROM pg_stat_statements
+            WHERE dbid = (SELECT oid FROM pg_database WHERE datname = %s)
+            AND mean_exec_time > 100
+            ORDER BY total_exec_time DESC
+            LIMIT 20
+        """, (db_name,))
+        
+        queries = []
+        for row in cur.fetchall():
+            queries.append({
+                "query": row[0],
+                "calls": row[1],
+                "total_time": row[2],
+                "avg_time": row[3],
+                "rows": row[4]
+            })
+        
+        cur.close()
+        conn.close()
+        
+        return jsonify({"success": True, "queries": queries})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e), "queries": []})
+
+
+@app.route("/api/databases/<db_name>/index-stats")
+@requires_auth
+def api_database_index_stats(db_name):
+    try:
+        conn = psycopg2.connect(
+            host=PG_HOST, port=PG_PORT, database=db_name,
+            user=PG_USER, password=PG_PASSWORD, connect_timeout=5
+        )
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT 
+                indexrelname as name,
+                relname as table,
+                pg_relation_size(indexrelid) as size,
+                idx_scan as scans,
+                idx_tup_read as tuples_read
+            FROM pg_stat_user_indexes
+            ORDER BY idx_scan DESC
+            LIMIT 30
+        """)
+        
+        indexes = []
+        for row in cur.fetchall():
+            indexes.append({
+                "name": row[0],
+                "table": row[1],
+                "size": row[2] or 0,
+                "scans": row[3] or 0,
+                "tuples_read": row[4] or 0
+            })
+        
+        cur.close()
+        conn.close()
+        
+        return jsonify({"success": True, "indexes": indexes})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e), "indexes": []})
+
+
+@app.route("/databases/<db_name>/backups")
+@requires_auth
+def database_backups(db_name):
+    return render_template("database_backups.html", db_name=db_name)
+
+
+@app.route("/api/databases/<db_name>/backups", methods=["GET", "POST"])
+@requires_auth
+def api_database_backups(db_name):
+    if request.method == "POST":
+        try:
+            backup_dir = f"/var/backups/postgresql/{db_name}"
+            result = subprocess.run([
+                "ssh", f"root@{PG_HOST}",
+                f"mkdir -p {backup_dir} && "
+                f"pg_dump -U postgres {db_name} | gzip > {backup_dir}/$(date +%Y%m%d_%H%M%S).sql.gz"
+            ], capture_output=True, text=True, timeout=300)
+            
+            if result.returncode == 0:
+                return jsonify({"success": True, "message": "Backup created"})
+            else:
+                return jsonify({"success": False, "error": result.stderr})
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e)})
+    
+    try:
+        result = subprocess.run([
+            "ssh", f"root@{PG_HOST}",
+            f"ls -lh /var/backups/postgresql/{db_name}/ 2>/dev/null || echo ''"
+        ], capture_output=True, text=True, timeout=30)
+        
+        backups = []
+        if result.returncode == 0 and result.stdout.strip():
+            for line in result.stdout.strip().split('\n')[1:]:
+                if line:
+                    parts = line.split()
+                    if len(parts) >= 9:
+                        backups.append({
+                            "id": parts[-1],
+                            "size": parts[4],
+                            "created_at": " ".join(parts[5:8]),
+                            "status": "completed",
+                            "type": "full",
+                            "location": "local"
+                        })
+        
+        return jsonify({"success": True, "backups": list(reversed(backups))})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e), "backups": []})
+
+
+@app.route("/api/databases/<db_name>/backups/<backup_id>/restore", methods=["POST"])
+@requires_auth
+def api_restore_backup(db_name, backup_id):
+    try:
+        backup_path = f"/var/backups/postgresql/{db_name}/{backup_id}"
+        
+        result = subprocess.run([
+            "ssh", f"root@{PG_HOST}",
+            f"gunzip -c {backup_path} | psql -U postgres {db_name}"
+        ], capture_output=True, text=True, timeout=600)
+        
+        if result.returncode == 0:
+            return jsonify({"success": True, "message": "Database restored"})
+        else:
+            return jsonify({"success": False, "error": result.stderr})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+@app.route("/alerts")
+@requires_auth
+def alerts_page():
+    return render_template("alerts.html", 
+        prometheus_url=PROMETHEUS_URL,
+        grafana_url=GRAFANA_URL)
+
+
+@app.route("/api/alerts/rules")
+def api_alert_rules():
+    try:
+        resp = requests.get(f"{PROMETHEUS_URL}/api/v1/rules", timeout=10)
+        data = resp.json()
+        
+        rules = []
+        if data.get("status") == "success":
+            for group in data["data"]["groups"]:
+                for rule in group.get("rules", []):
+                    if rule.get("type") == "alerting":
+                        rules.append({
+                            "name": rule.get("name"),
+                            "expr": rule.get("query"),
+                            "severity": rule.get("labels", {}).get("severity", "info"),
+                            "state": rule.get("state"),
+                            "group": group.get("name")
+                        })
+        
+        return jsonify({"success": True, "rules": rules})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e), "rules": []})
+
+
+@app.route("/api/alerts/silences", methods=["GET", "POST", "DELETE"])
+def api_alert_silences():
+    alertmanager_url = os.environ.get("ALERTMANAGER_URL", "http://100.102.220.16:9093")
+    
+    if request.method == "GET":
+        try:
+            resp = requests.get(f"{alertmanager_url}/api/v2/silences", timeout=10)
+            return jsonify({"success": True, "silences": resp.json()})
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e), "silences": []})
+    
+    elif request.method == "POST":
+        data = request.json
+        
+        if data.get("silence_id"):
+            try:
+                resp = requests.delete(f"{alertmanager_url}/api/v2/silence/{data['silence_id']}", timeout=10)
+                return jsonify({"success": resp.status_code == 200})
+            except Exception as e:
+                return jsonify({"success": False, "error": str(e)})
+        
+        matchers = data.get("matchers", [])
+        duration = data.get("duration", "1h")
+        
+        import re
+        m = re.match(r"(\d+)([hmsd])", duration)
+        if m:
+            value = int(m.group(1))
+            unit = m.group(2)
+            seconds = {"s": 1, "m": 60, "h": 3600, "d": 86400}[unit] * value
+        else:
+            seconds = 3600
+        
+        from datetime import timedelta
+        ends_at = (datetime.utcnow() + timedelta(seconds=seconds)).isoformat() + "Z"
+        
+        silence_data = {
+            "matchers": matchers,
+            "startsAt": datetime.utcnow().isoformat() + "Z",
+            "endsAt": ends_at,
+            "createdBy": "dashboard",
+            "comment": data.get("comment", "Silenced from dashboard")
+        }
+        
+        try:
+            resp = requests.post(
+                f"{alertmanager_url}/api/v2/silences",
+                json=silence_data,
+                timeout=10
+            )
+            return jsonify({"success": resp.status_code == 200, "silence_id": resp.json().get("silenceID")})
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e)})
+    
+    return jsonify({"success": False, "error": "Invalid method"})
 
 
 @app.route("/api/servers")
@@ -5467,5 +6078,319 @@ def server_detail(server_name):
     )
 
 
+@app.route("/api/settings/export")
+@requires_auth
+def api_settings_export():
+    if not PAAS_DB_AVAILABLE:
+        return jsonify({"success": False, "error": "PaaS database module not available"})
+    
+    try:
+        config = paas_db.export_configuration()
+        return jsonify({"success": True, "config": config})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+@app.route("/api/settings/import", methods=["POST"])
+@requires_auth
+def api_settings_import():
+    if not PAAS_DB_AVAILABLE:
+        return jsonify({"success": False, "error": "PaaS database module not available"})
+    
+    data = request.json
+    if not data or "config" not in data:
+        return jsonify({"success": False, "error": "No configuration provided"})
+    
+    mode = data.get("mode", "merge")
+    if mode not in ["merge", "replace"]:
+        return jsonify({"success": False, "error": "Invalid mode. Use 'merge' or 'replace'"})
+    
+    try:
+        result = paas_db.import_configuration(data["config"], mode)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+@app.route("/api/settings/sync-status")
+@requires_auth
+def api_settings_sync_status():
+    if not PAAS_DB_AVAILABLE:
+        return jsonify({"last_sync_status": "unavailable", "last_sync_at": None})
+    
+    try:
+        status = paas_db.get_sync_status()
+        return jsonify(status)
+    except Exception:
+        return jsonify({"last_sync_status": "error", "last_sync_at": None})
+
+
+@app.route("/api/settings/sync-history")
+@requires_auth
+def api_settings_sync_history():
+    if not PAAS_DB_AVAILABLE:
+        return jsonify({"history": []})
+    
+    try:
+        history = paas_db.get_sync_history(limit=50)
+        return jsonify({"history": history})
+    except Exception:
+        return jsonify({"history": []})
+
+
+@app.route("/api/settings/gist", methods=["GET", "POST"])
+@requires_auth
+def api_settings_gist():
+    if not PAAS_DB_AVAILABLE:
+        return jsonify({"success": False, "error": "PaaS database module not available"})
+    
+    if request.method == "GET":
+        try:
+            status = paas_db.get_sync_status()
+            gist_id = status.get("gist_id") or paas_db.get_setting("gist_id", "")
+            auto_sync = status.get("auto_sync_enabled", 1)
+            return jsonify({
+                "gist_id": gist_id,
+                "auto_sync_enabled": bool(auto_sync)
+            })
+        except Exception as e:
+            return jsonify({"gist_id": "", "auto_sync_enabled": True})
+    
+    data = request.json or {}
+    
+    if data.get("github_token"):
+        global GITHUB_TOKEN
+        GITHUB_TOKEN = data["github_token"]
+        env_path = "/opt/dashboard/config/.env"
+        os.makedirs(os.path.dirname(env_path), exist_ok=True)
+        env_vars = {}
+        if os.path.exists(env_path):
+            with open(env_path, "r") as f:
+                for line in f:
+                    if "=" in line and not line.startswith("#"):
+                        key, val = line.split("=", 1)
+                        env_vars[key.strip()] = val.strip()
+        env_vars["GITHUB_TOKEN"] = data["github_token"]
+        with open(env_path, "w") as f:
+            for key, val in env_vars.items():
+                f.write(f"{key}={val}\n")
+    
+    if data.get("gist_id"):
+        paas_db.set_setting("gist_id", data["gist_id"])
+        paas_db.update_sync_status({"gist_id": data["gist_id"]})
+    
+    if "auto_sync_enabled" in data:
+        paas_db.update_sync_status({"auto_sync_enabled": 1 if data["auto_sync_enabled"] else 0})
+    
+    return jsonify({"success": True})
+
+
+@app.route("/api/settings/gist/sync", methods=["POST"])
+@requires_auth
+def api_settings_gist_sync():
+    if not PAAS_DB_AVAILABLE:
+        return jsonify({"success": False, "error": "PaaS database module not available"})
+    
+    try:
+        service = get_sync_service()
+        result = service.sync()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+@app.route("/api/settings/gist/create", methods=["POST"])
+@requires_auth
+def api_settings_gist_create():
+    if not PAAS_DB_AVAILABLE:
+        return jsonify({"success": False, "error": "PaaS database module not available"})
+    
+    if not GITHUB_TOKEN:
+        return jsonify({"success": False, "error": "GitHub token not configured"})
+    
+    try:
+        service = GistSyncService(github_token=GITHUB_TOKEN)
+        result = service.create_gist()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+@app.route("/api/settings/gist/versions")
+@requires_auth
+def api_settings_gist_versions():
+    if not PAAS_DB_AVAILABLE:
+        return jsonify({"versions": []})
+    
+    try:
+        service = get_sync_service()
+        versions = service.get_gist_versions()
+        return jsonify({"versions": versions})
+    except Exception:
+        return jsonify({"versions": []})
+
+
+@app.route("/api/settings/gist/restore", methods=["POST"])
+@requires_auth
+def api_settings_gist_restore():
+    if not PAAS_DB_AVAILABLE:
+        return jsonify({"success": False, "error": "PaaS database module not available"})
+    
+    data = request.json or {}
+    version = data.get("version")
+    mode = data.get("mode", "merge")
+    
+    try:
+        service = get_sync_service()
+        result = service.restore_from_gist(version=version, mode=mode)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+@app.route("/api/settings/rotate-key", methods=["POST"])
+@requires_auth
+def api_settings_rotate_key():
+    if not PAAS_DB_AVAILABLE:
+        return jsonify({"success": False, "error": "PaaS database module not available"})
+    
+    try:
+        with paas_db.get_db() as conn:
+            rows = conn.execute("SELECT id, key, value_encrypted, scope, description, app_id FROM secrets").fetchall()
+            
+            old_key = paas_db.get_encryption_key()
+            
+            new_key = paas_db.AESGCM.generate_key(bit_length=256)
+            key_path = paas_db.ENCRYPTION_KEY_PATH
+            with open(key_path + ".backup", "wb") as f:
+                f.write(old_key)
+            
+            from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+            import base64 as b64
+            
+            old_aesgcm = AESGCM(old_key)
+            new_aesgcm = AESGCM(new_key)
+            
+            reencrypted = 0
+            for row in rows:
+                try:
+                    encrypted = row["value_encrypted"]
+                    if encrypted:
+                        data = b64.b64decode(encrypted)
+                        nonce = data[:12]
+                        ciphertext = data[12:]
+                        plaintext = old_aesgcm.decrypt(nonce, ciphertext, None)
+                        
+                        new_nonce = secrets.token_bytes(12)
+                        new_ciphertext = new_aesgcm.encrypt(new_nonce, plaintext, None)
+                        new_encrypted = b64.b64encode(new_nonce + new_ciphertext).decode()
+                        
+                        conn.execute(
+                            "UPDATE secrets SET value_encrypted = ? WHERE id = ?",
+                            (new_encrypted, row["id"])
+                        )
+                        reencrypted += 1
+                except Exception:
+                    pass
+            
+            with open(key_path, "wb") as f:
+                f.write(new_key)
+            os.chmod(key_path, 0o600)
+            
+            conn.commit()
+        
+        return jsonify({"success": True, "reencrypted_count": reencrypted})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+@app.route("/api/settings/reset", methods=["POST"])
+@requires_auth
+def api_settings_reset():
+    if not PAAS_DB_AVAILABLE:
+        return jsonify({"success": False, "error": "PaaS database module not available"})
+    
+    try:
+        with paas_db.get_db() as conn:
+            conn.execute("DELETE FROM domains")
+            conn.execute("DELETE FROM secrets")
+            conn.execute("DELETE FROM databases")
+            conn.execute("DELETE FROM deployment_steps")
+            conn.execute("DELETE FROM deployments")
+            conn.execute("DELETE FROM applications")
+            conn.commit()
+        
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+SETUP_COMPLETE_FILE = "/data/.setup_complete"
+
+
+def is_setup_complete():
+    return os.path.exists(SETUP_COMPLETE_FILE)
+
+
+@app.route("/setup")
+def setup_wizard():
+    if is_setup_complete():
+        return redirect(url_for("index"))
+    return render_template("setup.html")
+
+
+@app.route("/api/setup/credentials", methods=["POST"])
+def api_setup_credentials():
+    data = request.json or {}
+    
+    env_path = "/opt/dashboard/config/.env"
+    os.makedirs(os.path.dirname(env_path), exist_ok=True)
+    
+    env_vars = {}
+    if os.path.exists(env_path):
+        with open(env_path, "r") as f:
+            for line in f:
+                if "=" in line and not line.startswith("#"):
+                    key, val = line.split("=", 1)
+                    env_vars[key.strip()] = val.strip()
+    
+    if data.get("github_token"):
+        env_vars["GITHUB_TOKEN"] = data["github_token"]
+        global GITHUB_TOKEN
+        GITHUB_TOKEN = data["github_token"]
+    
+    if data.get("cloudflare_api_token"):
+        env_vars["CLOUDFLARE_API_TOKEN"] = data["cloudflare_api_token"]
+        global CLOUDFLARE_API_TOKEN
+        CLOUDFLARE_API_TOKEN = data["cloudflare_api_token"]
+    
+    if data.get("cloudflare_zone_id"):
+        env_vars["CLOUDFLARE_ZONE_ID"] = data["cloudflare_zone_id"]
+        global CLOUDFLARE_ZONE_ID
+        CLOUDFLARE_ZONE_ID = data["cloudflare_zone_id"]
+    
+    if data.get("cloudflare_zone_name"):
+        env_vars["CLOUDFLARE_ZONE_NAME"] = data["cloudflare_zone_name"]
+        global CLOUDFLARE_ZONE_NAME
+        CLOUDFLARE_ZONE_NAME = data["cloudflare_zone_name"]
+    
+    with open(env_path, "w") as f:
+        for key, val in env_vars.items():
+            f.write(f"{key}={val}\n")
+    
+    return jsonify({"success": True})
+
+
+@app.route("/api/setup/complete", methods=["POST"])
+def api_setup_complete():
+    os.makedirs(os.path.dirname(SETUP_COMPLETE_FILE), exist_ok=True)
+    with open(SETUP_COMPLETE_FILE, "w") as f:
+        f.write(datetime.utcnow().isoformat())
+    return jsonify({"success": True})
+
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080, debug=True)
+    if WEBSOCKET_AVAILABLE and socketio:
+        socketio.run(app, host="0.0.0.0", port=8080, debug=True, allow_unsafe_werkzeug=True)
+    else:
+        app.run(host="0.0.0.0", port=8080, debug=True)

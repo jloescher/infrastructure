@@ -1,0 +1,379 @@
+{% extends "base.html" %}
+{% block title %}{{ db_name }} - Database - Quantyra{% endblock %}
+
+{% block breadcrumbs %}
+{% set breadcrumbs = [
+    {'label': 'Dashboard', 'url': '/'},
+    {'label': 'Databases', 'url': '/databases'},
+    {'label': db_name}
+] %}
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>{{ db_name }}</h1>
+    <div class="header-actions">
+        <a href="/databases/{{ db_name }}/backups" class="btn btn-secondary">Backups</a>
+        <button class="btn" onclick="refreshMetrics()">Refresh</button>
+    </div>
+</div>
+
+<div class="db-overview">
+    <div class="db-metric-cards">
+        <div class="db-metric-card">
+            <div class="db-metric-value" id="db-size">-</div>
+            <div class="db-metric-label">Database Size</div>
+        </div>
+        <div class="db-metric-card">
+            <div class="db-metric-value"><span id="db-connections">-</span>/<span id="db-max-connections">-</span></div>
+            <div class="db-metric-label">Connections</div>
+        </div>
+        <div class="db-metric-card">
+            <div class="db-metric-value" id="db-tables">-</div>
+            <div class="db-metric-label">Tables</div>
+        </div>
+        <div class="db-metric-card">
+            <div class="db-metric-value" id="db-slow-queries">-</div>
+            <div class="db-metric-label">Slow Queries</div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Connection String</h2>
+    <div class="connection-string">
+        <code id="connection-string">postgresql://user:****@host:5000/{{ db_name }}</code>
+        <button class="btn btn-sm btn-secondary" onclick="copyConnectionString()">Copy</button>
+    </div>
+    <div class="connection-info">
+        <span><strong>Host:</strong> {{ pg_host }}:{{ pg_port }}</span>
+        <span><strong>Read Host:</strong> {{ pg_host }}:5001</span>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Tables</h2>
+    <div class="table-container">
+        <table class="server-table">
+            <thead>
+                <tr>
+                    <th>Table Name</th>
+                    <th>Rows</th>
+                    <th>Size</th>
+                    <th>Indexes</th>
+                    <th>Last Vacuum</th>
+                    <th>Last Analyze</th>
+                </tr>
+            </thead>
+            <tbody id="tables-body">
+                <tr><td colspan="6" class="loading-cell">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Query Performance</h2>
+    <p class="hint">Queries with average execution time > 100ms</p>
+    <div class="table-container">
+        <table class="server-table">
+            <thead>
+                <tr>
+                    <th>Query</th>
+                    <th>Calls</th>
+                    <th>Avg Time</th>
+                    <th>Total Time</th>
+                    <th>Rows</th>
+                </tr>
+            </thead>
+            <tbody id="queries-body">
+                <tr><td colspan="5" class="loading-cell">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Index Usage</h2>
+    <div class="table-container">
+        <table class="server-table">
+            <thead>
+                <tr>
+                    <th>Index Name</th>
+                    <th>Table</th>
+                    <th>Size</th>
+                    <th>Scans</th>
+                    <th>Tuples Read</th>
+                </tr>
+            </thead>
+            <tbody id="indexes-body">
+                <tr><td colspan="5" class="loading-cell">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Recent Backups</h2>
+    <div id="backups-summary">
+        <div class="backup-status" id="last-backup">
+            <span class="backup-label">Last Backup:</span>
+            <span class="backup-value" id="last-backup-time">-</span>
+        </div>
+        <a href="/databases/{{ db_name }}/backups" class="btn btn-secondary">View All Backups</a>
+    </div>
+</div>
+
+<style>
+.db-overview {
+    margin-bottom: 1.5rem;
+}
+
+.db-metric-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+}
+
+.db-metric-card {
+    background: linear-gradient(135deg, #16213e 0%, #1a2744 100%);
+    border-radius: 12px;
+    padding: 1.5rem;
+    text-align: center;
+    border: 1px solid #2a3a5e;
+}
+
+.db-metric-value {
+    font-size: 2rem;
+    font-weight: 600;
+    color: #00d4ff;
+    margin-bottom: 0.5rem;
+}
+
+.db-metric-label {
+    font-size: 0.875rem;
+    color: #8899a6;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.connection-string {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: #0f1419;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+.connection-string code {
+    flex: 1;
+    font-size: 0.9rem;
+}
+
+.connection-info {
+    display: flex;
+    gap: 2rem;
+    color: #8899a6;
+    font-size: 0.875rem;
+}
+
+.loading-cell {
+    text-align: center;
+    color: #8899a6;
+    padding: 2rem;
+}
+
+.query-preview {
+    max-width: 400px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: monospace;
+    font-size: 0.8rem;
+}
+
+.backups-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.backup-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.backup-label {
+    color: #8899a6;
+}
+
+.backup-value {
+    font-weight: 500;
+}
+</style>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const dbName = '{{ db_name }}';
+const pgHost = '{{ pg_host }}';
+const pgPort = '{{ pg_port }}';
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadMetrics();
+    loadTables();
+    loadQueryStats();
+    loadIndexUsage();
+    loadBackups();
+});
+
+function loadMetrics() {
+    fetch(`/api/databases/${dbName}/metrics`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('db-size').textContent = formatBytes(data.size || 0);
+                document.getElementById('db-connections').textContent = data.connections || 0;
+                document.getElementById('db-max-connections').textContent = data.max_connections || '-';
+                document.getElementById('db-tables').textContent = data.table_count || 0;
+                document.getElementById('db-slow-queries').textContent = data.slow_queries || 0;
+                
+                const connStr = `postgresql://user:****@${pgHost}:${pgPort}/${dbName}`;
+                document.getElementById('connection-string').textContent = connStr;
+            }
+        })
+        .catch(err => console.error('Failed to load metrics:', err));
+}
+
+function loadTables() {
+    fetch(`/api/databases/${dbName}/tables`)
+        .then(r => r.json())
+        .then(data => {
+            const tbody = document.getElementById('tables-body');
+            if (!data.tables || data.tables.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">No tables found</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = data.tables.map(t => `
+                <tr>
+                    <td><strong>${t.name}</strong></td>
+                    <td>${formatNumber(t.rows)}</td>
+                    <td>${formatBytes(t.size)}</td>
+                    <td>${t.indexes || 0}</td>
+                    <td>${t.last_vacuum || '-'}</td>
+                    <td>${t.last_analyze || '-'}</td>
+                </tr>
+            `).join('');
+        })
+        .catch(err => {
+            document.getElementById('tables-body').innerHTML = 
+                '<tr><td colspan="6" class="loading-cell">Error loading tables</td></tr>';
+        });
+}
+
+function loadQueryStats() {
+    fetch(`/api/databases/${dbName}/query-stats`)
+        .then(r => r.json())
+        .then(data => {
+            const tbody = document.getElementById('queries-body');
+            if (!data.queries || data.queries.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="loading-cell">No slow queries found</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = data.queries.map(q => `
+                <tr>
+                    <td class="query-preview" title="${escapeHtml(q.query)}">${escapeHtml(q.query.substring(0, 100))}...</td>
+                    <td>${formatNumber(q.calls)}</td>
+                    <td>${q.avg_time.toFixed(2)}ms</td>
+                    <td>${(q.total_time / 1000).toFixed(2)}s</td>
+                    <td>${formatNumber(q.rows)}</td>
+                </tr>
+            `).join('');
+        })
+        .catch(err => {
+            document.getElementById('queries-body').innerHTML = 
+                '<tr><td colspan="5" class="loading-cell">Query stats not available (pg_stat_statements may not be enabled)</td></tr>';
+        });
+}
+
+function loadIndexUsage() {
+    fetch(`/api/databases/${dbName}/index-stats`)
+        .then(r => r.json())
+        .then(data => {
+            const tbody = document.getElementById('indexes-body');
+            if (!data.indexes || data.indexes.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="loading-cell">No indexes found</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = data.indexes.map(i => `
+                <tr>
+                    <td>${i.name}</td>
+                    <td>${i.table}</td>
+                    <td>${formatBytes(i.size)}</td>
+                    <td>${formatNumber(i.scans)}</td>
+                    <td>${formatNumber(i.tuples_read)}</td>
+                </tr>
+            `).join('');
+        })
+        .catch(err => {
+            document.getElementById('indexes-body').innerHTML = 
+                '<tr><td colspan="5" class="loading-cell">Error loading indexes</td></tr>';
+        });
+}
+
+function loadBackups() {
+    fetch(`/api/databases/${dbName}/backups`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.backups && data.backups.length > 0) {
+                const lastBackup = data.backups[0];
+                document.getElementById('last-backup-time').textContent = 
+                    new Date(lastBackup.created_at).toLocaleString();
+            } else {
+                document.getElementById('last-backup-time').textContent = 'No backups';
+            }
+        })
+        .catch(err => console.error('Failed to load backups:', err));
+}
+
+function refreshMetrics() {
+    showInfo('Refreshing metrics...');
+    loadMetrics();
+    loadTables();
+    loadQueryStats();
+    loadIndexUsage();
+    loadBackups();
+}
+
+function copyConnectionString() {
+    const text = document.getElementById('connection-string').textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        showSuccess('Connection string copied!');
+    });
+}
+
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function formatNumber(num) {
+    return num ? num.toLocaleString() : '0';
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+{% endblock %}

@@ -1,0 +1,54 @@
+[Unit]
+Description={{ app_name }} - {{ framework_display_name }} Application
+Documentation=https://github.com/quantyra/infrastructure
+After=network.target
+
+[Service]
+Type=simple
+User={{ runtime_user }}
+Group={{ runtime_group }}
+WorkingDirectory={{ app_dir }}
+
+# Environment setup
+Environment="NODE_ENV={{ node_env }}"
+Environment="PORT={{ port }}"
+{% if env_vars %}
+{% for key, value in env_vars.items() %}
+Environment="{{ key }}={{ value }}"
+{% endfor %}
+{% endif %}
+
+# Start command
+ExecStart={{ start_cmd }}
+
+# Restart policy
+Restart=always
+RestartSec=5
+StartLimitInterval=60
+StartLimitBurst=3
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax={{ memory_limit | default('512M') }}
+
+# Security hardening
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths={{ app_dir }}
+{% if log_dir %}
+ReadWritePaths={{ log_dir }}
+{% endif %}
+
+# Standard output/error handling
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier={{ app_name }}
+
+# Timeout settings
+TimeoutStartSec=60
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

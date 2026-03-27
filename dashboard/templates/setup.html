@@ -1,0 +1,520 @@
+{% extends "base.html" %}
+{% block title %}First-Run Setup - Quantyra PaaS{% endblock %}
+
+{% block content %}
+<div class="setup-container">
+    <div class="setup-header">
+        <h1>Welcome to Quantyra PaaS</h1>
+        <p>Let's configure your infrastructure management platform.</p>
+    </div>
+
+    <div class="setup-steps">
+        <div class="step-indicator">
+            <div class="step active" id="step-1-indicator">
+                <span class="step-number">1</span>
+                <span class="step-label">Welcome</span>
+            </div>
+            <div class="step" id="step-2-indicator">
+                <span class="step-number">2</span>
+                <span class="step-label">Credentials</span>
+            </div>
+            <div class="step" id="step-3-indicator">
+                <span class="step-number">3</span>
+                <span class="step-label">Backup</span>
+            </div>
+            <div class="step" id="step-4-indicator">
+                <span class="step-number">4</span>
+                <span class="step-label">Complete</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="setup-card">
+        <div class="step-content" id="step-1">
+            <h2>Welcome</h2>
+            <p>Quantyra PaaS is a self-hosted infrastructure management platform that helps you:</p>
+            <ul>
+                <li>Deploy and manage applications across multiple servers</li>
+                <li>Provision domains with automatic SSL certificates</li>
+                <li>Manage databases in a PostgreSQL cluster</li>
+                <li>Monitor infrastructure with Prometheus and Grafana</li>
+            </ul>
+            <p style="margin-top: 20px; color: #888;">
+                Your configuration will be stored in a local SQLite database at <code>/data/paas.db</code>.
+                Secrets are encrypted with AES-256-GCM.
+            </p>
+            <div class="step-actions">
+                <button class="btn" onclick="nextStep()">Get Started</button>
+            </div>
+        </div>
+
+        <div class="step-content" id="step-2" style="display: none;">
+            <h2>Configure Credentials</h2>
+            <p>Enter your API credentials. These will be stored securely and encrypted.</p>
+
+            <div class="form-group">
+                <label for="github-token">GitHub Personal Access Token</label>
+                <input type="password" id="github-token" placeholder="ghp_xxxx" class="form-input">
+                <div class="hint">Required for deploying from GitHub repositories. Needs <code>repo</code> and <code>gist</code> scopes.</div>
+            </div>
+
+            <div class="form-group">
+                <label for="cf-token">Cloudflare API Token</label>
+                <input type="password" id="cf-token" placeholder="Cloudflare API token" class="form-input">
+                <div class="hint">Required for DNS provisioning and SSL certificates. Needs <code>Zone.DNS</code>, <code>Zone.Zone</code>, <code>Zone.Settings</code>.</div>
+            </div>
+
+            <div class="form-group">
+                <label for="cf-zone-id">Default Cloudflare Zone ID (Optional)</label>
+                <input type="text" id="cf-zone-id" placeholder="26470f68ef4dbbf7bf5a770630aa2a97" class="form-input">
+            </div>
+
+            <div class="form-group">
+                <label for="cf-zone-name">Default Zone Name (Optional)</label>
+                <input type="text" id="cf-zone-name" placeholder="xotec.io" class="form-input">
+            </div>
+
+            <div id="credentials-error" class="error-message" style="display: none;"></div>
+
+            <div class="step-actions">
+                <button class="btn btn-secondary" onclick="prevStep()">Back</button>
+                <button class="btn" onclick="saveCredentials()">Continue</button>
+            </div>
+        </div>
+
+        <div class="step-content" id="step-3" style="display: none;">
+            <h2>Restore from Backup?</h2>
+            <p>Would you like to restore your configuration from a previous backup?</p>
+
+            <div class="restore-options">
+                <div class="restore-option" onclick="selectRestoreOption('none')">
+                    <input type="radio" name="restore" value="none" id="restore-none" checked>
+                    <label for="restore-none">
+                        <strong>Start Fresh</strong>
+                        <span>Create a new configuration from scratch</span>
+                    </label>
+                </div>
+
+                <div class="restore-option" onclick="selectRestoreOption('gist')">
+                    <input type="radio" name="restore" value="gist" id="restore-gist">
+                    <label for="restore-gist">
+                        <strong>Restore from GitHub Gist</strong>
+                        <span>Enter a Gist ID to restore from a previous backup</span>
+                    </label>
+                </div>
+
+                <div class="restore-option" onclick="selectRestoreOption('file')">
+                    <input type="radio" name="restore" value="file" id="restore-file">
+                    <label for="restore-file">
+                        <strong>Import from File</strong>
+                        <span>Upload a JSON configuration file</span>
+                    </label>
+                </div>
+            </div>
+
+            <div id="gist-restore-section" style="display: none; margin-top: 20px;">
+                <div class="form-group">
+                    <label for="gist-id">Gist ID</label>
+                    <input type="text" id="gist-id" placeholder="abc123def456" class="form-input">
+                    <div class="hint">The ID from a previous Quantyra PaaS Gist backup</div>
+                </div>
+            </div>
+
+            <div id="file-restore-section" style="display: none; margin-top: 20px;">
+                <div class="form-group">
+                    <label for="import-file">Configuration File</label>
+                    <input type="file" id="import-file" accept=".json" class="form-input">
+                </div>
+            </div>
+
+            <div id="restore-status" class="status-message" style="display: none;"></div>
+
+            <div class="step-actions">
+                <button class="btn btn-secondary" onclick="prevStep()">Back</button>
+                <button class="btn" onclick="handleRestore()">Continue</button>
+            </div>
+        </div>
+
+        <div class="step-content" id="step-4" style="display: none;">
+            <h2>All Set!</h2>
+            <div class="success-icon">✓</div>
+            <p>Your Quantyra PaaS is configured and ready to use.</p>
+
+            <div class="next-steps">
+                <h3>Next Steps:</h3>
+                <ol>
+                    <li>Add your first application in the <a href="/apps/create">Applications</a> section</li>
+                    <li>Configure domains with automatic SSL provisioning</li>
+                    <li>Set up monitoring and alerts</li>
+                </ol>
+            </div>
+
+            <div class="step-actions">
+                <button class="btn" onclick="window.location.href='/'">Go to Dashboard</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.setup-container {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 40px 20px;
+}
+.setup-header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+.setup-header h1 {
+    margin-bottom: 10px;
+}
+.setup-header p {
+    color: #888;
+}
+.setup-steps {
+    margin-bottom: 30px;
+}
+.step-indicator {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+}
+.step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+}
+.step-number {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #2d2d44;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    color: #888;
+    transition: all 0.3s;
+}
+.step.active .step-number {
+    background: #4299e1;
+    color: white;
+}
+.step.completed .step-number {
+    background: #48bb78;
+    color: white;
+}
+.step-label {
+    font-size: 0.85em;
+    color: #888;
+}
+.step.active .step-label {
+    color: #4299e1;
+}
+.setup-card {
+    background: #1a1a2e;
+    border-radius: 8px;
+    padding: 30px;
+    border: 1px solid #2d2d44;
+}
+.step-content h2 {
+    margin-top: 0;
+    margin-bottom: 15px;
+}
+.step-content ul {
+    margin: 15px 0;
+    padding-left: 20px;
+}
+.step-content li {
+    margin: 8px 0;
+    color: #ccc;
+}
+.form-input {
+    width: 100%;
+    padding: 10px;
+    background: #2d2d44;
+    border: 1px solid #3d3d5c;
+    border-radius: 4px;
+    color: #fff;
+    font-size: 1em;
+}
+.form-group {
+    margin-bottom: 20px;
+}
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+.hint {
+    font-size: 0.85em;
+    color: #888;
+    margin-top: 5px;
+}
+.step-actions {
+    margin-top: 30px;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+.restore-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.restore-option {
+    background: #2d2d44;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    padding: 15px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+.restore-option:hover {
+    border-color: #4299e1;
+}
+.restore-option input {
+    margin-right: 10px;
+}
+.restore-option label {
+    cursor: pointer;
+}
+.restore-option label strong {
+    display: block;
+    margin-bottom: 5px;
+}
+.restore-option label span {
+    color: #888;
+    font-size: 0.9em;
+}
+.success-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: #234d36;
+    color: #48bb78;
+    font-size: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 20px auto;
+}
+.next-steps {
+    background: #2d2d44;
+    padding: 20px;
+    border-radius: 8px;
+    margin: 20px 0;
+}
+.next-steps h3 {
+    margin-top: 0;
+}
+.next-steps ol {
+    margin: 0;
+    padding-left: 20px;
+}
+.next-steps li {
+    margin: 8px 0;
+}
+.next-steps a {
+    color: #4299e1;
+}
+.status-message {
+    margin-top: 15px;
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+.status-message.success { background: #234d36; color: #48bb78; }
+.status-message.error { background: #4d2323; color: #f56565; }
+.status-message.info { background: #2d3748; color: #90cdf4; }
+.error-message {
+    background: #4d2323;
+    color: #f56565;
+    padding: 10px;
+    border-radius: 4px;
+    margin-top: 10px;
+}
+</style>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentStep = 1;
+const totalSteps = 4;
+
+function showStep(step) {
+    document.querySelectorAll('.step-content').forEach(el => el.style.display = 'none');
+    document.getElementById(`step-${step}`).style.display = 'block';
+    
+    document.querySelectorAll('.step-indicator .step').forEach(el => {
+        el.classList.remove('active', 'completed');
+    });
+    
+    for (let i = 1; i <= totalSteps; i++) {
+        const indicator = document.getElementById(`step-${i}-indicator`);
+        if (i < step) {
+            indicator.classList.add('completed');
+        } else if (i === step) {
+            indicator.classList.add('active');
+        }
+    }
+    
+    currentStep = step;
+}
+
+function nextStep() {
+    if (currentStep < totalSteps) {
+        showStep(currentStep + 1);
+    }
+}
+
+function prevStep() {
+    if (currentStep > 1) {
+        showStep(currentStep - 1);
+    }
+}
+
+function saveCredentials() {
+    const githubToken = document.getElementById('github-token').value;
+    const cfToken = document.getElementById('cf-token').value;
+    const cfZoneId = document.getElementById('cf-zone-id').value;
+    const cfZoneName = document.getElementById('cf-zone-name').value;
+    
+    fetch('/api/setup/credentials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            github_token: githubToken,
+            cloudflare_api_token: cfToken,
+            cloudflare_zone_id: cfZoneId,
+            cloudflare_zone_name: cfZoneName
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            nextStep();
+        } else {
+            document.getElementById('credentials-error').textContent = data.error || 'Failed to save credentials';
+            document.getElementById('credentials-error').style.display = 'block';
+        }
+    })
+    .catch(err => {
+        document.getElementById('credentials-error').textContent = 'Error: ' + err;
+        document.getElementById('credentials-error').style.display = 'block';
+    });
+}
+
+function selectRestoreOption(option) {
+    document.querySelectorAll('input[name="restore"]').forEach(el => el.checked = false);
+    document.getElementById(`restore-${option}`).checked = true;
+    
+    document.getElementById('gist-restore-section').style.display = option === 'gist' ? 'block' : 'none';
+    document.getElementById('file-restore-section').style.display = option === 'file' ? 'block' : 'none';
+}
+
+function handleRestore() {
+    const restoreOption = document.querySelector('input[name="restore"]:checked').value;
+    const statusEl = document.getElementById('restore-status');
+    
+    if (restoreOption === 'none') {
+        completeSetup();
+        return;
+    }
+    
+    if (restoreOption === 'gist') {
+        const gistId = document.getElementById('gist-id').value.trim();
+        if (!gistId) {
+            statusEl.className = 'status-message error';
+            statusEl.textContent = 'Please enter a Gist ID';
+            statusEl.style.display = 'block';
+            return;
+        }
+        
+        statusEl.className = 'status-message info';
+        statusEl.textContent = 'Restoring from Gist...';
+        statusEl.style.display = 'block';
+        
+        fetch('/api/settings/gist', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ gist_id: gistId })
+        })
+        .then(() => fetch('/api/settings/gist/restore', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: 'replace' })
+        }))
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                statusEl.className = 'status-message success';
+                statusEl.textContent = 'Configuration restored successfully!';
+                setTimeout(completeSetup, 1000);
+            } else {
+                statusEl.className = 'status-message error';
+                statusEl.textContent = 'Restore failed: ' + (data.error || 'Unknown error');
+            }
+        })
+        .catch(err => {
+            statusEl.className = 'status-message error';
+            statusEl.textContent = 'Error: ' + err;
+        });
+        return;
+    }
+    
+    if (restoreOption === 'file') {
+        const fileInput = document.getElementById('import-file');
+        if (!fileInput.files[0]) {
+            statusEl.className = 'status-message error';
+            statusEl.textContent = 'Please select a file';
+            statusEl.style.display = 'block';
+            return;
+        }
+        
+        statusEl.className = 'status-message info';
+        statusEl.textContent = 'Importing configuration...';
+        statusEl.style.display = 'block';
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const config = JSON.parse(e.target.result);
+                fetch('/api/settings/import', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ config: config, mode: 'replace' })
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        statusEl.className = 'status-message success';
+                        statusEl.textContent = 'Configuration imported successfully!';
+                        setTimeout(completeSetup, 1000);
+                    } else {
+                        statusEl.className = 'status-message error';
+                        statusEl.textContent = 'Import failed: ' + (data.error || 'Unknown error');
+                    }
+                })
+                .catch(err => {
+                    statusEl.className = 'status-message error';
+                    statusEl.textContent = 'Error: ' + err;
+                });
+            } catch (err) {
+                statusEl.className = 'status-message error';
+                statusEl.textContent = 'Invalid JSON file';
+            }
+        };
+        reader.readAsText(fileInput.files[0]);
+        return;
+    }
+}
+
+function completeSetup() {
+    fetch('/api/setup/complete', { method: 'POST' })
+        .then(() => nextStep());
+}
+</script>
+{% endblock %}

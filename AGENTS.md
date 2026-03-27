@@ -47,8 +47,9 @@ infrastructure/
 │   └── roles/                   # Ansible roles
 ├── dashboard/
 │   ├── app.py                   # Flask application (main logic)
+│   ├── database.py              # SQLite database module for PaaS state
 │   ├── templates/               # Jinja2 HTML templates
-│   ├── config/                  # Runtime config (databases.yml, applications.yml)
+│   ├── config/                  # Runtime config (YAML fallback for SQLite)
 │   └── requirements.txt         # Python dependencies
 ├── docker/
 │   ├── docker-compose.yml       # Monitoring + dashboard stack
@@ -84,6 +85,22 @@ infrastructure/
 - **Cloudflare API Token**: zf5ncwuOaaXz2IJ1BVBu8myf0HQt5IxkPje_Rm1V
 - **Cloudflare Zone ID** (xotec.io): 26470f68ef4dbbf7bf5a770630aa2a97
 - **Cloudflare Zone ID** (rentalfixer.app): d565e98b12effe08e530da729b82c0b9
+
+### Database Storage (SQLite)
+
+**PaaS Internal State**: `/data/paas.db` (SQLite)
+- Stores applications, domains, secrets, servers, deployments
+- Secrets encrypted with AES-256-GCM
+- Encryption key: `/data/vault.key`
+
+**Application Databases**: External PostgreSQL cluster (managed by PaaS)
+- Write endpoint: `router-01:5000`, `router-02:5000`
+- Read endpoint: `router-01:5001`, `router-02:5001`
+
+**Configuration Sync**:
+- Export/import to JSON via Settings page
+- GitHub Gist backup with auto-sync
+- YAML files still supported as fallback
 
 ### Domain Configuration
 - **Production**: Root domain (domain.tld) with www redirect

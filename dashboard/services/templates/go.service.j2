@@ -1,0 +1,55 @@
+[Unit]
+Description={{ app_name }} - Go Application
+Documentation=https://github.com/quantyra/infrastructure
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ runtime_user }}
+Group={{ runtime_group }}
+WorkingDirectory={{ app_dir }}
+
+# Environment setup
+Environment="APP_ENV={{ app_env }}"
+Environment="PORT={{ port }}"
+{% if env_vars %}
+{% for key, value in env_vars.items() %}
+Environment="{{ key }}={{ value }}"
+{% endfor %}
+{% endif %}
+
+# Start command
+ExecStart={{ binary_path }}
+
+# Restart policy
+Restart=always
+RestartSec=5
+StartLimitInterval=60
+StartLimitBurst=3
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax={{ memory_limit | default('256M') }}
+
+# Security hardening
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths={{ app_dir }}
+{% if log_dir %}
+ReadWritePaths={{ log_dir }}
+{% endif %}
+
+# Standard output/error handling
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier={{ app_name }}
+
+# Timeout settings
+TimeoutStartSec=30
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

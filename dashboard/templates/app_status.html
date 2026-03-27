@@ -514,23 +514,31 @@ function runSeeds() {
     })
     .then(r => r.json())
     .then(data => {
-        if (data.success) {
-            let html = '<span style="color:#48bb78;">✓ Seeds ran successfully</span><br>';
-            html += '<code style="font-size:12px;">' + data.command + '</code>';
+        let html = '';
+        if (data.results) {
             for (const [server, result] of Object.entries(data.results)) {
                 if (result.success) {
-                    html += '<br><span style="color:#48bb78;">✓ ' + server + '</span>';
+                    html += '<span style="color:#48bb78;">✓ ' + server + '</span>';
                     if (result.stdout) {
-                        html += '<pre style="margin:5px 0; padding:5px; background:#2d2d44; font-size:11px; max-height:100px; overflow:auto;">' + result.stdout + '</pre>';
+                        html += '<pre style="margin:5px 0; padding:5px; background:#2d2d44; font-size:11px; max-height:150px; overflow:auto; white-space:pre-wrap;">' + result.stdout + '</pre>';
                     }
                 } else {
-                    html += '<br><span style="color:#f56565;">✗ ' + server + ': ' + (result.stderr || result.error || 'Unknown error') + '</span>';
+                    html += '<span style="color:#f56565;">✗ ' + server + '</span>';
+                    if (result.stdout) {
+                        html += '<pre style="margin:5px 0; padding:5px; background:#2d2d44; font-size:11px; max-height:150px; overflow:auto; white-space:pre-wrap;">' + result.stdout + '</pre>';
+                    }
+                    if (result.stderr && result.stderr.includes('failed')) {
+                        html += '<div style="font-size:11px; color:#888;">SSH: ' + result.stderr + '</div>';
+                    }
                 }
+                html += '<br>';
             }
-            resultDiv.innerHTML = html;
+        } else if (data.error) {
+            html = '<span style="color:#f56565;">Error: ' + data.error + '</span>';
         } else {
-            resultDiv.innerHTML = '<span style="color:#f56565;">Error: ' + (data.error || 'Unknown error') + '</span>';
+            html = '<span style="color:#f56565;">Unknown error</span>';
         }
+        resultDiv.innerHTML = html;
     })
     .catch(err => {
         resultDiv.innerHTML = '<span style="color:#f56565;">Error: ' + err + '</span>';

@@ -132,4 +132,561 @@
         </table>
     </div>
 </div>
+
+<div class="card">
+    <h2>Configuration Management</h2>
+    <p>Export or import PaaS configuration for backup and portability.</p>
+    
+    <div class="settings-section">
+        <h3>Export Configuration</h3>
+        <p class="hint">Export all PaaS configuration including applications, domains, secrets, and servers.</p>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button class="btn" onclick="exportConfig()">Export to File</button>
+            <button class="btn btn-secondary" onclick="syncToGist()">Sync to Gist Now</button>
+        </div>
+        <div id="export-status" class="status-message" style="display: none;"></div>
+    </div>
+    
+    <div class="settings-section">
+        <h3>Import Configuration</h3>
+        <p class="hint">Import configuration from a JSON file. You can merge with existing or replace entirely.</p>
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+            <input type="file" id="import-file" accept=".json" style="display: none;" onchange="handleImportFile(event)">
+            <button class="btn btn-secondary" onclick="document.getElementById('import-file').click()">Choose File</button>
+            <span id="import-filename" style="color: #888;"></span>
+        </div>
+        <div id="import-options" style="display: none; margin-top: 10px;">
+            <label style="display: block; margin: 8px 0;">
+                <input type="radio" name="import-mode" value="merge" checked> Merge (add new, update existing)
+            </label>
+            <label style="display: block; margin: 8px 0;">
+                <input type="radio" name="import-mode" value="replace"> Replace (clear all, then import)
+            </label>
+            <div style="margin-top: 10px;">
+                <button class="btn" onclick="importConfig()">Import</button>
+                <button class="btn btn-secondary" onclick="cancelImport()">Cancel</button>
+            </div>
+        </div>
+        <div id="import-preview" style="display: none; background: #2d2d44; padding: 15px; border-radius: 4px; margin-top: 15px; font-family: monospace; font-size: 0.85em;"></div>
+        <div id="import-status" class="status-message" style="display: none;"></div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>GitHub Gist Sync</h2>
+    <p>Automatically backup configuration to a private GitHub Gist.</p>
+    
+    <div class="form-group">
+        <label for="github-token-gist">GitHub Personal Access Token</label>
+        <input type="password" id="github-token-gist" placeholder="ghp_xxxx" class="form-input">
+        <div class="hint">Token must have <code>gist</code> scope. Can be the same token as above.</div>
+    </div>
+    
+    <div class="form-group">
+        <label for="gist-id">Gist ID</label>
+        <div style="display: flex; gap: 10px;">
+            <input type="text" id="gist-id" placeholder="Leave empty to create new Gist" class="form-input" style="flex: 1;">
+            <button class="btn btn-secondary" onclick="createNewGist()">Create New Gist</button>
+        </div>
+    </div>
+    
+    <div class="form-group">
+        <label style="display: flex; align-items: center; gap: 8px;">
+            <input type="checkbox" id="auto-sync" checked>
+            Auto-sync on configuration changes
+        </label>
+        <div class="hint">Automatically sync to Gist 5 seconds after any configuration change.</div>
+    </div>
+    
+    <div style="background: #2d2d44; padding: 15px; border-radius: 4px; margin: 15px 0;">
+        <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #3d3d5c;">
+            <span style="color: #888;">Status:</span>
+            <span id="sync-status">Checking...</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #3d3d5c;">
+            <span style="color: #888;">Last sync:</span>
+            <span id="last-sync">Never</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding: 8px 0;">
+            <span style="color: #888;">Gist URL:</span>
+            <span id="gist-url">Not configured</span>
+        </div>
+    </div>
+    
+    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <button class="btn" onclick="saveGistSettings()">Save Settings</button>
+        <a id="view-gist-link" href="#" target="_blank" class="btn btn-secondary" style="display: none;">View Gist</a>
+        <button class="btn btn-secondary" onclick="showRestoreModal()">Restore from Gist...</button>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Sync History</h2>
+    <div class="table-container">
+        <table class="server-table">
+            <thead>
+                <tr><th>Time</th><th>Type</th><th>Status</th><th>Details</th></tr>
+            </thead>
+            <tbody id="sync-history-body">
+                <tr><td colspan="4" style="text-align: center; color: #888;">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Data Management</h2>
+    
+    <h3>Database Information</h3>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 15px 0;">
+        <div style="background: #2d2d44; padding: 10px; border-radius: 4px;">
+            <div style="color: #888; font-size: 0.85em;">Database Type</div>
+            <div style="font-weight: 500;">SQLite</div>
+        </div>
+        <div style="background: #2d2d44; padding: 10px; border-radius: 4px;">
+            <div style="color: #888; font-size: 0.85em;">Location</div>
+            <div style="font-weight: 500;">/data/paas.db</div>
+        </div>
+        <div style="background: #2d2d44; padding: 10px; border-radius: 4px;">
+            <div style="color: #888; font-size: 0.85em;">Size</div>
+            <div id="db-size" style="font-weight: 500;">Calculating...</div>
+        </div>
+    </div>
+    
+    <h3 style="margin-top: 20px;">Secrets Encryption</h3>
+    <p class="hint">Secrets are encrypted with AES-256-GCM. The encryption key is stored separately.</p>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 15px 0;">
+        <div style="background: #2d2d44; padding: 10px; border-radius: 4px;">
+            <div style="color: #888; font-size: 0.85em;">Algorithm</div>
+            <div style="font-weight: 500;">AES-256-GCM</div>
+        </div>
+        <div style="background: #2d2d44; padding: 10px; border-radius: 4px;">
+            <div style="color: #888; font-size: 0.85em;">Key Location</div>
+            <div style="font-weight: 500;">/data/vault.key</div>
+        </div>
+    </div>
+    <div style="margin-top: 10px;">
+        <button class="btn btn-secondary" onclick="rotateEncryptionKey()">Rotate Encryption Key</button>
+    </div>
+    <div id="key-status" class="status-message" style="display: none;"></div>
+</div>
+
+<div class="card" style="border: 1px solid #f56565;">
+    <h2 style="color: #f56565;">Danger Zone</h2>
+    
+    <h3>Reset Configuration</h3>
+    <p class="hint" style="color: #f56565;">This will delete all applications, domains, secrets, and deployment history. This action cannot be undone.</p>
+    <button class="btn" style="background: #f56565;" onclick="confirmReset()">Reset All Configuration</button>
+</div>
+
+<div id="restore-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 1000; align-items: center; justify-content: center;">
+    <div style="background: #1a1a2e; border-radius: 8px; width: 500px; max-width: 90%; max-height: 80vh; overflow: hidden; display: flex; flex-direction: column;">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; border-bottom: 1px solid #2d2d44;">
+            <h3 style="margin: 0;">Restore from Gist</h3>
+            <button onclick="closeRestoreModal()" style="background: none; border: none; color: #888; font-size: 24px; cursor: pointer;">&times;</button>
+        </div>
+        <div style="padding: 20px; overflow-y: auto;">
+            <p>Select a version to restore:</p>
+            <div id="gist-versions" style="max-height: 300px; overflow-y: auto;">
+                <div style="text-align: center; padding: 20px; color: #888;">Loading versions...</div>
+            </div>
+            <div style="margin-top: 15px;">
+                <label style="display: block; margin: 8px 0;">
+                    <input type="radio" name="restore-mode" value="merge" checked> Merge with existing configuration
+                </label>
+                <label style="display: block; margin: 8px 0;">
+                    <input type="radio" name="restore-mode" value="replace"> Replace all configuration
+                </label>
+            </div>
+        </div>
+        <div style="padding: 15px 20px; border-top: 1px solid #2d2d44; display: flex; justify-content: flex-end; gap: 10px;">
+            <button class="btn btn-secondary" onclick="closeRestoreModal()">Cancel</button>
+            <button class="btn" onclick="restoreFromGist()" id="restore-btn" disabled>Restore Selected</button>
+        </div>
+    </div>
+</div>
+
+<style>
+.form-input {
+    width: 100%;
+    padding: 10px;
+    background: #2d2d44;
+    border: 1px solid #3d3d5c;
+    border-radius: 4px;
+    color: #fff;
+    font-size: 1em;
+}
+.settings-section {
+    margin: 20px 0;
+    padding: 15px 0;
+    border-bottom: 1px solid #2d2d44;
+}
+.settings-section:last-child {
+    border-bottom: none;
+}
+.settings-section h3 {
+    margin-top: 0;
+    font-size: 1.1em;
+}
+.status-message {
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+.status-message.success { background: #234d36; color: #48bb78; }
+.status-message.error { background: #4d2323; color: #f56565; }
+.status-message.info { background: #2d3748; color: #90cdf4; }
+</style>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let selectedVersion = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadSyncStatus();
+    loadSyncHistory();
+    loadGistSettings();
+});
+
+function loadSyncStatus() {
+    fetch('/api/settings/sync-status')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('sync-status').textContent = 
+                data.last_sync_status === 'success' ? '✓ Synced' : 
+                data.last_sync_status === 'failed' ? '✗ Failed' : 'Not synced';
+            document.getElementById('last-sync').textContent = 
+                data.last_sync_at ? new Date(data.last_sync_at).toLocaleString() : 'Never';
+            if (data.gist_url) {
+                document.getElementById('gist-url').innerHTML = 
+                    `<a href="${data.gist_url}" target="_blank" style="color: #4299e1;">${data.gist_id}</a>`;
+                document.getElementById('view-gist-link').href = data.gist_url;
+                document.getElementById('view-gist-link').style.display = 'inline-block';
+            }
+        })
+        .catch(() => {
+            document.getElementById('sync-status').textContent = 'Error loading';
+        });
+}
+
+function loadSyncHistory() {
+    fetch('/api/settings/sync-history')
+        .then(r => r.json())
+        .then(data => {
+            const tbody = document.getElementById('sync-history-body');
+            if (!data.history || data.history === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #888;">No sync history</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.history.map(item => `
+                <tr>
+                    <td>${new Date(item.created_at).toLocaleString()}</td>
+                    <td>${item.direction}</td>
+                    <td>${item.status === 'success' ? '<span style="color: #48bb78;">Success</span>' : '<span style="color: #f56565;">Failed</span>'}</td>
+                    <td>${item.details || '-'}</td>
+                </tr>
+            `).join('');
+        })
+        .catch(() => {
+            document.getElementById('sync-history-body').innerHTML = 
+                '<tr><td colspan="4" style="text-align: center; color: #888;">Error loading history</td></tr>';
+        });
+}
+
+function loadGistSettings() {
+    fetch('/api/settings/gist')
+        .then(r => r.json())
+        .then(data => {
+            if (data.gist_id) document.getElementById('gist-id').value = data.gist_id;
+            if (data.auto_sync_enabled !== undefined) document.getElementById('auto-sync').checked = data.auto_sync_enabled;
+        });
+}
+
+function exportConfig() {
+    const statusEl = document.getElementById('export-status');
+    statusEl.className = 'status-message info';
+    statusEl.textContent = 'Exporting...';
+    statusEl.style.display = 'block';
+    
+    fetch('/api/settings/export')
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                const blob = new Blob([JSON.stringify(data.config, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `quantyra-paas-config-${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                statusEl.className = 'status-message success';
+                statusEl.textContent = '✓ Configuration exported successfully';
+            } else {
+                statusEl.className = 'status-message error';
+                statusEl.textContent = '✗ Export failed: ' + (data.error || 'Unknown error');
+            }
+        })
+        .catch(err => {
+            statusEl.className = 'status-message error';
+            statusEl.textContent = '✗ Export failed: ' + err;
+        });
+}
+
+function handleImportFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    document.getElementById('import-filename').textContent = file.name;
+    document.getElementById('import-options').style.display = 'block';
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const config = JSON.parse(e.target.result);
+            const preview = document.getElementById('import-preview');
+            preview.style.display = 'block';
+            preview.innerHTML = `
+                <strong>Preview:</strong>
+                <ul style="margin: 10px 0;">
+                    <li>Applications: ${config.applications?.length || 0}</li>
+                    <li>Domains: ${config.domains?.length || 0}</li>
+                    <li>Secrets: ${config.secrets?.data?.length || 0}</li>
+                    <li>Servers: ${config.servers?.length || 0}</li>
+                    <li>Exported: ${config.exported_at || 'Unknown'}</li>
+                </ul>
+            `;
+        } catch (err) {
+            const statusEl = document.getElementById('import-status');
+            statusEl.className = 'status-message error';
+            statusEl.textContent = '✗ Invalid JSON file';
+            statusEl.style.display = 'block';
+        }
+    };
+    reader.readAsText(file);
+}
+
+function importConfig() {
+    const fileInput = document.getElementById('import-file');
+    const file = fileInput.files[0];
+    if (!file) return;
+    
+    const mode = document.querySelector('input[name="import-mode"]:checked').value;
+    const statusEl = document.getElementById('import-status');
+    statusEl.className = 'status-message info';
+    statusEl.textContent = 'Importing...';
+    statusEl.style.display = 'block';
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const config = JSON.parse(e.target.result);
+        
+        fetch('/api/settings/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ config: config, mode: mode })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                statusEl.className = 'status-message success';
+                statusEl.innerHTML = `✓ Import successful<br>Applications: ${data.applications.created} created, ${data.applications.updated} updated<br>Domains: ${data.domains.created} created, ${data.domains.updated} updated`;
+                cancelImport();
+            } else {
+                statusEl.className = 'status-message error';
+                statusEl.textContent = '✗ Import failed: ' + (data.error || 'Unknown error');
+            }
+        })
+        .catch(err => {
+            statusEl.className = 'status-message error';
+            statusEl.textContent = '✗ Import failed: ' + err;
+        });
+    };
+    reader.readAsText(file);
+}
+
+function cancelImport() {
+    document.getElementById('import-file').value = '';
+    document.getElementById('import-filename').textContent = '';
+    document.getElementById('import-options').style.display = 'none';
+    document.getElementById('import-preview').style.display = 'none';
+}
+
+function syncToGist() {
+    const statusEl = document.getElementById('export-status');
+    statusEl.className = 'status-message info';
+    statusEl.textContent = 'Syncing to Gist...';
+    statusEl.style.display = 'block';
+    
+    fetch('/api/settings/gist/sync', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                statusEl.className = 'status-message success';
+                statusEl.textContent = '✓ Synced to Gist successfully';
+                loadSyncStatus();
+                loadSyncHistory();
+            } else {
+                statusEl.className = 'status-message error';
+                statusEl.textContent = '✗ Sync failed: ' + (data.error || 'Unknown error');
+            }
+        })
+        .catch(err => {
+            statusEl.className = 'status-message error';
+            statusEl.textContent = '✗ Sync failed: ' + err;
+        });
+}
+
+function saveGistSettings() {
+    const token = document.getElementById('github-token-gist').value;
+    const gistId = document.getElementById('gist-id').value;
+    const autoSync = document.getElementById('auto-sync').checked;
+    
+    fetch('/api/settings/gist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            github_token: token,
+            gist_id: gistId,
+            auto_sync_enabled: autoSync
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('Settings saved successfully');
+            loadSyncStatus();
+        } else {
+            alert('Failed to save settings: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(err => alert('Failed to save settings: ' + err));
+}
+
+function createNewGist() {
+    if (!confirm('Create a new private Gist with current configuration?')) return;
+    
+    fetch('/api/settings/gist/create', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('gist-id').value = data.gist_id;
+                alert('Gist created successfully!\n\nGist ID: ' + data.gist_id + '\nURL: ' + data.gist_url);
+                loadSyncStatus();
+                loadSyncHistory();
+            } else {
+                alert('Failed to create Gist: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(err => alert('Failed to create Gist: ' + err));
+}
+
+function showRestoreModal() {
+    document.getElementById('restore-modal').style.display = 'flex';
+    document.getElementById('gist-versions').innerHTML = '<div style="text-align: center; padding: 20px; color: #888;">Loading versions...</div>';
+    document.getElementById('restore-btn').disabled = true;
+    selectedVersion = null;
+    
+    fetch('/api/settings/gist/versions')
+        .then(r => r.json())
+        .then(data => {
+            if (!data.versions || data.versions.length === 0) {
+                document.getElementById('gist-versions').innerHTML = '<div style="text-align: center; padding: 20px; color: #888;">No versions found</div>';
+                return;
+            }
+            
+            document.getElementById('gist-versions').innerHTML = data.versions.map(v => `
+                <div onclick="selectVersion('${v.version}', this)" style="padding: 12px; background: #2d2d44; border-radius: 4px; margin-bottom: 8px; cursor: pointer; border: 2px solid transparent;">
+                    <div style="font-weight: 500;">${new Date(v.committed_at).toLocaleString()}</div>
+                    <div style="font-size: 0.85em; color: #888;">Version: ${v.version.substring(0, 7)}</div>
+                </div>
+            `).join('');
+        })
+        .catch(() => {
+            document.getElementById('gist-versions').innerHTML = '<div style="text-align: center; padding: 20px; color: #888;">Error loading versions</div>';
+        });
+}
+
+function closeRestoreModal() {
+    document.getElementById('restore-modal').style.display = 'none';
+    selectedVersion = null;
+}
+
+function selectVersion(version, el) {
+    document.querySelectorAll('#gist-versions > div').forEach(item => item.style.borderColor = 'transparent');
+    el.style.borderColor = '#48bb78';
+    selectedVersion = version;
+    document.getElementById('restore-btn').disabled = false;
+}
+
+function restoreFromGist() {
+    if (!selectedVersion) return;
+    
+    const mode = document.querySelector('input[name="restore-mode"]:checked').value;
+    
+    if (!confirm(`Restore configuration from Gist?\n\nMode: ${mode}\nVersion: ${selectedVersion.substring(0, 7)}`)) return;
+    
+    fetch('/api/settings/gist/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ version: selectedVersion, mode: mode })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('Configuration restored successfully!');
+            closeRestoreModal();
+            loadSyncStatus();
+            loadSyncHistory();
+        } else {
+            alert('Failed to restore: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(err => alert('Failed to restore: ' + err));
+}
+
+function rotateEncryptionKey() {
+    if (!confirm('Rotate the encryption key?\n\nThis will re-encrypt all secrets with a new key. Make sure you have exported your configuration first!')) return;
+    
+    const statusEl = document.getElementById('key-status');
+    statusEl.className = 'status-message info';
+    statusEl.textContent = 'Rotating encryption key...';
+    statusEl.style.display = 'block';
+    
+    fetch('/api/settings/rotate-key', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                statusEl.className = 'status-message success';
+                statusEl.textContent = '✓ Encryption key rotated successfully';
+            } else {
+                statusEl.className = 'status-message error';
+                statusEl.textContent = '✗ Failed: ' + (data.error || 'Unknown error');
+            }
+        })
+        .catch(err => {
+            statusEl.className = 'status-message error';
+            statusEl.textContent = '✗ Failed: ' + err;
+        });
+}
+
+function confirmReset() {
+    if (!confirm('Are you sure you want to reset ALL configuration?\n\nThis will delete:\n- All applications\n- All domains\n- All secrets\n- All deployment history\n\nThis action CANNOT be undone!')) return;
+    
+    fetch('/api/settings/reset', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                alert('Configuration has been reset.');
+                location.reload();
+            } else {
+                alert('Failed to reset: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(err => alert('Failed to reset: ' + err));
+}
+</script>
 {% endblock %}

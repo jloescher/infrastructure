@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+{% block title %}{{ db_name }} Backups - Quantyra{% endblock %}
+
+{% set breadcrumbs = [
+    {'label': 'Dashboard', 'url': '/'},
+    {'label': 'Databases', 'url': '/databases'},
+    {'label': db_name, 'url': '/databases/' + db_name},
+    {'label': 'Backups'}
+] %}
+
+{% block content %}
+<div class="page-header">
+    <h1>{{ db_name }} - Backups</h1>
+    <div class="header-actions">
+        <a href="/databases/{{ db_name }}" class="btn btn-secondary">Back to Database</a>
+        <button class="btn" onclick="createBackup()">Create Backup</button>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Backup Settings</h2>
+    <div class="backup-settings">
+        <div class="setting-row">
+            <span class="setting-label">Auto-backup enabled:</span>
+            <span class="setting-value" id="auto-backup-enabled">Loading...</span>
+            <button class="btn btn-sm btn-secondary" onclick="toggleAutoBackup()">Toggle</button>
+        </div>
+        <div class="setting-row">
+            <span class="setting-label">Retention period:</span>
+            <span class="setting-value" id="retention-days">Loading...</span>
+        </div>
+        <div class="setting-row">
+            <span class="setting-label">Backup schedule:</span>
+            <span class="setting-value" id="backup-schedule">Loading...</span>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Backup History</h2>
+    <div class="table-container">
+        <table class="server-table">
+            <thead>
+                <tr>
+                    <th>Created</th>
+                    <th>Size</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Location</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="backups-body">
+                <tr><td colspan="6" class="loading-cell">Loading backups...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div id="restore-modal" class="modal">
+    <div class="modal-content">
+        <h3>Restore Backup</h3>
+        <p>Are you sure you want to restore from this backup?</p>
+        <p class="warning-text">⚠️ This will replace the current database with the backup data.</p>
+        <div class="backup-info" id="restore-backup-info"></div>
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="confirm-restore">
+                I understand this will replace current data
+            </label>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeRestoreModal()">Cancel</button>
+            <button class="btn" id="restore-btn" onclick="confirmRestore()" disabled>Restore</button>
+        </div>
+    </div>
+</div>
+
+<style>
+.backup-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.setting-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem;
+    background: #0f1419;
+    border-radius: 8px;
+}
+
+.setting-label {
+    color: #8899a6;
+    min-width: 180px;
+}
+
+.setting-value {
+    font-weight: 500;
+}
+
+.warning-text {
+    color: #f39c12;
+    font-size: 0.9rem;
+}
+
+.backup-info {
+    background: #0f1419;
+    padding: 1rem;
+    border-radius: 8px;
+    margin: 1rem 0;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-badge.completed {
+    background: rgba(39, 174, 96, 0.2);
+    color: #27ae60;
+}
+
+.status-badge.running {
+    background: rgba(0, 212, 255, 0.2);
+    color: #00d4ff;
+}
+
+.status-badge.failed {
+    background: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
+}
+</style>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const dbName = '{{ db_name }}';
+let selectedBackup = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadBackups();
+    loadSettings();
+});
+
+function loadBackups() {
+    fetch(`/api/databases/${dbName}/backups`)
+        .then(r => r.json())
+        .then(data => {
+            const tbody = document.getElementById('backups-body');
+            
+            if (!data.backups || data.backups.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">No backups found</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = data.backups.map(b => `
+                <tr>
+                    <td>${new Date(b.created_at).toLocaleString()}</td>
+                    <td>${formatBytes(b.size || 0)}</td>
+                    <td>${b.type || 'full'}</td>
+                    <td><span class="status-badge ${b.status}">${b.status}</span></td>
+                    <td>${b.location || 'local'}</td>
+                    <td>
+                        <button class="btn btn-sm btn-secondary" onclick="downloadBackup('${b.id}')">Download</button>
+                        <button class="btn btn-sm" onclick="showRestoreModal('${b.id}')">Restore</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteBackup('${b.id}')">Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+        })
+        .catch(err => {
+            document.getElementById('backups-body').innerHTML = 
+                '<tr><td colspan="6" class="loading-cell">Error loading backups</td></tr>';
+        });
+}
+
+function loadSettings() {
+    fetch(`/api/databases/${dbName}/backup-settings`)
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('auto-backup-enabled').textContent = data.auto_backup ? 'Yes' : 'No';
+            document.getElementById('retention-days').textContent = (data.retention_days || 30) + ' days';
+            document.getElementById('backup-schedule').textContent = data.schedule || 'Daily at 00:00';
+        })
+        .catch(err => console.error('Failed to load settings:', err));
+}
+
+function createBackup() {
+    if (!confirm('Create a manual backup of ' + dbName + '?')) return;
+    
+    showInfo('Creating backup...');
+    
+    fetch(`/api/databases/${dbName}/backups`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showSuccess('Backup created successfully');
+                loadBackups();
+            } else {
+                showError(data.error || 'Failed to create backup');
+            }
+        })
+        .catch(err => showError('Failed to create backup: ' + err.message));
+}
+
+function showRestoreModal(backupId) {
+    selectedBackup = backupId;
+    document.getElementById('restore-backup-info').textContent = `Backup ID: ${backupId}`;
+    document.getElementById('confirm-restore').checked = false;
+    document.getElementById('restore-btn').disabled = true;
+    document.getElementById('restore-modal').classList.add('active');
+}
+
+function closeRestoreModal() {
+    document.getElementById('restore-modal').classList.remove('active');
+    selectedBackup = null;
+}
+
+document.getElementById('confirm-restore').addEventListener('change', function() {
+    document.getElementById('restore-btn').disabled = !this.checked;
+});
+
+function confirmRestore() {
+    if (!selectedBackup) return;
+    
+    showInfo('Restoring database...');
+    
+    fetch(`/api/databases/${dbName}/backups/${selectedBackup}/restore`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showSuccess('Database restored successfully');
+                closeRestoreModal();
+            } else {
+                showError(data.error || 'Failed to restore database');
+            }
+        })
+        .catch(err => showError('Failed to restore: ' + err.message));
+}
+
+function downloadBackup(backupId) {
+    window.location.href = `/api/databases/${dbName}/backups/${backupId}/download`;
+}
+
+function deleteBackup(backupId) {
+    if (!confirm('Delete this backup? This cannot be undone.')) return;
+    
+    fetch(`/api/databases/${dbName}/backups/${backupId}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showSuccess('Backup deleted');
+                loadBackups();
+            } else {
+                showError(data.error || 'Failed to delete backup');
+            }
+        });
+}
+
+function toggleAutoBackup() {
+    fetch(`/api/databases/${dbName}/backup-settings`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                loadSettings();
+                showSuccess('Backup settings updated');
+            }
+        });
+}
+
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+</script>
+{% endblock %}

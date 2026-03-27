@@ -4,26 +4,89 @@
     <title>{% block title %}Quantyra Dashboard{% endblock %}</title>
     <link rel="stylesheet" href="/static/style.css">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
     {% block extra_head %}{% endblock %}
 </head>
 <body>
     <nav class="navbar">
-        <div class="nav-brand">Quantyra Dashboard</div>
-        <div class="nav-links">
-            <a href="/" class="{% if request.path == '/' %}active{% endif %}">Dashboard</a>
-            <a href="/databases" class="{% if '/databases' in request.path %}active{% endif %}">Databases</a>
-            <a href="/servers" class="{% if request.path == '/servers' or request.path.startswith('/servers/') %}active{% endif %}" id="servers-nav">
-                Servers
+        <div class="nav-left">
+            <button class="nav-toggle" onclick="toggleNav()">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+            <a href="/" class="nav-brand">
+                <span class="nav-logo">Q</span>
+                <span class="nav-brand-text">Quantyra</span>
+            </a>
+        </div>
+        
+        <div class="nav-links" id="nav-links">
+            <a href="/" class="nav-link {% if request.path == '/' %}active{% endif %}">
+                <span class="nav-icon">📊</span>
+                <span class="nav-text">Dashboard</span>
+            </a>
+            <a href="/apps" class="nav-link {% if '/apps' in request.path %}active{% endif %}">
+                <span class="nav-icon">🚀</span>
+                <span class="nav-text">Applications</span>
+            </a>
+            <a href="/databases" class="nav-link {% if '/databases' in request.path %}active{% endif %}">
+                <span class="nav-icon">🗄️</span>
+                <span class="nav-text">Databases</span>
+            </a>
+            <a href="/servers" class="nav-link {% if request.path == '/servers' or request.path.startswith('/servers/') %}active{% endif %}">
+                <span class="nav-icon">🖥️</span>
+                <span class="nav-text">Servers</span>
                 <span class="nav-badge" id="updates-badge" style="display: none;">0</span>
             </a>
-            <a href="/secrets" class="{% if '/secrets' in request.path %}active{% endif %}">Secrets</a>
-            <a href="/apps" class="{% if '/apps' in request.path %}active{% endif %}">Applications</a>
-            <a href="/docs" class="{% if '/docs' in request.path %}active{% endif %}">Docs</a>
-            <a href="/settings" class="{% if request.path == '/settings' %}active{% endif %}">Settings</a>
-            <a href="{{ prometheus_url | default('http://100.102.220.16:9090') }}" target="_blank">Prometheus</a>
-            <a href="{{ grafana_url | default('http://100.102.220.16:3000') }}" target="_blank">Grafana</a>
+            <a href="/secrets" class="nav-link {% if '/secrets' in request.path %}active{% endif %}">
+                <span class="nav-icon">🔐</span>
+                <span class="nav-text">Secrets</span>
+            </a>
+            <a href="/docs" class="nav-link {% if '/docs' in request.path %}active{% endif %}">
+                <span class="nav-icon">📚</span>
+                <span class="nav-text">Docs</span>
+            </a>
+            <a href="/settings" class="nav-link {% if request.path == '/settings' %}active{% endif %}">
+                <span class="nav-icon">⚙️</span>
+                <span class="nav-text">Settings</span>
+            </a>
+            <div class="nav-divider"></div>
+            <a href="{{ prometheus_url | default('http://100.102.220.16:9090') }}" target="_blank" class="nav-link nav-external">
+                <span class="nav-icon">📈</span>
+                <span class="nav-text">Prometheus</span>
+                <span class="nav-external-icon">↗</span>
+            </a>
+            <a href="{{ grafana_url | default('http://100.102.220.16:3000') }}" target="_blank" class="nav-link nav-external">
+                <span class="nav-icon">📉</span>
+                <span class="nav-text">Grafana</span>
+                <span class="nav-external-icon">↗</span>
+            </a>
+        </div>
+        
+        <div class="nav-right">
+            <button class="nav-search" onclick="openSearch()" title="Search (Ctrl+K)">
+                <span class="nav-icon">🔍</span>
+            </button>
         </div>
     </nav>
+    
+    {% block breadcrumbs %}
+    {% if breadcrumbs %}
+    <div class="breadcrumbs">
+        <div class="container">
+            {% for crumb in breadcrumbs %}
+                {% if crumb.url %}
+                    <a href="{{ crumb.url }}">{{ crumb.label }}</a>
+                    <span class="breadcrumb-sep">›</span>
+                {% else %}
+                    <span class="breadcrumb-current">{{ crumb.label }}</span>
+                {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    {% endblock %}
     
     <div class="container">
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -37,12 +100,143 @@
         {% block content %}{% endblock %}
     </div>
     
+    <div id="toast-container"></div>
+    
+    <div id="search-modal" class="search-modal" style="display: none;">
+        <div class="search-backdrop" onclick="closeSearch()"></div>
+        <div class="search-content">
+            <div class="search-input-wrapper">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="search-input" placeholder="Search applications, servers, databases..." autocomplete="off">
+                <span class="search-shortcut">ESC</span>
+            </div>
+            <div id="search-results" class="search-results"></div>
+        </div>
+    </div>
+    
+    <div id="progress-modal" class="progress-modal" style="display: none;">
+        <div class="progress-backdrop"></div>
+        <div class="progress-content">
+            <div class="progress-header">
+                <h3 id="progress-title">Deploying...</h3>
+                <button class="progress-close" onclick="closeProgressModal()">×</button>
+            </div>
+            <div class="progress-body">
+                <div class="progress-info">
+                    <span id="progress-app"></span>
+                    <span id="progress-branch"></span>
+                    <span id="progress-commit"></span>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="progress-bar">
+                        <div class="progress-fill" style="width: 0%"></div>
+                    </div>
+                    <span class="progress-percent" id="progress-percent">0%</span>
+                </div>
+                <div id="progress-servers" class="progress-servers"></div>
+                <div id="progress-output" class="progress-output"></div>
+            </div>
+            <div class="progress-footer">
+                <span id="progress-time"></span>
+                <div class="progress-actions">
+                    <button class="btn btn-secondary" onclick="closeProgressModal()">Background</button>
+                    <button class="btn" id="progress-cancel" onclick="cancelDeployment()">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <footer class="footer">
         <p>Quantyra Infrastructure Dashboard &copy; 2026</p>
     </footer>
+    
     {% block extra_scripts %}{% endblock %}
     
+    <script src="/static/toast.js"></script>
+    <script src="/static/progress.js"></script>
     <script>
+    // Mobile nav toggle
+    function toggleNav() {
+        document.getElementById('nav-links').classList.toggle('open');
+    }
+    
+    // Search modal
+    function openSearch() {
+        document.getElementById('search-modal').style.display = 'flex';
+        document.getElementById('search-input').focus();
+    }
+    
+    function closeSearch() {
+        document.getElementById('search-modal').style.display = 'none';
+        document.getElementById('search-input').value = '';
+        document.getElementById('search-results').innerHTML = '';
+    }
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', function(e) {
+        // Ctrl+K or Cmd+K for search
+        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+            e.preventDefault();
+            openSearch();
+        }
+        // ESC to close modals
+        if (e.key === 'Escape') {
+            closeSearch();
+        }
+    });
+    
+    // Search functionality
+    document.getElementById('search-input').addEventListener('input', function(e) {
+        const query = e.target.value.trim();
+        if (query.length < 2) {
+            document.getElementById('search-results').innerHTML = '<div class="search-empty">Type at least 2 characters...</div>';
+            return;
+        }
+        
+        Promise.all([
+            fetch('/api/apps').then(r => r.json()).catch(() => ({apps: []})),
+            fetch('/api/databases').then(r => r.json()).catch(() => ({databases: []})),
+            fetch('/api/servers').then(r => r.json()).catch(() => ({}))
+        ]).then(([appsData, dbsData, serversData]) => {
+            const results = [];
+            
+            // Search apps
+            (appsData.applications || appsData.apps || []).forEach(app => {
+                const name = app.name || app;
+                if (name.toLowerCase().includes(query.toLowerCase())) {
+                    results.push({type: 'app', name: name, url: '/apps/' + name});
+                }
+            });
+            
+            // Search databases
+            (dbsData.databases || []).forEach(db => {
+                const name = db.name || db;
+                if (name.toLowerCase().includes(query.toLowerCase())) {
+                    results.push({type: 'database', name: name, url: '/databases/' + name});
+                }
+            });
+            
+            // Search servers
+            Object.entries(serversData).forEach(([name, info]) => {
+                if (name.toLowerCase().includes(query.toLowerCase())) {
+                    results.push({type: 'server', name: name, url: '/servers/' + name});
+                }
+            });
+            
+            const resultsEl = document.getElementById('search-results');
+            if (results.length === 0) {
+                resultsEl.innerHTML = '<div class="search-empty">No results found</div>';
+            } else {
+                resultsEl.innerHTML = results.slice(0, 10).map(r => `
+                    <a href="${r.url}" class="search-result" onclick="closeSearch()">
+                        <span class="search-result-type">${r.type}</span>
+                        <span class="search-result-name">${r.name}</span>
+                    </a>
+                `).join('');
+            }
+        });
+    });
+    
     // Fetch updates count for nav badge
     (function() {
         fetch('/api/updates/status')
@@ -53,7 +247,6 @@
                 badge.textContent = data.total_updates;
                 badge.style.display = 'inline';
                 
-                // Add security indicator if there are security updates
                 if (data.security_updates > 0) {
                     badge.style.background = '#e74c3c';
                     badge.title = data.security_updates + ' security updates';

@@ -1,0 +1,362 @@
+{% extends "base.html" %}
+{% block title %}Alerts - Quantyra{% endblock %}
+
+{% set breadcrumbs = [
+    {'label': 'Dashboard', 'url': '/'},
+    {'label': 'Alerts'}
+] %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Alerts</h1>
+    <div class="header-actions">
+        <a href="{{ grafana_url | default('http://100.102.220.16:3000') }}/alerting/list" target="_blank" class="btn btn-secondary">Grafana Alerts</a>
+    </div>
+</div>
+
+<div class="alerts-summary">
+    <div class="alert-stat-cards">
+        <div class="alert-stat-card critical">
+            <div class="stat-value" id="critical-count">0</div>
+            <div class="stat-label">Critical</div>
+        </div>
+        <div class="alert-stat-card warning">
+            <div class="stat-value" id="warning-count">0</div>
+            <div class="stat-label">Warning</div>
+        </div>
+        <div class="alert-stat-card info">
+            <div class="stat-value" id="info-count">0</div>
+            <div class="stat-label">Info</div>
+        </div>
+        <div class="alert-stat-card silenced">
+            <div class="stat-value" id="silenced-count">0</div>
+            <div class="stat-label">Silenced</div>
+        </div>
+    </div>
+</div>
+
+<div class="tabs">
+    <a href="#" class="tab active" onclick="showTab('active')">Active Alerts</a>
+    <a href="#" class="tab" onclick="showTab('rules')">Alert Rules</a>
+    <a href="#" class="tab" onclick="showTab('silences')">Silences</a>
+</div>
+
+<div id="active-tab" class="tab-content">
+    <div class="card">
+        <div class="table-container">
+            <table class="server-table">
+                <thead>
+                    <tr>
+                        <th>Severity</th>
+                        <th>Alert</th>
+                        <th>Source</th>
+                        <th>Duration</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="alerts-body">
+                    <tr><td colspan="5" class="loading-cell">Loading alerts...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="rules-tab" class="tab-content" style="display: none;">
+    <div class="card">
+        <div class="page-header" style="margin-bottom: 1rem;">
+            <h3 style="margin: 0;">Configured Alert Rules</h3>
+            <button class="btn" onclick="showCreateRuleModal()">Create Rule</button>
+        </div>
+        <div class="table-container">
+            <table class="server-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Expression</th>
+                        <th>Severity</th>
+                        <th>State</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="rules-body">
+                    <tr><td colspan="5" class="loading-cell">Loading rules...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="silences-tab" class="tab-content" style="display: none;">
+    <div class="card">
+        <div class="page-header" style="margin-bottom: 1rem;">
+            <h3 style="margin: 0;">Active Silences</h3>
+            <button class="btn" onclick="showCreateSilenceModal()">Create Silence</button>
+        </div>
+        <div id="silences-body">
+            <div class="loading-cell">Loading silences...</div>
+        </div>
+    </div>
+</div>
+
+<style>
+.alerts-summary {
+    margin-bottom: 1.5rem;
+}
+
+.alert-stat-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+}
+
+.alert-stat-card {
+    background: #16213e;
+    border-radius: 12px;
+    padding: 1.5rem;
+    text-align: center;
+    border: 1px solid #2a3a5e;
+}
+
+.alert-stat-card .stat-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+}
+
+.alert-stat-card .stat-label {
+    font-size: 0.875rem;
+    color: #8899a6;
+    text-transform: uppercase;
+    margin-top: 0.5rem;
+}
+
+.alert-stat-card.critical .stat-value { color: #e74c3c; }
+.alert-stat-card.warning .stat-value { color: #f39c12; }
+.alert-stat-card.info .stat-value { color: #00d4ff; }
+.alert-stat-card.silenced .stat-value { color: #8899a6; }
+
+.severity-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.severity-badge.critical {
+    background: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
+}
+
+.severity-badge.warning {
+    background: rgba(243, 156, 18, 0.2);
+    color: #f39c12;
+}
+
+.severity-badge.info {
+    background: rgba(0, 212, 255, 0.2);
+    color: #00d4ff;
+}
+
+.silence-item {
+    background: #0f1419;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border: 1px solid #2a3a5e;
+}
+
+.silence-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.silence-matchers {
+    font-family: monospace;
+    font-size: 0.875rem;
+    color: #8899a6;
+}
+</style>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadAlerts();
+    loadRules();
+    loadSilences();
+});
+
+function loadAlerts() {
+    fetch('/api/alerts')
+        .then(r => r.json())
+        .then(data => {
+            const alerts = data.alerts || [];
+            
+            let critical = 0, warning = 0, info = 0;
+            alerts.forEach(a => {
+                if (a.labels?.severity === 'critical') critical++;
+                else if (a.labels?.severity === 'warning') warning++;
+                else info++;
+            });
+            
+            document.getElementById('critical-count').textContent = critical;
+            document.getElementById('warning-count').textContent = warning;
+            document.getElementById('info-count').textContent = info;
+            
+            const tbody = document.getElementById('alerts-body');
+            if (alerts.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="loading-cell">No active alerts</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = alerts.map(a => `
+                <tr>
+                    <td><span class="severity-badge ${a.labels?.severity || 'info'}">${a.labels?.severity || 'info'}</span></td>
+                    <td><strong>${escapeHtml(a.labels?.alertname || 'Unknown')}</strong><br><small style="color: #8899a6;">${escapeHtml(a.annotations?.summary || '')}</small></td>
+                    <td>${a.labels?.job || a.labels?.instance || '-'}</td>
+                    <td>${formatDuration(a.startsAt)}</td>
+                    <td>
+                        <button class="btn btn-sm btn-secondary" onclick="silenceAlert('${a.fingerprint}')">Silence</button>
+                        <a href="{{ prometheus_url | default('http://100.102.220.16:9090') }}/graph?g0.expr=${encodeURIComponent(a.labels?.alertname || '')}" target="_blank" class="btn btn-sm btn-secondary">Query</a>
+                    </td>
+                </tr>
+            `).join('');
+        })
+        .catch(err => {
+            document.getElementById('alerts-body').innerHTML = 
+                '<tr><td colspan="5" class="loading-cell">Error loading alerts</td></tr>';
+        });
+}
+
+function loadRules() {
+    fetch('/api/alerts/rules')
+        .then(r => r.json())
+        .then(data => {
+            const rules = data.rules || [];
+            const tbody = document.getElementById('rules-body');
+            
+            if (rules.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="loading-cell">No custom rules configured</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = rules.map(r => `
+                <tr>
+                    <td><strong>${escapeHtml(r.name)}</strong></td>
+                    <td><code>${escapeHtml(r.expr)}</code></td>
+                    <td><span class="severity-badge ${r.severity}">${r.severity}</span></td>
+                    <td>${r.state || 'inactive'}</td>
+                    <td>
+                        <button class="btn btn-sm btn-secondary" onclick="editRule('${r.id}')">Edit</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteRule('${r.id}')">Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+        })
+        .catch(err => {
+            document.getElementById('rules-body').innerHTML = 
+                '<tr><td colspan="5" class="loading-cell">Error loading rules</td></tr>';
+        });
+}
+
+function loadSilences() {
+    fetch('/api/alerts/silences')
+        .then(r => r.json())
+        .then(data => {
+            const silences = data.silences || [];
+            const silenced = silences.filter(s => s.status?.state !== 'expired').length;
+            document.getElementById('silenced-count').textContent = silenced;
+            
+            const container = document.getElementById('silences-body');
+            
+            if (silences.length === 0) {
+                container.innerHTML = '<div class="loading-cell">No silences configured</div>';
+                return;
+            }
+            
+            container.innerHTML = silences.map(s => `
+                <div class="silence-item">
+                    <div class="silence-header">
+                        <strong>${escapeHtml(s.comment || 'No comment')}</strong>
+                        <span style="color: ${s.status?.state === 'expired' ? '#8899a6' : '#f39c12'};">${s.status?.state || 'active'}</span>
+                    </div>
+                    <div class="silence-matchers">
+                        ${s.matchers?.map(m => `${m.isEqual ? '' : '~'}${m.name}${m.isRegex ? '=~' : '='}'${m.value}'`).join(', ') || '-'}
+                    </div>
+                    <div style="margin-top: 0.5rem; color: #8899a6; font-size: 0.875rem;">
+                        Ends: ${new Date(s.endsAt).toLocaleString()}
+                    </div>
+                    ${s.status?.state !== 'expired' ? `<button class="btn btn-sm btn-secondary" onclick="deleteSilence('${s.id}')" style="margin-top: 0.5rem;">Delete</button>` : ''}
+                </div>
+            `).join('');
+        })
+        .catch(err => {
+            document.getElementById('silences-body').innerHTML = 
+                '<div class="loading-cell">Error loading silences</div>';
+        });
+}
+
+function showTab(tab) {
+    document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+    document.getElementById(tab + '-tab').style.display = 'block';
+    event.target.classList.add('active');
+}
+
+function silenceAlert(fingerprint) {
+    const duration = prompt('Silence duration (e.g., 1h, 30m, 1d):', '1h');
+    if (!duration) return;
+    
+    fetch('/api/alerts/silences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fingerprint, duration, comment: 'Silenced from dashboard' })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showSuccess('Alert silenced');
+            loadSilences();
+        } else {
+            showError(data.error || 'Failed to silence alert');
+        }
+    });
+}
+
+function deleteSilence(id) {
+    if (!confirm('Delete this silence?')) return;
+    
+    fetch(`/api/alerts/silences/${id}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showSuccess('Silence deleted');
+                loadSilences();
+            }
+        });
+}
+
+function formatDuration(startsAt) {
+    if (!startsAt) return '-';
+    const start = new Date(startsAt);
+    const now = new Date();
+    const diff = Math.floor((now - start) / 1000);
+    
+    if (diff < 60) return `${diff}s`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ${Math.floor((diff % 3600) / 60)}m`;
+    return `${Math.floor(diff / 86400)}d`;
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+{% endblock %}
