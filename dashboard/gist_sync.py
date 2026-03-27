@@ -32,7 +32,7 @@ class GistSyncService:
     """Service for syncing PaaS configuration to GitHub Gist."""
     
     def __init__(self, github_token: str = None, gist_id: str = None):
-        self.github_token = github_token or os.environ.get('GITHUB_TOKEN')
+        self.github_token = github_token or os.environ.get('GITHUB_TOKEN') or get_setting('github_token')
         self.gist_id = gist_id or os.environ.get('GIST_ID') or get_setting('gist_id')
         self._sync_timer = None
         self._sync_lock = threading.Lock()

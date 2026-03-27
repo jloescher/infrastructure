@@ -6408,7 +6408,7 @@ def api_settings_gist():
     if data.get("github_token"):
         global GITHUB_TOKEN
         GITHUB_TOKEN = data["github_token"]
-        env_path = "/opt/dashboard/config/.env"
+        env_path = os.path.join(BASE_DIR, "config", ".env")
         os.makedirs(os.path.dirname(env_path), exist_ok=True)
         env_vars = {}
         if os.path.exists(env_path):
@@ -6421,6 +6421,8 @@ def api_settings_gist():
         with open(env_path, "w") as f:
             for key, val in env_vars.items():
                 f.write(f"{key}={val}\n")
+        # Also save to database for container environments
+        paas_db.set_setting("github_token", data["github_token"])
     
     if data.get("gist_id"):
         paas_db.set_setting("gist_id", data["gist_id"])
