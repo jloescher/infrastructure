@@ -6413,6 +6413,51 @@ def api_settings_database_info():
     return jsonify(info)
 
 
+@app.route("/api/settings/database/restore", methods=["POST"])
+@requires_auth
+def api_settings_database_restore():
+    """Restore database from uploaded SQLite backup file."""
+    if 'database' not in request.files:
+        return jsonify({"success": False, "error": "No database file provided"})
+    
+    file = request.files['database']
+    if file.filename == '':
+        return jsonify({"success": False, "error": "No file selected"})
+    
+    if not file.filename.endswith(('.db', '.sqlite', '.sqlite3', '.paas.db')):
+        return jsonify({"success": False, "error": "Invalid file type. Must be .db or .sqlite file"})
+    
+    try:
+        db_path = os.environ.get('PAAS_DATABASE_PATH', '/data/paas.db')
+        
+        # Create backup of current database
+        if os.path.exists(db_path):
+            backup_path = db_path + '.backup-' + datetime.utcnow().strftime('%Y%m%d-%H%M%S')
+            import shutil
+            shutil.copy2(db_path, backup_path)
+        
+        # Save uploaded file
+        file.save(db_path)
+        
+        # Verify it's a valid SQLite database
+        import sqlite3
+        conn = sqlite3.connect(db_path)
+        cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = cursor.fetchall()
+        conn.close()
+        
+        if len(tables) == 0:
+            return jsonify({"success": False, "error": "Invalid database file - no tables found"})
+        
+        return jsonify({
+            "success": True,
+            "message": f"Database restored with {len(tables)} tables",
+            "tables": [t[0] for t in tables]
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
 @app.route("/api/settings/sync-history")
 @requires_auth
 def api_settings_sync_history():

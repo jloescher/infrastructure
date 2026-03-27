@@ -63,30 +63,13 @@
 
 <div class="card">
     <h2>GitHub Integration</h2>
-    <p>Configure GitHub token for accessing private repositories during application deployment.</p>
-    
-    <form method="POST" action="/settings/github-token">
-        <div class="form-group">
-            <label for="github_token">GitHub Personal Access Token</label>
-            <input type="password" id="github_token" name="github_token" placeholder="ghp_xxxxxxxxxxxx" {% if github_token_set %}value="****************"{% endif %}>
-            <div class="hint">Token with <code>repo</code> scope for private repo access. Stored securely on the server.</div>
-        </div>
-        
-        <div class="form-group">
-            <button type="submit" class="btn">Save GitHub Token</button>
-            {% if github_token_set %}
-            <span style="color: #27ae60; margin-left: 1rem;">Token configured</span>
-            {% endif %}
-        </div>
-    </form>
-    
-    <h3 style="margin-top: 2rem;">How to Create a GitHub Token</h3>
-    <ol>
-        <li>Go to <a href="https://github.com/settings/tokens" target="_blank" class="link">GitHub Settings → Developer settings → Personal access tokens</a></li>
-        <li>Click "Generate new token (classic)"</li>
-        <li>Select the <code>repo</code> scope</li>
-        <li>Copy the token and paste it above</li>
-    </ol>
+    <p>GitHub token is configured in the <a href="#gist-sync-section" class="link">Gist Sync section</a> below.</p>
+    <p class="hint">The same token is used for:</p>
+    <ul style="margin: 10px 0; padding-left: 20px;">
+        <li>Accessing private repositories during deployment</li>
+        <li>Backing up configuration to GitHub Gist</li>
+    </ul>
+    <p class="hint">Required scopes: <code>repo</code> (for private repos) and <code>gist</code> (for backups)</p>
 </div>
 
 <div class="card">
@@ -172,15 +155,25 @@
     </div>
 </div>
 
-<div class="card">
-    <h2>GitHub Gist Sync</h2>
-    <p>Automatically backup configuration to a private GitHub Gist.</p>
+<div class="card" id="gist-sync-section">
+    <h2>GitHub Token & Gist Sync</h2>
+    <p>Configure GitHub token for repository access and automatic backup to a private Gist.</p>
     
     <div class="form-group">
         <label for="github-token-gist">GitHub Personal Access Token</label>
         <input type="password" id="github-token-gist" placeholder="ghp_xxxx" class="form-input">
-        <div class="hint">Token must have <code>gist</code> scope. Can be the same token as above.</div>
+        <div class="hint">Required scopes: <code>repo</code> (private repo access) + <code>gist</code> (backup sync)</div>
     </div>
+    
+    <h3 style="margin-top: 1.5rem;">How to Create a GitHub Token</h3>
+    <ol>
+        <li>Go to <a href="https://github.com/settings/tokens" target="_blank" class="link">GitHub Settings → Developer settings → Personal access tokens</a></li>
+        <li>Click "Generate new token (classic)"</li>
+        <li>Select scopes: <code>repo</code> and <code>gist</code></li>
+        <li>Copy the token and paste it above</li>
+    </ol>
+    
+    <h3 style="margin-top: 1.5rem;">Gist Configuration</h3>
     
     <div class="form-group">
         <label for="gist-id">Gist ID</label>
@@ -245,13 +238,29 @@
         </div>
         <div style="background: #2d2d44; padding: 10px; border-radius: 4px;">
             <div style="color: #888; font-size: 0.85em;">Location</div>
-            <div style="font-weight: 500;">/data/paas.db</div>
+            <div style="font-weight: 500;" id="db-path">/data/paas.db</div>
         </div>
         <div style="background: #2d2d44; padding: 10px; border-radius: 4px;">
             <div style="color: #888; font-size: 0.85em;">Size</div>
             <div id="db-size" style="font-weight: 500;">Calculating...</div>
         </div>
     </div>
+    
+    <h3 style="margin-top: 20px;">Restore Database from Backup</h3>
+    <p class="hint">Upload a SQLite database backup (paas.db) to restore your configuration.</p>
+    <div style="margin: 15px 0;">
+        <input type="file" id="db-backup-file" accept=".db,.sqlite,.sqlite3" style="display: none;" onchange="handleDbBackupUpload(event)">
+        <button class="btn btn-secondary" onclick="document.getElementById('db-backup-file').click()">Upload Database Backup</button>
+        <span id="db-backup-name" style="margin-left: 10px; color: #888;"></span>
+    </div>
+    <div id="db-backup-warning" style="display: none; background: #4d2323; padding: 15px; border-radius: 4px; margin: 15px 0;">
+        <strong style="color: #f56565;">Warning:</strong> This will replace your current database.
+        <div style="margin-top: 10px;">
+            <button class="btn" style="background: #f56565;" onclick="confirmDbRestore()">Restore Database</button>
+            <button class="btn btn-secondary" onclick="cancelDbRestore()">Cancel</button>
+        </div>
+    </div>
+    <div id="db-restore-status" class="status-message" style="display: none;"></div>
     
     <h3 style="margin-top: 20px;">Secrets Encryption</h3>
     <p class="hint">Secrets are encrypted with AES-256-GCM. The encryption key is stored separately.</p>
@@ -699,6 +708,59 @@ function confirmReset() {
             }
         })
         .catch(err => alert('Failed to reset: ' + err));
+}
+
+let pendingDbFile = null;
+
+function handleDbBackupUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    pendingDbFile = file;
+    document.getElementById('db-backup-name').textContent = file.name;
+    document.getElementById('db-backup-warning').style.display = 'block';
+}
+
+function cancelDbRestore() {
+    pendingDbFile = null;
+    document.getElementById('db-backup-file').value = '';
+    document.getElementById('db-backup-name').textContent = '';
+    document.getElementById('db-backup-warning').style.display = 'none';
+    document.getElementById('db-restore-status').style.display = 'none';
+}
+
+function confirmDbRestore() {
+    if (!pendingDbFile) return;
+    
+    const statusEl = document.getElementById('db-restore-status');
+    statusEl.className = 'status-message info';
+    statusEl.textContent = 'Uploading and restoring database...';
+    statusEl.style.display = 'block';
+    
+    const formData = new FormData();
+    formData.append('database', pendingDbFile);
+    
+    fetch('/api/settings/database/restore', {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            statusEl.className = 'status-message success';
+            statusEl.textContent = '✓ Database restored successfully! Reloading...';
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            statusEl.className = 'status-message error';
+            statusEl.textContent = '✗ Failed: ' + (data.error || 'Unknown error');
+        }
+    })
+    .catch(err => {
+        statusEl.className = 'status-message error';
+        statusEl.textContent = '✗ Failed: ' + err;
+    });
+    
+    cancelDbRestore();
 }
 </script>
 {% endblock %}
