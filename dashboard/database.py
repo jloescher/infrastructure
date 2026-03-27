@@ -957,10 +957,10 @@ def get_sync_status() -> Dict[str, Any]:
 def update_sync_status(updates: Dict[str, Any]) -> bool:
     """Update sync status."""
     set_clause = ', '.join(f'{k} = ?' for k in updates.keys())
-    values = list(updates.values()) + [1]
+    values = list(updates.values())
     
     with get_db() as conn:
-        conn.execute(f'UPDATE sync_status SET {set_clause} WHERE id = 1', values)
+        conn.execute(f'UPDATE sync_status SET {set_clause} WHERE id = ?', values + [1])
         conn.commit()
     
     return True
