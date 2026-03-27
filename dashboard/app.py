@@ -735,7 +735,7 @@ def ssh_command(server_ip, command, timeout=30):
                 fallback["stderr"] = f"Primary ({server_ip}) blocked by Tailscale check; fallback ({public_ip}) failed: {fallback.get('stderr', '').strip()}"
                 return fallback
         
-        if primary.get("stdout"):
+        if primary.get("success"):
             return primary
         
         ssh_error_patterns = ["Connection refused", "Connection timed out", "No route to host", "Host key verification failed", "Permission denied"]
