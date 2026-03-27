@@ -54,6 +54,8 @@ services:
       # SSH key for server access (auto-detected if at ~/.ssh/id_vps)
       # Mount explicitly if using a different path
       - ${HOME}/.ssh/id_vps:/root/.ssh/id_vps:ro
+      # Config files (databases.yml, applications.yml, .env)
+      - ../configs/dashboard:/app/config:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/"]
