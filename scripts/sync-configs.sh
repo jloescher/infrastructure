@@ -31,6 +31,10 @@ ssh root@100.102.220.16 "cat /opt/dashboard/config/.env 2>/dev/null" | sed 's/=.
 ssh root@100.102.220.16 "cat /opt/dashboard/config/applications.yml 2>/dev/null" > configs/dashboard/applications.yml
 ssh root@100.102.220.16 "cat /opt/dashboard/config/databases.yml 2>/dev/null" > configs/dashboard/databases.yml
 ssh root@100.102.220.16 "cat /etc/systemd/system/dashboard.service" > configs/dashboard/dashboard.service
+
+# SQLite database backup
+scp -q root@100.102.220.16:/data/paas.db configs/dashboard/paas.db 2>/dev/null || echo "  Warning: Could not sync paas.db"
+
 echo "Dashboard configs synced"
 
 # ==================== Provision Scripts ====================
