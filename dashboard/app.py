@@ -472,6 +472,15 @@ def requires_auth(f):
     return decorated
 
 
+def format_bytes(b):
+    """Format bytes to human readable string."""
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if b < 1024:
+            return f"{b:.1f} {unit}"
+        b /= 1024
+    return f"{b:.1f} PB"
+
+
 def load_databases():
     # Try SQLite first
     if PAAS_DB_AVAILABLE:
@@ -6370,6 +6379,38 @@ def api_settings_sync_status():
         return jsonify(status)
     except Exception:
         return jsonify({"last_sync_status": "error", "last_sync_at": None})
+
+
+@app.route("/api/settings/database-info")
+@requires_auth
+def api_settings_database_info():
+    """Get SQLite database file information."""
+    db_path = os.environ.get('PAAS_DATABASE_PATH', '/data/paas.db')
+    key_path = os.environ.get('PAAS_KEY_PATH', '/data/vault.key')
+    
+    info = {
+        'database_type': 'SQLite',
+        'database_path': db_path,
+        'database_size': 0,
+        'database_size_human': '0 B',
+        'key_path': key_path,
+        'key_exists': False
+    }
+    
+    try:
+        if os.path.exists(db_path):
+            size = os.path.getsize(db_path)
+            info['database_size'] = size
+            info['database_size_human'] = format_bytes(size)
+    except:
+        pass
+    
+    try:
+        info['key_exists'] = os.path.exists(key_path)
+    except:
+        pass
+    
+    return jsonify(info)
 
 
 @app.route("/api/settings/sync-history")

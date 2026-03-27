@@ -348,7 +348,19 @@ document.addEventListener('DOMContentLoaded', function() {
     loadSyncStatus();
     loadSyncHistory();
     loadGistSettings();
+    loadDatabaseInfo();
 });
+
+function loadDatabaseInfo() {
+    fetch('/api/settings/database-info')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('db-size').textContent = data.database_size_human || '0 B';
+        })
+        .catch(() => {
+            document.getElementById('db-size').textContent = 'Error';
+        });
+}
 
 function loadSyncStatus() {
     fetch('/api/settings/sync-status')
