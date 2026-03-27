@@ -6408,21 +6408,25 @@ def api_settings_gist():
     if data.get("github_token"):
         global GITHUB_TOKEN
         GITHUB_TOKEN = data["github_token"]
-        env_path = os.path.join(BASE_DIR, "config", ".env")
-        os.makedirs(os.path.dirname(env_path), exist_ok=True)
-        env_vars = {}
-        if os.path.exists(env_path):
-            with open(env_path, "r") as f:
-                for line in f:
-                    if "=" in line and not line.startswith("#"):
-                        key, val = line.split("=", 1)
-                        env_vars[key.strip()] = val.strip()
-        env_vars["GITHUB_TOKEN"] = data["github_token"]
-        with open(env_path, "w") as f:
-            for key, val in env_vars.items():
-                f.write(f"{key}={val}\n")
-        # Also save to database for container environments
+        # Save to database (always works)
         paas_db.set_setting("github_token", data["github_token"])
+        # Try to save to .env file (may fail in Docker with read-only mount)
+        try:
+            env_path = os.path.join(BASE_DIR, "config", ".env")
+            os.makedirs(os.path.dirname(env_path), exist_ok=True)
+            env_vars = {}
+            if os.path.exists(env_path):
+                with open(env_path, "r") as f:
+                    for line in f:
+                        if "=" in line and not line.startswith("#"):
+                            key, val = line.split("=", 1)
+                            env_vars[key.strip()] = val.strip()
+            env_vars["GITHUB_TOKEN"] = data["github_token"]
+            with open(env_path, "w") as f:
+                for key, val in env_vars.items():
+                    f.write(f"{key}={val}\n")
+        except (OSError, PermissionError):
+            pass  # Read-only filesystem in Docker, database is source of truth
     
     if data.get("gist_id"):
         paas_db.set_setting("gist_id", data["gist_id"])
