@@ -240,6 +240,7 @@ get_ssl_cert() {
     if [ -f "$CLOUDFLARE_CREDS" ]; then
         certbot certonly --dns-cloudflare \
             --dns-cloudflare-credentials "$CLOUDFLARE_CREDS" \
+            --dns-cloudflare-propagation-seconds 60 \
             $certbot_args \
             --non-interactive --agree-tos --expand --email "$EMAIL" || {
             echo "Failed to obtain certificate for $domain"

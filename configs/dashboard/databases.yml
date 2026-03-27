@@ -34,3 +34,38 @@ databases:
     pgbouncer_max_clients: 200
     app: rentalfixer
     environment: staging
+  jonathanloescher:
+    name: jonathanloescher
+    description: Jonathan Loescher
+    owner: jonathanloescher_admin
+    users:
+    - name: jonathanloescher_user
+      password: c6CsjUR9UlimGOykIjOZKw
+      password_hash: SCRAM-SHA-256$4096:lXdgi6gXYujdGO36ZsGHpg==$Afqf4WHLwamBiL4PcvtTfNs/4Kn8fep22LIF9hkVCY8=:gCDV8yz7zxmrCmHSbB0UrTn8nug4riRkfbMfnGbDm1Y=
+      roles: []
+    - name: jonathanloescher_admin
+      password: zuWKPBWepvFUE9823TEGbg
+      password_hash: SCRAM-SHA-256$4096:+QuutBb1XomCwCR26Cce4g==$hZb8KDgGcjN9ZsuHtOJylVD1ImPEDgpjykWyDQJ1E3M=:5ynf+N8Y+mtYp2/UkJqosyY2bzWZc+7yGFMZqdvhc6E=
+      roles:
+      - CREATEDB
+    pgbouncer_pool_size: 20
+    pgbouncer_max_clients: 200
+    app: jonathanloescher
+  jonathanloescher_staging:
+    name: jonathanloescher_staging
+    description: jonathanloescher staging database
+    owner: jonathanloescher_staging_admin
+    users:
+    - name: jonathanloescher_staging_user
+      password: 2Pz6o_mNRvuB5EUgnWUmUA
+      password_hash: SCRAM-SHA-256$4096:dMjv0cBsIBL/MaD15eCzkg==$soCkA5VxQLpbfXE884WmoLxPYyo1BlXoSBHoKOv6ysk=:tsb42rhU0JkKfpqxAZC5aHESCzhdGaSVNw/aD4N0eJw=
+      roles: []
+    - name: jonathanloescher_staging_admin
+      password: 2oeHLE8hTWzG_GhmD4oaeg
+      password_hash: SCRAM-SHA-256$4096:UIlWdDhcjU/hASWHXkrdpQ==$L7pw72d/HfRLIWiE7lmJunSoo1YDOSbJBD3Jy8CxYFs=:OpX5RCea+hyt2iEcxRXSa1c2GuOLFbCjwaTtob9XlcI=
+      roles:
+      - CREATEDB
+    pgbouncer_pool_size: 20
+    pgbouncer_max_clients: 200
+    app: jonathanloescher
+    environment: staging
