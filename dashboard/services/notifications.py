@@ -550,7 +550,7 @@ class NotificationService:
         </html>
         """
         
-return html
+        return html
     
     @classmethod
     def send_alert(cls, alert_type: str, message: str, 

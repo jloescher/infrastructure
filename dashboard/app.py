@@ -6433,6 +6433,18 @@ try:
 except ImportError as e:
     print(f"Warning: Could not register services routes: {e}")
 
+try:
+    from api.drift_routes import register_drift_routes
+    register_drift_routes(app)
+except ImportError as e:
+    print(f"Warning: Could not register drift routes: {e}")
+
+try:
+    from api.backup_routes import register_backup_routes
+    register_backup_routes(app)
+except ImportError as e:
+    print(f"Warning: Could not register backup routes: {e}")
+
 
 if __name__ == "__main__":
     if WEBSOCKET_AVAILABLE and socketio:
