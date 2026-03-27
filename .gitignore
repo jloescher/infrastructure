@@ -42,4 +42,8 @@ screencapture-*.png
 # Temporary files
 *.tmp
 *.temp
-/tmp/
+
+# Encryption keys - NEVER commit
+vault.key
+*.key
+/tmp/vault.key
