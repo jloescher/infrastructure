@@ -71,7 +71,12 @@ if WEBSOCKET_AVAILABLE and socketio:
 AUTH_USER = os.environ.get("DASHBOARD_USER", "admin")
 AUTH_PASS = os.environ.get("DASHBOARD_PASS", "DbAdmin2026!")
 
-ENV_FILE = "/opt/dashboard/config/.env"
+# Container-friendly paths - configurable via environment
+BASE_DIR = os.environ.get("BASE_DIR", "/opt/dashboard")
+SSH_KEY_PATH = os.environ.get("SSH_KEY_PATH", os.path.expanduser("~/.ssh/id_vps"))
+LOCAL_TAILSCALE_IP = os.environ.get("LOCAL_TAILSCALE_IP", "")
+
+ENV_FILE = os.path.join(BASE_DIR, "config", ".env")
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 
 CLOUDFLARE_API_TOKEN = ""
@@ -97,7 +102,6 @@ if os.path.exists(ENV_FILE):
             elif line.startswith("WEBHOOK_PUBLIC_HOST="):
                 WEBHOOK_PUBLIC_HOST = line.split("=", 1)[1].strip()
 
-BASE_DIR = "/opt/dashboard"
 DB_CONFIG_PATH = os.path.join(BASE_DIR, "config", "databases.yml")
 APPS_CONFIG_PATH = os.path.join(BASE_DIR, "config", "applications.yml")
 DOCS_PATH = os.path.join(BASE_DIR, "docs")
@@ -694,22 +698,24 @@ def resolve_public_ip(server_ip):
 import socket
 
 def ssh_command(server_ip, command, timeout=30):
-    # Check if we're running on the same server - use local execution
     local_ips = ["127.0.0.1", "localhost", "127.0.1.1"]
     
-    # Get Tailscale IP if available
-    try:
-        result = subprocess.run(
-            ["ip", "addr", "show", "tailscale0"],
-            capture_output=True, text=True, timeout=5
-        )
-        if result.returncode == 0:
-            import re
-            match = re.search(r'inet ([0-9.]+)/', result.stdout)
-            if match:
-                local_ips.append(match.group(1))
-    except:
-        pass
+    # Use LOCAL_TAILSCALE_IP env var if set, otherwise try to detect
+    if LOCAL_TAILSCALE_IP:
+        local_ips.append(LOCAL_TAILSCALE_IP)
+    else:
+        try:
+            result = subprocess.run(
+                ["ip", "addr", "show", "tailscale0"],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0:
+                import re
+                match = re.search(r'inet ([0-9.]+)/', result.stdout)
+                if match:
+                    local_ips.append(match.group(1))
+        except:
+            pass
     
     def run_local(run_timeout):
         result = subprocess.run(
@@ -722,7 +728,7 @@ def ssh_command(server_ip, command, timeout=30):
         return {"success": result.returncode == 0, "stdout": result.stdout, "stderr": result.stderr}
     
     def run_target(target_ip, run_timeout):
-        ssh_key = os.path.expanduser("~/.ssh/id_vps")
+        ssh_key = SSH_KEY_PATH
         ssh_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5",
                    "-o", "BatchMode=yes"]
         if os.path.exists(ssh_key):

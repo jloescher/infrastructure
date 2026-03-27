@@ -8,6 +8,8 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PAAS_DATABASE_PATH=/data/paas.db
 ENV PAAS_KEY_PATH=/data/vault.key
+ENV BASE_DIR=/app
+ENV SSH_KEY_PATH=/root/.ssh/id_vps
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -16,6 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libffi-dev \
     libssl-dev \
     curl \
+    openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app directory

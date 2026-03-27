@@ -4,12 +4,12 @@ services:
   # Infrastructure Dashboard
   dashboard:
     build:
-      context: ../dashboard
-      dockerfile: ../docker/dashboard/Dockerfile
+      context: ..
+      dockerfile: Dockerfile
     container_name: infrastructure-dashboard
     hostname: infrastructure-dashboard
-    ports:
-      - "8080:8080"
+    # Use host network for Tailscale access
+    network_mode: host
     environment:
       - PG_HOST=${PG_HOST:-100.102.220.16}
       - PG_PORT=${PG_PORT:-5000}
@@ -18,18 +18,27 @@ services:
       - REDIS_HOST=${REDIS_HOST:-100.126.103.51}
       - REDIS_PORT=${REDIS_PORT:-6379}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - PROMETHEUS_URL=http://prometheus:9090
-      - GRAFANA_URL=http://grafana:3000
+      - PROMETHEUS_URL=${PROMETHEUS_URL:-http://100.102.220.16:9090}
+      - GRAFANA_URL=${GRAFANA_URL:-http://100.102.220.16:3000}
       - DASHBOARD_USER=${DASHBOARD_USER:-admin}
       - DASHBOARD_PASS=${DASHBOARD_PASS:-DbAdmin2026!}
       - SECRET_KEY=${SECRET_KEY:-}
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - CLOUDFLARE_API_TOKEN=${CF_API_TOKEN:-}
+      - CLOUDFLARE_ZONE_ID=${CF_ZONE_ID:-}
+      - CLOUDFLARE_ZONE_NAME=${CF_ZONE_NAME:-}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-}
+      - WEBHOOK_PUBLIC_HOST=${WEBHOOK_PUBLIC_HOST:-hooks.quantyralabs.cc}
+      - BASE_DIR=/app
+      - SSH_KEY_PATH=/root/.ssh/id_vps
+      - LOCAL_TAILSCALE_IP=${LOCAL_TAILSCALE_IP:-}
+      - PAAS_DATABASE_PATH=/data/paas.db
+      - PAAS_KEY_PATH=/data/vault.key
     volumes:
-      - dashboard-config:/opt/dashboard/config
-      - dashboard-docs:/opt/dashboard/docs
-    networks:
-      - infrastructure
+      # Persistent data (SQLite database + encryption key)
+      - dashboard-data:/data
+      # SSH key for server access (read-only)
+      - ${SSH_KEY_PATH:-/root/.ssh/id_vps}:/root/.ssh/id_vps:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/"]
@@ -37,15 +46,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-    # Allow access to Tailscale network
-    extra_hosts:
-      - "router-01:100.102.220.16"
-      - "router-02:100.116.175.9"
-      - "re-db:100.92.26.38"
-      - "re-node-02:100.89.130.19"
-      - "re-node-01:100.126.103.51"
-      - "re-node-03:100.114.117.46"
-      - "re-node-04:100.115.75.119"
 
   # Prometheus - Metrics Collection
   prometheus:
@@ -125,10 +125,8 @@ networks:
     name: infrastructure-network
 
 volumes:
-  dashboard-config:
-    name: infrastructure-dashboard-config
-  dashboard-docs:
-    name: infrastructure-dashboard-docs
+  dashboard-data:
+    name: infrastructure-dashboard-data
   prometheus-data:
     name: infrastructure-prometheus-data
   grafana-data:

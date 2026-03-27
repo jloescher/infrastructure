@@ -49,8 +49,11 @@ class SSHConnectionPool:
         self._locks: Dict[str, threading.Lock] = {}  # Per-server locks
         self._global_lock = threading.Lock()
         
-        # SSH key path - check both server and local paths
-        if os.path.exists('/root/.ssh/id_vps'):
+        # SSH key path - use environment variable if set
+        ssh_key_env = os.environ.get('SSH_KEY_PATH', '')
+        if ssh_key_env and os.path.exists(ssh_key_env):
+            self._ssh_key_path = ssh_key_env
+        elif os.path.exists('/root/.ssh/id_vps'):
             self._ssh_key_path = '/root/.ssh/id_vps'
         else:
             self._ssh_key_path = os.path.expanduser('~/.ssh/id_vps')
