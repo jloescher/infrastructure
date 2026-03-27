@@ -4,6 +4,12 @@ Celery configuration for async deployment tasks.
 This module configures Celery to use Redis as the message broker
 and result backend, enabling async deployment processing with
 real-time progress updates via WebSocket.
+
+Phase 4 additions:
+- SSL certificate auto-renewal tasks
+- Database and service backup tasks
+- System maintenance tasks
+- Configuration drift detection
 """
 
 import os
@@ -21,7 +27,14 @@ celery_app = Celery(
     'quantyra_paas',
     broker=BROKER_URL,
     backend=RESULT_BACKEND,
-    include=['tasks.deploy', 'tasks.scheduler']
+    include=[
+        'tasks.deploy',
+        'tasks.scheduler',
+        'tasks.ssl',
+        'tasks.backup',
+        'tasks.maintenance',
+        'tasks.drift',
+    ]
 )
 
 celery_app.conf.update(
@@ -51,6 +64,9 @@ celery_app.conf.update(
 
 # Celery Beat schedule for periodic tasks
 celery_app.conf.beat_schedule = {
+    # =============================================================================
+    # Deployment Scheduling (Phase 2)
+    # =============================================================================
     'process-scheduled-deployments': {
         'task': 'tasks.scheduler.process_scheduled_deployments',
         'schedule': crontab(minute='*/5'),  # Check every 5 minutes
@@ -62,6 +78,70 @@ celery_app.conf.beat_schedule = {
     'cleanup-old-deployment-steps': {
         'task': 'tasks.deploy.cleanup_old_deployments_task',
         'schedule': crontab(hour=4, minute=0),  # Daily at 4 AM UTC
+    },
+    
+    # =============================================================================
+    # SSL Certificate Management (Phase 4)
+    # =============================================================================
+    'check-ssl-expiration': {
+        'task': 'tasks.ssl.check_ssl_expiration',
+        'schedule': crontab(hour='0,12', minute=0),  # Twice daily
+    },
+    
+    # =============================================================================
+    # Backup Management (Phase 4)
+    # =============================================================================
+    'backup-all-databases': {
+        'task': 'tasks.backup.backup_all_databases',
+        'schedule': crontab(hour='*/6', minute=0),  # Every 6 hours
+    },
+    'backup-all-services': {
+        'task': 'tasks.backup.backup_all_services',
+        'schedule': crontab(hour=2, minute=0),  # Daily at 2 AM UTC
+    },
+    'cleanup-old-backups': {
+        'task': 'tasks.backup.cleanup_old_backups',
+        'schedule': crontab(hour=4, minute=30),  # Daily at 4:30 AM UTC
+        'kwargs': {'days': 30}
+    },
+    
+    # =============================================================================
+    # System Maintenance (Phase 4)
+    # =============================================================================
+    'cleanup-old-deployments': {
+        'task': 'tasks.maintenance.cleanup_old_deployments',
+        'schedule': crontab(hour=3, minute=30),  # Daily at 3:30 AM UTC
+        'kwargs': {'days': 30}
+    },
+    'cleanup-old-logs': {
+        'task': 'tasks.maintenance.cleanup_old_logs',
+        'schedule': crontab(hour=5, minute=0),  # Daily at 5 AM UTC
+        'kwargs': {'days': 7}
+    },
+    'cleanup-docker-resources': {
+        'task': 'tasks.maintenance.cleanup_docker_resources',
+        'schedule': crontab(day_of_week=0, hour=5, minute=30),  # Weekly on Sunday at 5:30 AM
+    },
+    'check-disk-space': {
+        'task': 'tasks.maintenance.check_disk_space',
+        'schedule': crontab(hour='*/6', minute=15),  # Every 6 hours at :15
+    },
+    'check-service-status': {
+        'task': 'tasks.maintenance.check_service_status',
+        'schedule': crontab(minute=30),  # Hourly at :30
+    },
+    
+    # =============================================================================
+    # Configuration Drift Detection (Phase 3)
+    # =============================================================================
+    'check-configuration-drift': {
+        'task': 'tasks.drift.check_configuration_drift',
+        'schedule': crontab(minute=30),  # Hourly at :30
+    },
+    'cleanup-old-drift-history': {
+        'task': 'tasks.drift.cleanup_old_drift_history',
+        'schedule': crontab(hour=6, minute=0),  # Daily at 6 AM UTC
+        'kwargs': {'days': 30}
     },
 }
 

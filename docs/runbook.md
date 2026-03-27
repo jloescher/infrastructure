@@ -1,4 +1,4 @@
-# Quantyra Infrastructure Runbook
+# Operations Runbook
 
 ## Quick Reference
 
@@ -10,9 +10,9 @@
 | **Database** | re-node-03 | 100.114.117.46 | 172.93.54.145 | PostgreSQL + Redis | 8 vCPU, 32GB RAM, 640GB NVMe |
 | **Database** | re-node-04 | 100.115.75.119 | 172.93.54.122 | PostgreSQL | 8 vCPU, 32GB RAM, 640GB NVMe |
 | **App** | re-db | 100.92.26.38 | 208.87.128.115 | App Server | 12 vCPU, 48GB RAM, 720GB NVMe |
-| **App** | re-node-02 | 100.89.130.19 | 23.227.173.245 | App Server (ATL pending) | 12 vCPU, 48GB RAM, 720GB NVMe |
-| **Router** | router-01 | 100.102.220.16 | 172.93.54.112 | HAProxy/PgBouncer/Monitoring | 2 vCPU, 8GB RAM, 160GB SSD |
-| **Router** | router-02 | 100.116.175.9 | 23.29.118.6 | HAProxy/PgBouncer | 2 vCPU, 8GB RAM, 160GB SSD |
+| **App** | re-node-02 | 100.89.130.19 | 23.227.173.245 | App Server (ATL) | 12 vCPU, 48GB RAM, 720GB NVMe |
+| **Router** | router-01 | 100.102.220.16 | 172.93.54.112 | HAProxy/Monitoring/Dashboard | 2 vCPU, 8GB RAM, 160GB SSD |
+| **Router** | router-02 | 100.116.175.9 | 23.29.118.6 | HAProxy | 2 vCPU, 8GB RAM, 160GB SSD |
 
 ### Connection Endpoints
 
@@ -20,9 +20,7 @@
 |---------|----------|------|-------|
 | PostgreSQL Write | router-01 | 5000 | Via HAProxy |
 | PostgreSQL Read | router-01 | 5001 | Load balanced replicas |
-| PostgreSQL (Pooled) | router-01 | 6432 | Via PgBouncer |
 | Redis Write | router-01 | 6379 | Master via HAProxy |
-| Redis Read | router-01 | 6380 | Replica via HAProxy |
 | Prometheus | router-01 | 9090 | Metrics |
 | Grafana | router-01 | 3000 | Dashboards |
 | Alertmanager | router-01 | 9093 | Alerts |
@@ -34,7 +32,88 @@
 **PostgreSQL Leader**: Check via `patronictl list` or dashboard
 **Redis Master**: Check via `redis-cli INFO replication` or dashboard
 
-## Common Operations
+---
+
+## PaaS Operations
+
+### Deploy an Application
+
+**Via Dashboard:**
+1. Navigate to http://100.102.220.16:8080
+2. Select application → Deploy
+3. Select branch and environment
+4. Watch real-time progress
+
+**Via API:**
+```bash
+curl -X POST -u admin:DbAdmin2026! \
+  http://100.102.220.16:8080/api/apps/my-app/deploy-async \
+  -H "Content-Type: application/json" \
+  -d '{"branch": "main", "environment": "production"}'
+```
+
+**Via SSH:**
+```bash
+ssh root@100.92.26.38
+cd /opt/apps/my-app
+git pull origin main
+php artisan optimize
+sudo systemctl restart php8.5-fpm
+```
+
+### Rollback a Deployment
+
+**Via Dashboard:**
+1. Go to Applications → [App] → Deployments
+2. Find last successful deployment
+3. Click "Rollback"
+
+**Via SSH:**
+```bash
+ssh root@100.92.26.38
+cd /var/www/myapp
+git checkout <previous-commit>
+php artisan optimize
+sudo systemctl restart php8.5-fpm
+```
+
+### Provision a New Domain
+
+1. Dashboard → Applications → [App] → Domains
+2. Add Domain → Configure:
+   - Domain name
+   - Environment (production/staging)
+   - SSL enabled
+3. Click Provision
+4. Wait for SSL certificate (usually 1-2 minutes)
+
+### Create a Database
+
+**Via Dashboard:**
+1. Applications → [App] → Database
+2. Click "Create Database"
+3. Credentials auto-generated
+
+**Via psql:**
+```bash
+psql -h router-01 -p 5000 -U patroni_superuser -d postgres
+
+CREATE DATABASE mydb;
+CREATE USER myuser WITH PASSWORD 'secret';
+GRANT ALL PRIVILEGES ON DATABASE mydb TO myuser;
+```
+
+### Add a Service (Redis/Meilisearch)
+
+1. Applications → [App] → Services
+2. Click "Add Service"
+3. Select service type
+4. Configure memory limits
+5. Connection string auto-injected into environment
+
+---
+
+## Infrastructure Operations
 
 ### Dashboard Access
 
@@ -181,92 +260,88 @@ curl -X POST http://100.102.220.16:9090/-/reload
 /usr/local/bin/redis_backup.sh
 ```
 
-## Troubleshooting
+---
 
-### PostgreSQL Issues
+## Incident Response
 
-#### High Connection Count
+### Application Down
 
-```bash
-# Check current connections via HAProxy
-psql -h 100.102.220.16 -p 5000 -U patroni_superuser -d postgres -c "SELECT count(*), state FROM pg_stat_activity GROUP BY state;"
+1. Check application status:
+   ```bash
+   ssh root@100.92.26.38
+   systemctl status php8.5-fpm
+   systemctl status nginx
+   ```
 
-# Kill idle connections
-psql -h 100.102.220.16 -p 5000 -U patroni_superuser -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state = 'idle' AND query_start < now() - interval '10 minutes';"
-```
+2. Check logs:
+   ```bash
+   tail -f /var/log/nginx/error.log
+   tail -f /var/log/php8.5-fpm/error.log
+   ```
 
-#### Replication Lag
+3. Restart services:
+   ```bash
+   systemctl restart php8.5-fpm
+   systemctl restart nginx
+   ```
 
-```bash
-# Check lag on primary
-psql -h 100.102.220.16 -p 5000 -U patroni_superuser -d postgres -c "SELECT client_addr, state, sent_lsn, replay_lsn FROM pg_stat_replication;"
+### Database Issues
 
-# Check replay on specific replica
-ssh re-node-03 "sudo -u postgres psql -c \"SELECT now() - pg_last_xact_replay_timestamp() AS replication_delay;\""
-```
+1. Check cluster status:
+   ```bash
+   patronictl list
+   ```
 
-#### Patroni Not Starting
+2. Check connections:
+   ```bash
+   psql -h router-01 -p 5000 -c "SELECT count(*) FROM pg_stat_activity;"
+   ```
 
-```bash
-# Check Patroni logs
-journalctl -u patroni -f
-
-# Check etcd connectivity
-etcdctl --endpoints=http://100.102.220.16:2379,http://100.116.175.9:2379,http://100.115.75.119:2379 cluster-health
-
-# Reinitialize if needed
-patronictl reinit quantyra_pg <node_name>
-```
+3. Check replication lag:
+   ```bash
+   patronictl list
+   ```
 
 ### Redis Issues
 
-#### High Memory Usage
+1. Check status:
+   ```bash
+   redis-cli -h 100.126.103.51 -p 6379 -a <password> INFO
+   ```
 
-```bash
-# Check memory usage
-redis-cli -h 100.102.220.16 -p 6379 -a CcPUa3nvcxHtyNYjztbDyfCCuhgix78novmBDNGk INFO memory | grep used_memory_human
-
-# Check big keys
-redis-cli -h 100.102.220.16 -p 6379 -a CcPUa3nvcxHtyNYjztbDyfCCuhgix78novmBDNGk --bigkeys
-```
+2. Check memory:
+   ```bash
+   redis-cli -h 100.126.103.51 INFO memory
+   ```
 
 ### HAProxy Issues
 
-#### Backend Down
+1. Check status:
+   ```bash
+   systemctl status haproxy
+   ```
 
-```bash
-# Check backend status
-echo "show stat" | nc 100.102.220.16:8404 | grep -E "pxname|postgres|redis"
+2. Check config:
+   ```bash
+   haproxy -c -f /etc/haproxy/haproxy.cfg
+   ```
 
-# Enable/disable server
-echo "set server postgres_write/re-node-01 state ready" | nc 100.102.220.16:8404
-echo "set server postgres_write/re-node-01 state maint" | nc 100.102.220.16:8404
-```
+3. View stats: http://100.102.220.16:8404/stats
 
-### Dashboard Issues
+### SSL Certificate Issues
 
-#### Dashboard Not Loading
+1. Check expiration:
+   ```bash
+   certbot certificates
+   ```
 
-```bash
-# Check service status
-ssh router-01 "systemctl status dashboard"
+2. Renew manually:
+   ```bash
+   certbot renew --cert-name example.com
+   systemctl reload haproxy
+   ```
 
-# Restart dashboard
-ssh router-01 "systemctl restart dashboard"
-
-# Check logs
-ssh router-01 "journalctl -u dashboard -f"
-```
-
-#### Disk Space Not Showing
-
-```bash
-# Check Prometheus is accessible
-curl http://100.102.220.16:9090/api/v1/query?query=up
-
-# Check node_exporter on a server
-curl http://100.126.103.51:9100/metrics | head
-```
+---
 
 ## Emergency Procedures
 
@@ -282,7 +357,7 @@ curl http://100.126.103.51:9100/metrics | head
 
 2. Check etcd:
    ```bash
-   etcdctl --endpoints=http://100.102.220.16:2379,http://100.116.175.9:2379,http://100.115.75.119:2379 cluster-health
+   etcdctl --endpoints=http://100.102.220.16:2379,http://100.116.175.9:2379,http.115.75.119:2379 cluster-health
    ```
 
 3. If etcd is down, restart it on all nodes:
@@ -337,25 +412,78 @@ curl http://100.126.103.51:9100/metrics | head
    systemctl restart dashboard
    ```
 
-## Application Deployment
+---
 
-### Via Dashboard
+## Maintenance Windows
 
-1. Navigate to http://100.102.220.16:8080/apps/create
-2. Select framework
-3. Enter application details
-4. Configure database (optional)
-5. Click "Create Application"
-6. Copy GitHub Actions workflow to repository
-7. Add secrets to GitHub
+### Before Maintenance
 
-### Manual Deployment
+1. Create silence in Alertmanager:
+   ```bash
+   curl -X POST http://100.102.220.16:9093/api/v1/silences \
+     -H "Content-Type: application/json" \
+     -d '{"matchers":[{"name":"alertname","value":".*","isRegex":true}],"startsAt":"2026-03-27T10:00:00Z","endsAt":"2026-03-27T12:00:00Z","createdBy":"admin","comment":"Scheduled maintenance"}'
+   ```
+
+2. Notify stakeholders
+3. Document planned changes
+
+### During Maintenance
+
+1. Monitor progress
+2. Keep logs
+3. Update status page if applicable
+
+### After Maintenance
+
+1. Verify all services healthy:
+   ```bash
+   patronictl list
+   redis-cli -h 100.102.220.16 ping
+   curl -s http://100.102.220.16:9090/api/v1/targets | jq '.data.activeTargets[].health'
+   ```
+
+2. Remove silences:
+   ```bash
+   curl -X DELETE http://100.102.220.16:9093/api/v1/silence/<silence_id>
+   ```
+
+3. Send notification
+
+---
+
+## Backup & Recovery
+
+### Database Backup
 
 ```bash
-# Deploy to both app servers
-ssh root@100.92.26.38 "cd /opt/apps/APP_NAME && git pull && systemctl restart APP_NAME"
-ssh root@100.89.130.19 "cd /opt/apps/APP_NAME && git pull && systemctl restart APP_NAME"
+# Manual backup
+pg_dump -h router-01 -p 5000 -U postgres mydb | gzip > backup.sql.gz
+
+# Restore
+gunzip -c backup.sql.gz | psql -h router-01 -p 5000 -U postgres mydb
 ```
+
+### Redis Backup
+
+```bash
+redis-cli -h 100.126.103.51 BGSAVE
+cp /var/lib/redis/dump.rdb /backup/redis-$(date +%Y%m%d).rdb
+```
+
+### Full System Recovery
+
+1. Provision new servers
+2. Run Ansible playbooks:
+   ```bash
+   ansible-playbook ansible/playbooks/provision.yml
+   ```
+3. Restore databases
+4. Restore Redis
+5. Verify all services
+6. Sync HAProxy configs
+
+---
 
 ## Contacts
 

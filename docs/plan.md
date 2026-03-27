@@ -30,6 +30,7 @@ This document tracks current tasks, priorities, and future improvements for the 
 | UX Foundation (Phase 1) | ✅ Complete | WebSocket, Celery, real-time progress, toast notifications |
 | Feature Parity (Phase 2) | ✅ Complete | Multi-framework, blue-green, hooks, notifications, database UX |
 | Advanced Features (Phase 3) | ✅ Complete | Action pattern, service templates, drift detection |
+| Automation & Polish (Phase 4) | ✅ Complete | Auto-SSL, auto-backup, cleanup, documentation |
 
 **Note:** All application and database state is now stored in SQLite at `/data/paas.db` instead of YAML files. The YAML files are still supported as a fallback for backward compatibility.
 
@@ -1508,6 +1509,79 @@ curl -X POST http://localhost:8080/api/apps/myapp/services \
 - `GET /api/drift/results` - Current drift results
 - `GET /api/drift/history` - Historical checks
 - `GET /api/drift/trend` - Trend analysis
+
+**Tracking:**
+- Started: 2026-03-27
+- Completed: 2026-03-27
+- Status: ✅ Complete
+
+---
+
+### 0.8. Phase 4: Automation & Polish ✅ COMPLETE (2026-03-27)
+
+**Goal:** Add automation features, polish the experience, and create comprehensive documentation.
+
+#### Automation Features
+
+| Task | Schedule | Status |
+|------|----------|--------|
+| SSL expiration check | Twice daily (0:00, 12:00) | ✅ Complete |
+| Database backups | Every 6 hours | ✅ Complete |
+| Service backups | Daily at 2 AM | ✅ Complete |
+| Backup cleanup | Daily at 4:30 AM | ✅ Complete |
+| Deployment cleanup | Daily at 3:30 AM | ✅ Complete |
+| Log cleanup | Daily at 5 AM | ✅ Complete |
+| Docker cleanup | Weekly (Sunday) | ✅ Complete |
+| Disk space check | Every 6 hours | ✅ Complete |
+| Service status check | Hourly | ✅ Complete |
+| Configuration drift | Hourly | ✅ Complete |
+
+#### Files Created
+
+**Tasks:**
+- `tasks/ssl.py` - SSL certificate management (check, renew, alert)
+- `tasks/backup.py` - Automated backups for databases and services
+- `tasks/maintenance.py` - Cleanup and monitoring tasks
+
+**API:**
+- `api/backup_routes.py` - Backup configuration and management API
+
+**Documentation:**
+- `docs/getting-started.md` - Quick start guide for new users
+- `docs/api.md` - Complete API reference with examples
+- `docs/runbook.md` - Operations runbook for incident response
+- `docs/architecture-diagram.md` - Visual architecture documentation
+
+#### New API Endpoints
+
+**Backup:**
+- `GET /api/backup/status` - Backup status for all resources
+- `GET /api/backup/history` - Backup history
+- `PUT /api/databases/<db>/backup-config` - Configure backup settings
+- `POST /api/backup/run` - Trigger all backups
+
+#### Celery Beat Schedule
+
+```python
+CELERYBEAT_SCHEDULE = {
+    'check-ssl-expiration': crontab(hour='0,12', minute=0),      # Twice daily
+    'backup-databases': crontab(hour='*/6', minute=0),           # Every 6 hours
+    'backup-services': crontab(hour=2, minute=0),                # Daily at 2 AM
+    'cleanup-backups': crontab(hour=4, minute=30),               # Daily at 4:30 AM
+    'cleanup-deployments': crontab(hour=3, minute=30),           # Daily at 3:30 AM
+    'check-disk-space': crontab(hour='*/6', minute=15),          # Every 6 hours
+    'check-config-drift': crontab(minute=30),                    # Hourly
+}
+```
+
+#### Documentation Delivered
+
+| Document | Purpose | Status |
+|----------|---------|--------|
+| Getting Started | Quick start for new users | ✅ Complete |
+| API Reference | Complete API documentation | ✅ Complete |
+| Runbook | Operations and incident response | ✅ Complete |
+| Architecture | Visual system documentation | ✅ Complete |
 
 **Tracking:**
 - Started: 2026-03-27

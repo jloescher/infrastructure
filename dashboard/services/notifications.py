@@ -550,7 +550,42 @@ class NotificationService:
         </html>
         """
         
-        return html
+return html
+    
+    @classmethod
+    def send_alert(cls, alert_type: str, message: str, 
+                   severity: str = 'warning', details: Dict = None) -> Dict[str, Any]:
+        """
+        Send a generic alert notification.
+        
+        Args:
+            alert_type: Type of alert (ssl, disk, backup, service, etc.)
+            message: Alert message content
+            severity: Alert severity (info, warning, critical)
+            details: Optional additional details
+            
+        Returns:
+            Dict with notification results
+        """
+        severity_emoji = {
+            'info': 'ℹ️',
+            'warning': '⚠️',
+            'critical': '🚨',
+            'error': '❌'
+        }
+        
+        emoji = severity_emoji.get(severity, '⚠️')
+        
+        notification_message = {
+            'title': f'{emoji} {alert_type.title()} Alert',
+            'alert_type': alert_type,
+            'severity': severity,
+            'message': message,
+            'details': details,
+            'timestamp': datetime.utcnow().isoformat()
+        }
+        
+        return cls._send_notifications(notification_message, f'alert_{alert_type}')
 
 
 # Convenience functions
@@ -607,4 +642,26 @@ def notify_rollback(app_name: str, environment: str, previous_commit: str = None
         previous_commit=previous_commit,
         new_commit=new_commit,
         reason=reason
+    )
+
+
+def send_alert(alert_type: str, message: str, severity: str = 'warning',
+               details: Dict = None) -> Dict[str, Any]:
+    """
+    Send a generic alert notification.
+    
+    Args:
+        alert_type: Type of alert (ssl, disk, backup, service, etc.)
+        message: Alert message content
+        severity: Alert severity (info, warning, critical)
+        details: Optional additional details
+        
+    Returns:
+        Dict with notification results
+    """
+    return NotificationService.send_alert(
+        alert_type=alert_type,
+        message=message,
+        severity=severity,
+        details=details
     )
