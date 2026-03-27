@@ -29,6 +29,12 @@ body {
     color: #00d4ff;
 }
 
+.nav-links {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
 .nav-links a {
     color: #8899a6;
     text-decoration: none;

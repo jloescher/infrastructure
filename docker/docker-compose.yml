@@ -1,5 +1,3 @@
-version: "3.8"
-
 # Quantyra PaaS Dashboard
 # 
 # Deployment Options:
@@ -28,10 +26,10 @@ services:
       - PG_HOST=${PG_HOST:-100.102.220.16}
       - PG_PORT=${PG_PORT:-5000}
       - PG_USER=${PG_USER:-patroni_superuser}
-      - PG_PASSWORD=${PG_PASSWORD:-}
+      - PG_PASSWORD=${PG_PASSWORD:-2e7vBpaaVK4vTJzrKebC}
       - REDIS_HOST=${REDIS_HOST:-100.126.103.51}
       - REDIS_PORT=${REDIS_PORT:-6379}
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-CcPUa3nvcxHtyNYjztbDyfCCuhgix78novmBDNGk}
       # Monitoring (defaults work on Tailscale)
       - PROMETHEUS_URL=${PROMETHEUS_URL:-http://100.102.220.16:9090}
       - GRAFANA_URL=${GRAFANA_URL:-http://100.102.220.16:3000}
