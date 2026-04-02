@@ -2,7 +2,7 @@
 
 > **Comprehensive reference documentation for the Quantyra multi-region VPS infrastructure.**
 > 
-> **Last Updated:** 2026-04-01
+> **Last Updated:** 2026-04-02
 > **Document Purpose:** Provide complete context for AI assistants (Grok) to understand the entire infrastructure setup.
 
 ---
@@ -54,7 +54,7 @@ The Quantyra infrastructure is a multi-region VPS platform built on **7 servers*
 | Deprecated Flask PaaS dashboard | 2026-04-01 | Coolify is now primary deployment platform |
 | Removed legacy PHP-FPM deployments | 2026-04-01 | All apps now managed by Coolify |
 | Added daily backup for pgAdmin/Ivory | 2026-03-26 | 03:00 UTC backup with 7-day retention |
-| Cleared HAProxy app routing | 2026-04-01 | Coolify proxy handles all app routing |
+| Updated HAProxy routing to Coolify | 2026-04-02 | HAProxy routes all domains to Coolify backend |
 | Implemented package update monitoring | 2026-03-19 | Dashboard shows available updates per server |
 | Fixed PHP-FPM pool configuration | 2026-03-19 | Optimized for 12 vCPU/48GB servers |
 
@@ -347,6 +347,61 @@ URL: http://100.102.220.16:8000
    - Click "Deploy" button
    - Monitor deployment logs in real-time
    - Application becomes available at configured domain
+
+### Domain Provisioning with Coolify + HAProxy
+
+**Architecture (Updated 2026-04-02):**
+
+All domains are provisioned through Coolify, with HAProxy handling SSL termination:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    DOMAIN PROVISIONING FLOW                               │
+│                                                                           │
+│  1. Cloudflare DNS                                                        │
+│     • Domain points to router IPs (DNS round-robin)                      │
+│     • Both router-01 and router-02 IPs returned                          │
+│                                                                           │
+│  2. HAProxy (router-01, router-02)                                        │
+│     • Terminates SSL (existing Let's Encrypt certificates)               │
+│     • Routes ALL domains to coolify_backend                              │
+│     • Sends plain HTTP to Coolify Traefik                                │
+│                                                                           │
+│  3. Coolify Traefik (re-db, re-node-02)                                   │
+│     • Receives HTTP traffic on port 80                                    │
+│     • Routes to appropriate Docker container                             │
+│     • Domain mapping managed by Coolify                                  │
+│                                                                           │
+│  4. Application Container                                                 │
+│     • Docker container running app                                        │
+│     • Environment variables from Coolify                                  │
+│     • Database from Patroni cluster or Coolify-managed                   │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**How to Add a New Domain:**
+
+1. **In Coolify UI**:
+   - Go to Application → Configuration → Domains
+   - Add domain (e.g., `myapp.domain.tld`)
+   - Coolify configures Traefik routing
+
+2. **SSL Certificate**:
+   - HAProxy already has SSL certificates for existing domains
+   - For new domains, add certificate to HAProxy:
+     ```bash
+     certbot certonly --dns-cloudflare --dns-cloudflare-credentials /root/.cloudflare.ini -d myapp.domain.tld
+     cat /etc/letsencrypt/live/myapp.domain.tld/fullchain.pem /etc/letsencrypt/live/myapp.domain.tld/privkey.pem > /etc/haproxy/certs/myapp.domain.tld.pem
+     systemctl reload haproxy
+     ```
+
+3. **DNS Configuration**:
+   - Add A record in Cloudflare pointing to both router IPs:
+     - `myapp.domain.tld` → 172.93.54.112 (router-01)
+     - `myapp.domain.tld` → 23.29.118.6 (router-02)
+   - Enable Cloudflare proxy (orange cloud)
+
+**Note:** Coolify's built-in SSL is not used because HAProxy handles SSL termination. Coolify receives plain HTTP traffic.
 
 ### Database Provisioning with Coolify
 
@@ -751,7 +806,7 @@ Automatic failover via Sentinel:
 
 ## 7. Network Architecture
 
-### Traffic Flow
+### Traffic Flow (Updated 2026-04-02)
 
 ```
                                     USER
@@ -771,13 +826,15 @@ Automatic failover via Sentinel:
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                            ROUTER LAYER                                  │
 │   router-01                              router-02                      │
-│   • HAProxy (ports 80, 443)              • HAProxy (ports 80, 443)      │
-│   • SSL termination                      • SSL termination              │
+│   • HAProxy (port 80 → HTTPS redirect)   • HAProxy (port 80 → redirect)│
+│   • HAProxy (port 443 → Coolify)         • HAProxy (port 443 → Coolify) │
+│   • SSL termination (all domains)        • SSL termination              │
 │   • Coolify (port 8000)                  • Backup router                │
 │   • Monitoring stack                                                     │
 │   • pgAdmin, Ivory                                                       │
 └─────────────────────────────────────────────────────────────────────────┘
                          │                                  │
+                         │ HTTP (port 80)                   │ HTTP (port 80)
                          └──────────────┬───────────────────┘
                                         │
                           ┌─────────────┴─────────────┐
@@ -785,8 +842,9 @@ Automatic failover via Sentinel:
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                          APP SERVER LAYER                                │
 │   re-db (100.92.26.38)           re-node-02 (100.89.130.19)             │
-│   • coolify-proxy (Traefik)       • coolify-proxy (Traefik)             │
+│   • coolify-proxy (Traefik:80)    • coolify-proxy (Traefik:80)          │
 │   • Docker containers             • Docker containers                   │
+│   • Routes by Host header         • Routes by Host header               │
 └─────────────────────────────────────────────────────────────────────────┘
                                         │
                                         ▼
@@ -799,6 +857,12 @@ Automatic failover via Sentinel:
 │   Master: re-node-01:6379, Replica: re-node-03:6379                     │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+**Key Changes:**
+- HAProxy now routes ALL domains to coolify_backend
+- No per-domain ACLs in HAProxy
+- Coolify Traefik handles all app routing internally
+- SSL certificates remain on HAProxy (not Coolify)
 
 ### Tailscale VPN
 
@@ -825,17 +889,21 @@ tailscale ip
 
 ### HAProxy Configuration
 
-#### Current HAProxy Routing
+#### Current HAProxy Routing (Updated 2026-04-02)
 
-HAProxy routes traffic based on the remaining application backends:
+All application domains are now routed through HAProxy to Coolify Traefik:
 
-| Domain | Backend | Port | Notes |
-|--------|---------|------|-------|
-| rentalfixer.app | rentalfixer_backend | 8100 | Production app |
-| staging.rentalfixer.app | rentalfixer-staging_backend | 9200 | Password protected |
-| jonathanloescher.com | jonathanloescher_backend | 8101 | Production app |
-| staging.jonathanloescher.com | jonathanloescher-staging_backend | 9201 | Password protected |
-| hooks.quantyralabs.cc | webhook_backend | 8080 | Webhook-only endpoint |
+| Domain | Backend | Destination | Notes |
+|--------|---------|-------------|-------|
+| All domains | coolify_backend | re-db:80, re-node-02:80 | Routes to Coolify Traefik |
+| - | not_found_backend | 404 response | Fallback for unmatched routes |
+
+**Architecture:**
+```
+Cloudflare → HAProxy (SSL termination) → Coolify Traefik (HTTP) → Docker containers
+```
+
+HAProxy terminates SSL for all domains with existing certificates, then routes plain HTTP traffic to Coolify Traefik on port 80.
 
 #### HAProxy Configuration Files
 
@@ -844,14 +912,36 @@ HAProxy routes traffic based on the remaining application backends:
 ├── haproxy.cfg              # Main configuration
 ├── certs/                   # SSL certificates
 │   ├── default.pem
+│   ├── jonathanloescher.com.pem
+│   ├── staging.jonathanloescher.com.pem
 │   ├── rentalfixer.app.pem
 │   ├── staging.rentalfixer.app.pem
+│   ├── hooks.quantyralabs.cc.pem
 │   └── ...
 └── domains/
-    ├── web_http.cfg         # HTTP frontend (redirects)
-    ├── web_https.cfg        # HTTPS frontend
-    ├── web_backends.cfg     # Application backends
-    └── registry.conf        # Domain → App → Port mapping
+    ├── web_http.cfg         # HTTP frontend (redirects to HTTPS)
+    ├── web_https.cfg        # HTTPS frontend (routes to coolify_backend)
+    ├── web_backends.cfg     # coolify_backend + not_found_backend
+    └── registry.conf        # Empty (Coolify manages domains)
+```
+
+#### Current Backend Configuration
+
+```haproxy
+# From /etc/haproxy/domains/web_backends.cfg
+
+backend coolify_backend
+    mode http
+    balance roundrobin
+    option httpchk GET /health
+    http-check expect status 200-499
+    option forwardfor
+    server re-db-coolify 100.92.26.38:80 check
+    server re-node-02-coolify 100.89.130.19:80 check
+
+backend not_found_backend
+    mode http
+    http-request deny deny_status 404
 ```
 
 #### HAProxy Management
@@ -1126,36 +1216,34 @@ All legacy PHP-FPM deployments from `/opt/apps/` have been removed:
 - Per-domain SSL certificates
 - Manual nginx + PHP-FPM configuration
 
-**After (2026-04):**
-- HAProxy routes minimal legacy apps
-- Coolify proxy (Traefik) handles most application routing
+**After (2026-04-02):**
+- HAProxy routes ALL domains to coolify_backend
+- Coolify proxy (Traefik) handles all application routing
 - Container-based deployments
-- Automatic SSL via Coolify
+- SSL termination at HAProxy, HTTP internally to Coolify
 
-### Current HAProxy Routing State
+### Current HAProxy Routing State (Updated 2026-04-02)
 
-Only these backends remain configured:
+All domains route to Coolify Traefik:
 
 ```haproxy
-# From configs/haproxy/router-01/web_backends.cfg
-backend rentalfixer_backend
-    server app1 100.92.26.38:8100 check
-    server app2 100.89.130.19:8100 check
+# From /etc/haproxy/domains/web_backends.cfg
 
-backend rentalfixer-staging_backend
-    http-request auth realm "Staging Area" unless { http_auth(rentalfixer-staging_users) }
-    server app1 100.92.26.38:9200 check
-    server app2 100.89.130.19:9200 check
+backend coolify_backend
+    mode http
+    balance roundrobin
+    option httpchk GET /health
+    http-check expect status 200-499
+    option forwardfor
+    server re-db-coolify 100.92.26.38:80 check
+    server re-node-02-coolify 100.89.130.19:80 check
 
-backend jonathanloescher_backend
-    server app1 100.92.26.38:8101 check
-    server app2 100.89.130.19:8101 check
-
-backend jonathanloescher-staging_backend
-    http-request auth realm "Staging Area" unless { http_auth(jonathanloescher-staging_users) }
-    server app1 100.92.26.38:9201 check
-    server app2 100.89.130.19:9201 check
+backend not_found_backend
+    mode http
+    http-request deny deny_status 404
 ```
+
+**Note:** HAProxy registry.conf is empty. Domain management is handled by Coolify.
 
 ### How to Migrate Apps to Coolify
 
@@ -1510,5 +1598,5 @@ Use Patroni with etcd DCS for PostgreSQL high availability.
 ---
 
 *Document created: 2026-04-01*
-*Last updated: 2026-04-01*
+*Last updated: 2026-04-02*
 *Maintained by: Infrastructure Team*
