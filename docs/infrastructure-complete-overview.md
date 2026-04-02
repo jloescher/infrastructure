@@ -384,15 +384,18 @@ All domains are provisioned through Coolify, with HAProxy handling SSL terminati
 1. **In Coolify UI**:
    - Go to Application → Configuration → Domains
    - Add domain (e.g., `myapp.domain.tld`)
-   - Coolify configures Traefik routing
+   - Coolify stores domain in PostgreSQL database
 
-2. **SSL Certificate**:
-   - HAProxy already has SSL certificates for existing domains
-   - For new domains, add certificate to HAProxy:
+2. **Automated SSL Certificate Provisioning**:
+   - **sync-coolify-domains.sh** runs every 5 minutes (cron)
+   - Script queries Coolify database for active domains
+   - Detects missing SSL certificates
+   - Provisions certificate via certbot DNS-01 challenge
+   - Rebuilds HAProxy HTTPS frontend with new cert
+   - Reloads HAProxy on both routers
+   - **Or run manually:**
      ```bash
-     certbot certonly --dns-cloudflare --dns-cloudflare-credentials /root/.cloudflare.ini -d myapp.domain.tld
-     cat /etc/letsencrypt/live/myapp.domain.tld/fullchain.pem /etc/letsencrypt/live/myapp.domain.tld/privkey.pem > /etc/haproxy/certs/myapp.domain.tld.pem
-     systemctl reload haproxy
+     ssh root@100.102.220.16 "/opt/scripts/sync-coolify-domains.sh"
      ```
 
 3. **DNS Configuration**:
@@ -400,6 +403,22 @@ All domains are provisioned through Coolify, with HAProxy handling SSL terminati
      - `myapp.domain.tld` → 172.93.54.112 (router-01)
      - `myapp.domain.tld` → 23.29.118.6 (router-02)
    - Enable Cloudflare proxy (orange cloud)
+
+**Automated Domain Sync Script:**
+
+See [Domain Sync Automation Documentation](./domain-sync-automation.md) for complete details:
+- Script location: `/opt/scripts/sync-coolify-domains.sh`
+- Cron schedule: `*/5 * * * *` (every 5 minutes)
+- Logs: `/var/log/sync-coolify-domains.log`
+- Dry-run mode: `--dry-run` flag for safe testing
+
+**Key Features:**
+- ✅ Automatic SSL certificate provisioning
+- ✅ HAProxy configuration rebuild
+- ✅ Sync to both routers
+- ✅ Zero-downtime reload
+- ✅ Idempotent and safe
+- ✅ Comprehensive logging
 
 **Note:** Coolify's built-in SSL is not used because HAProxy handles SSL termination. Coolify receives plain HTTP traffic.
 
