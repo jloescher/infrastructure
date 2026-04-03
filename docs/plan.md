@@ -660,9 +660,64 @@ HTTP/2 200
 
 **Next Steps:**
 - Migrate existing apps from legacy deployment to Dokploy
-- Configure monitoring for Dokploy/Traefik
-- Set up automated backups for Dokploy configuration
-- Document app migration procedures
+- ⏳ Set up automated backups for Dokploy configuration
+- ⏳ Document app migration procedures
+
+---
+
+## Milestone: Dokploy/Traefik Monitoring Complete (2026-04-03)
+
+**Monitoring Stack Extended:**
+- Traefik metrics endpoint configured via metrics.yml router
+- Docker daemon metrics enabled on both app servers (port 9323)
+- Prometheus scrape jobs added for Traefik and Docker
+- Grafana dashboards provisioned for Traefik and Docker Swarm
+
+**Traefik Metrics:**
+- Config reloads and success status
+- Request rates per entrypoint and service
+- Response time histograms (p50, p95, p99)
+- Active TLS certificates count
+- Open connections
+
+**Docker Swarm Metrics:**
+- Node count and health status
+- Container states (running, paused, stopped)
+- Container action rates
+- Network actions
+
+**Prometheus Targets:**
+- Total targets: 28 (all healthy)
+- Traefik: 1 target (re-db) - UP
+- Docker: 2 targets (re-db, re-node-02) - UP
+
+**Grafana Dashboards Created:**
+- ✅ Quantyra - Traefik (13KB JSON)
+- ✅ Quantyra - Docker Swarm (14KB JSON)
+
+**Architecture:**
+- Prometheus on router-01 scrapes all metrics
+- Grafana on router-01 visualizes metrics
+- Traefik metrics exposed via HTTP endpoint `/metrics` (proxied from internal API)
+- Docker metrics exposed directly on port 9323
+
+**Verification:**
+- Traefik metrics flowing: config reloads, request durations, entrypoint metrics
+- Docker metrics flowing: container states, actions, health checks
+- Dashboards accessible at http://100.102.220.16:3000
+
+**Files Updated:**
+- `/etc/dokploy/traefik/traefik.yml` - Added Prometheus metrics config
+- `/etc/dokploy/traefik/dynamic/metrics.yml` - Exposed metrics endpoint
+- `/etc/docker/daemon.json` - Added metrics-addr configuration
+- `/etc/prometheus/prometheus.yml` - Added Traefik and Docker scrape jobs
+- `/var/lib/grafana/dashboards/traefik_dashboard.json` - Traefik dashboard
+- `/var/lib/grafana/dashboards/docker_swarm_dashboard.json` - Docker Swarm dashboard
+
+**Tracking:**
+- Started: 2026-04-03
+- Completed: 2026-04-03 19:49 UTC
+- Status: ✅ Complete
 
 ---
 
