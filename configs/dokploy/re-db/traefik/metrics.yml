@@ -1,0 +1,12 @@
+http:
+  routers:
+    traefik-metrics:
+      rule: "PathPrefix(`/metrics`)"
+      service: traefik-metrics-service
+      entryPoints:
+        - web
+  services:
+    traefik-metrics-service:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:8080"

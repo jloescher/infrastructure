@@ -91,3 +91,17 @@ scrape_configs:
         labels: {node: 're-db'}
       - targets: ['100.89.130.19:9253']
         labels: {node: 're-node-02'}
+
+  - job_name: 'traefik'
+    static_configs:
+      - targets: ['100.92.26.38:80']
+        labels: {node: 're-db', role: 'traefik'}
+    metrics_path: /metrics
+
+  - job_name: 'docker'
+    static_configs:
+      - targets: ['100.92.26.38:9323']
+        labels: {node: 're-db', role: 'docker'}
+      - targets: ['100.89.130.19:9323']
+        labels: {node: 're-node-02', role: 'docker'}
+    metrics_path: /metrics

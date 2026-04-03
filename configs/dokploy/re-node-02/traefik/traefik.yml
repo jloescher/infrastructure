@@ -23,6 +23,12 @@ entryPoints:
         certResolver: letsencrypt
 api:
   insecure: true
+metrics:
+  prometheus:
+    addEntryPointsLabels: true
+    addServicesLabels: true
+    addRoutersLabels: true
+    buckets: [0.1, 0.3, 1.2, 5.0]
 certificatesResolvers:
   letsencrypt:
     acme:
