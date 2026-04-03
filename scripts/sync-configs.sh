@@ -2,7 +2,8 @@
 # Sync all configurations from production servers to local repo
 # Run from infrastructure root directory
 
-set -e
+# Removed set -e to handle missing files gracefully
+# set -e
 
 echo "Syncing configurations from production servers..."
 
@@ -25,20 +26,10 @@ ssh root@100.116.175.9 "cat /etc/haproxy/domains/web_backends.cfg" > configs/hap
 echo "HAProxy configs synced"
 
 # ==================== Dashboard ====================
-echo "=== Dashboard ==="
-mkdir -p configs/dashboard
-ssh root@100.102.220.16 "cat /opt/dashboard/config/.env 2>/dev/null" | sed 's/=.*/=/' > configs/dashboard/.env.example
-ssh root@100.102.220.16 "cat /opt/dashboard/config/applications.yml 2>/dev/null" > configs/dashboard/applications.yml
-ssh root@100.102.220.16 "cat /opt/dashboard/config/databases.yml 2>/dev/null" > configs/dashboard/databases.yml
-ssh root@100.102.220.16 "cat /etc/systemd/system/dashboard.service" > configs/dashboard/dashboard.service
-
-# SQLite database backup
-scp -q root@100.102.220.16:/data/paas.db configs/dashboard/paas.db 2>/dev/null || echo "  Warning: Could not sync paas.db"
-
-# Encryption key backup (DO NOT COMMIT TO GIT)
-scp -q root@100.102.220.16:/data/vault.key configs/dashboard/vault.key 2>/dev/null || echo "  Warning: Could not sync vault.key"
-
-echo "Dashboard configs synced"
+# NOTE: Old Flask dashboard removed - now using Dokploy
+# Dashboard configs no longer exist on router-01
+echo "=== Dashboard (Obsolete) ==="
+echo "  Skipped - old Flask dashboard removed, using Dokploy instead"
 
 # ==================== Provision Scripts ====================
 echo "=== Provision Scripts ==="
@@ -59,16 +50,16 @@ for server in "100.92.26.38:re-db" "100.89.130.19:re-node-02"; do
     ssh root@$ip "cat /etc/nginx/nginx.conf" > configs/app-servers/$name/nginx.conf
     ssh root@$ip "cat /etc/nginx/sites-enabled/* 2>/dev/null" > configs/app-servers/$name/sites-enabled.conf
     
-    # Individual site configs
-    for site in rentalfixer rentalfixer-staging stub_status default; do
-        ssh root@$ip "cat /etc/nginx/sites-available/$site 2>/dev/null" > "configs/app-servers/$name/nginx-sites/$site" 2>/dev/null
+    # Individual site configs (only stub_status and default exist now)
+    for site in stub_status default; do
+        ssh root@$ip "cat /etc/nginx/sites-available/$site 2>/dev/null" > "configs/app-servers/$name/nginx-sites/$site" 2>/dev/null || true
     done
     
     # PHP-FPM
-    ssh root@$ip "cat /etc/php/8.5/fpm/php-fpm.conf" > configs/app-servers/$name/php-fpm/php-fpm.conf 2>/dev/null
+    ssh root@$ip "cat /etc/php/8.5/fpm/php-fpm.conf" > configs/app-servers/$name/php-fpm/php-fpm.conf 2>/dev/null || true
     for pool in $(ssh root@$ip "ls /etc/php/8.5/fpm/pool.d/*.conf 2>/dev/null"); do
         poolname=$(basename $pool)
-        ssh root@$ip "cat /etc/php/8.5/fpm/pool.d/$poolname" > "configs/app-servers/$name/php-fpm/$poolname"
+        ssh root@$ip "cat /etc/php/8.5/fpm/pool.d/$poolname" > "configs/app-servers/$name/php-fpm/$poolname" 2>/dev/null || true
     done
 done
 
@@ -149,13 +140,67 @@ ssh root@100.102.220.16 "cat /etc/logrotate.d/nginx" > configs/logrotate/nginx 2
 echo "Logrotate configs synced"
 
 # ==================== App .env examples ====================
-echo "=== App .env examples ==="
-mkdir -p configs/apps
-for app in rentalfixer rentalfixer-staging; do
-    ssh root@100.92.26.38 "cat /opt/apps/$app/.env 2>/dev/null" | sed 's/=.*/=***/' > "configs/apps/$app-re-db.env.example" 2>/dev/null
-    ssh root@100.89.130.19 "cat /opt/apps/$app/.env 2>/dev/null" | sed 's/=.*/=***/' > "configs/apps/$app-re-node-02.env.example" 2>/dev/null
+# NOTE: Apps now deployed via Dokploy - no manual /opt/apps/ directory
+echo "=== App .env examples (Obsolete) ==="
+echo "  Skipped - apps now managed by Dokploy"
+
+# ==================== Dokploy ====================
+echo "=== Dokploy ==="
+mkdir -p configs/dokploy/re-db/traefik configs/dokploy/re-node-02/traefik
+mkdir -p configs/dokploy/re-db/monitoring configs/dokploy/re-node-02/monitoring
+
+# Manager node (re-db) - Traefik configs
+ssh root@100.92.26.38 "cat /etc/dokploy/traefik/traefik.yml" > configs/dokploy/re-db/traefik/traefik.yml 2>/dev/null || true
+
+# Sync all dynamic config files from manager
+for file in $(ssh root@100.92.26.38 "ls /etc/dokploy/traefik/dynamic/*.yml 2>/dev/null"); do
+    filename=$(basename "$file")
+    ssh root@100.92.26.38 "cat /etc/dokploy/traefik/dynamic/$filename" > "configs/dokploy/re-db/traefik/$filename" 2>/dev/null || true
 done
-echo "App .env examples synced"
+
+# ACME certificate metadata (DO NOT SYNC CONTENT - contains private keys)
+ssh root@100.92.26.38 "stat -c '%a %U %G %s %y' /etc/dokploy/traefik/dynamic/acme.json 2>/dev/null" > configs/dokploy/re-db/traefik/acme.json.metadata 2>/dev/null || true
+
+# Worker node (re-node-02) - Traefik configs
+ssh root@100.89.130.19 "cat /etc/dokploy/traefik/traefik.yml" > configs/dokploy/re-node-02/traefik/traefik.yml 2>/dev/null || true
+
+# Sync all dynamic config files from worker
+for file in $(ssh root@100.89.130.19 "ls /etc/dokploy/traefik/dynamic/*.yml 2>/dev/null"); do
+    filename=$(basename "$file")
+    ssh root@100.89.130.19 "cat /etc/dokploy/traefik/dynamic/$filename" > "configs/dokploy/re-node-02/traefik/$filename" 2>/dev/null || true
+done
+
+# ACME certificate metadata from worker (DO NOT SYNC CONTENT - contains private keys)
+ssh root@100.89.130.19 "stat -c '%a %U %G %s %y' /etc/dokploy/traefik/dynamic/acme.json 2>/dev/null" > configs/dokploy/re-node-02/traefik/acme.json.metadata 2>/dev/null || true
+
+# Dokploy monitoring configs (manager node only)
+for file in $(ssh root@100.92.26.38 "ls /etc/dokploy/monitoring/dokploy/*.json 2>/dev/null"); do
+    filename=$(basename "$file")
+    ssh root@100.92.26.38 "cat /etc/dokploy/monitoring/dokploy/$filename" > "configs/dokploy/re-db/monitoring/$filename" 2>/dev/null || true
+done
+
+echo "Dokploy configs synced"
+
+# ==================== Docker ====================
+echo "=== Docker ==="
+mkdir -p configs/docker/re-db configs/docker/re-node-02
+
+# Docker daemon configuration from both nodes
+ssh root@100.92.26.38 "cat /etc/docker/daemon.json" > configs/docker/re-db/daemon.json 2>/dev/null || true
+ssh root@100.89.130.19 "cat /etc/docker/daemon.json" > configs/docker/re-node-02/daemon.json 2>/dev/null || true
+
+echo "Docker daemon configs synced"
+
+# ==================== Docker Swarm ====================
+echo "=== Docker Swarm ==="
+mkdir -p configs/docker/swarm
+
+# Swarm status from manager
+ssh root@100.92.26.38 "docker node ls" > configs/docker/swarm/nodes.txt 2>/dev/null || true
+ssh root@100.92.26.38 "docker service ls" > configs/docker/swarm/services.txt 2>/dev/null || true
+ssh root@100.92.26.38 "docker network ls" > configs/docker/swarm/networks.txt 2>/dev/null || true
+
+echo "Docker Swarm state synced"
 
 # ==================== Cleanup ====================
 find configs/ -size 0 -delete

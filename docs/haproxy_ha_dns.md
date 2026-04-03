@@ -1,49 +1,50 @@
-# HAProxy High Availability - DNS Round-Robin
+# HAProxy High Availability - Database Load Balancing
 
-> **Note**: Infrastructure is branded "quantyra" but public domains use xotec.io
+> **CRITICAL UPDATE (2026-04-03):** HAProxy now handles **DATABASE TRAFFIC ONLY**
+> 
+> Applications route directly via Cloudflare → Traefik (Option B architecture)
+> HAProxy NO LONGER routes application traffic
 
 ## Architecture Overview
 
-The infrastructure uses a **consolidated frontend architecture** where all domains share a single HAProxy frontend, rather than having separate frontends per domain.
+**CHANGED (2026-04-03):** HAProxy is now dedicated to database load balancing. All application traffic routes directly via Cloudflare to Traefik on the app servers.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    CONSOLIDATED FRONTEND                        │
-│                                                                 │
-│   ┌─────────────────────────────────────────────────────────┐  │
-│   │  web_https (single frontend, port 443)                  │  │
-│   │                                                          │  │
-│   │  Bind: :443 ssl                                          │  │
-│   │    crt /etc/haproxy/certs/domain1.pem                    │  │
-│   │    crt /etc/haproxy/certs/domain2.pem                    │  │
-│   │    crt /etc/haproxy/certs/domain3.pem                    │  │
-│   │                                                          │  │
-│   │  ACLs:                                                   │  │
-│   │    acl is_domain1 hdr(host) -i domain1.tld               │  │
-│   │    acl is_domain2 hdr(host) -i domain2.tld               │  │
-│   │                                                          │  │
-│   │  Routes:                                                 │  │
-│   │    use_backend app1_backend if is_domain1                │  │
-│   │    use_backend app2_backend if is_domain2                │  │
-│   └─────────────────────────────────────────────────────────┘  │
-│                                                                 │
+│                    HAProxy - DATABASE ONLY                       │
+│                                                                  │
+│   HAProxy handles ONLY:                                         │
+│   • PostgreSQL (Ports 5000, 5001)                              │
+│   • Redis (Port 6379)                                          │
+│   • Stats Dashboard (Port 8404)                                │
+│                                                                  │
+│   HAProxy NO LONGER handles:                                    │
+│   ✗ Application traffic (HTTP/HTTPS)                           │
+│   ✗ App SSL certificates                                        │
+│   ✗ Domain routing                                              │
+│                                                                  │
+│   Applications route via:                                        │
+│   Cloudflare → Traefik (re-db/re-node-02) → App Containers     │
+│                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Why Consolidated?**
-- Multiple frontends on port 443 cause SNI routing issues
-- Single frontend with multiple certificates works reliably
-- HAProxy uses Host header for routing after SSL termination
-- Simpler configuration management
+**Why This Change?**
+- Simplified architecture: Apps bypass HAProxy entirely
+- Better performance: One less hop in traffic path
+- Automatic SSL: Traefik handles Let's Encrypt
+- Clear separation: HAProxy = Databases, Traefik = Apps
 
 ## Current Setup
 
-Two HAProxy routers in active-active configuration:
+Two HAProxy routers in active-active configuration for **DATABASE LOAD BALANCING ONLY**:
 
 | Router | Public IP | Tailscale IP | Role |
 |--------|-----------|--------------|------|
-| router-01 | 172.93.54.112 | 100.102.220.16 | Primary |
-| router-02 | 23.29.118.6 | 100.116.175.9 | Secondary |
+| router-01 | 172.93.54.112 | 100.102.220.16 | Database Load Balancer |
+| router-02 | 23.29.118.6 | 100.116.175.9 | Database Load Balancer (Secondary) |
+
+**Note:** Application traffic no longer routes through HAProxy. Apps use Cloudflare → Traefik directly.
 
 ## Configuration Files
 
@@ -51,30 +52,33 @@ Two HAProxy routers in active-active configuration:
 
 ```
 /etc/haproxy/
-├── haproxy.cfg              # Main config (stats, metrics, PostgreSQL, Redis)
+├── haproxy.cfg              # Main config (PostgreSQL, Redis, Stats)
 └── domains/
-    ├── web_http.cfg         # Single HTTP frontend (redirects)
-    ├── web_https.cfg        # Single HTTPS frontend (all domains)
-    ├── web_backends.cfg     # All application backends
-    └── registry.conf        # Domain → App → Port mapping
+    ├── web_http.cfg         # Minimal (returns 404 for all requests)
+    ├── web_https.cfg        # Minimal (returns 404 for all requests)
+    └── web_backends.cfg     # not_found_backend only
 ```
 
-### Domain Registry
+**What Changed (2026-04-03):**
+- Removed app-specific SSL certificates from `/etc/haproxy/certs/`
+- Removed app routing ACLs and backends
+- Removed `registry.conf` (no longer needed)
+- HTTP/HTTPS frontends return 404 (apps route via Traefik)
 
-The `registry.conf` file tracks all registered domains:
+### Database Endpoints (UNCHANGED)
 
-```bash
-# Format: domain=app_name=port
-rentalfixer.app=rentalfixer=8100
-staging.rentalfixer.app=rentalfixer_staging=8101
-www.rentalfixer.app=rentalfixer_www_redirect=8100
-```
+Applications continue to use these endpoints:
 
-This registry is used by `provision-domain.sh` to rebuild the consolidated configs.
+**PostgreSQL:**
+- **Write (RW)**: `100.102.220.16:5000` or `100.116.175.9:5000`
+- **Read (RO)**: `100.102.220.16:5001` or `100.116.175.9:5001`
+
+**Redis:**
+- **Write**: `100.102.220.16:6379` or `100.116.175.9:6379`
 
 ### Main Config (haproxy.cfg)
 
-Handles infrastructure services only:
+Handles database services only:
 
 ```haproxy
 # Stats page - http://router:8404/stats
@@ -114,126 +118,137 @@ frontend redis_read
     bind 100.102.220.16:6380
     mode tcp
     default_backend redis_replicas
+
+# PostgreSQL backends
+backend pg_primary
+    mode tcp
+    option httpchk GET /primary
+    http-check expect status 200
+    server node1 100.126.103.51:5432 check check-ssl verify none
+    server node2 100.114.117.46:5432 check check-ssl verify none
+    server node3 100.115.75.119:5432 check check-ssl verify none
+
+backend pg_replicas
+    mode tcp
+    balance roundrobin
+    option httpchk GET /replica
+    http-check expect status 200
+    server node1 100.126.103.51:5432 check check-ssl verify none
+    server node2 100.114.117.46:5432 check check-ssl verify none
+    server node3 100.115.75.119:5432 check check-ssl verify none
+
+# Redis backends
+backend redis_master
+    mode tcp
+    option httpchk GET /master
+    http-check expect status 200
+    server node1 100.126.103.51:6379 check
+    server node2 100.114.117.46:6379 check
+
+backend redis_replicas
+    mode tcp
+    balance roundrobin
+    option httpchk GET /replica
+    http-check expect status 200
+    server node1 100.126.103.51:6379 check
+    server node2 100.114.117.46:6379 check
 ```
 
-### HTTP Frontend (web_http.cfg)
+### HTTP/HTTPS Frontends (Minimal - Returns 404)
 
-Single frontend for all HTTP redirects:
-
+**web_http.cfg:**
 ```haproxy
 frontend web_http
     bind :80
     mode http
-
-    # Redirect each domain to HTTPS
-    http-request redirect scheme https code 301 if { hdr(host) -i rentalfixer.app }
-    http-request redirect scheme https code 301 if { hdr(host) -i staging.rentalfixer.app }
-```
-
-### HTTPS Frontend (web_https.cfg)
-
-Single frontend with all certificates:
-
-```haproxy
-frontend web_https
-    bind :443 ssl \
-        crt /etc/haproxy/certs/rentalfixer.app.pem \
-        crt /etc/haproxy/certs/staging.rentalfixer.app.pem \
-        alpn h2,http/1.1
-    mode http
-
-    # Client IP forwarding from Cloudflare
-    http-request set-header X-Real-IP %[req.hdr(CF-Connecting-IP)] if { req.hdr(CF-Connecting-IP) -m found }
-    http-request set-header X-Real-IP %[src] unless { req.hdr(CF-Connecting-IP) -m found }
-    http-request set-header X-Forwarded-For %[req.hdr(CF-Connecting-IP)] if { req.hdr(CF-Connecting-IP) -m found }
-    http-request set-header X-Forwarded-For %[src] unless { req.hdr(CF-Connecting-IP) -m found }
-    http-request set-header X-Forwarded-Proto https
-
-    # ACLs for domain routing
-    acl is_rentalfixer_app hdr(host) -i rentalfixer.app
-    acl is_staging_rentalfixer_app hdr(host) -i staging.rentalfixer.app
-
-    # WWW redirects
-    acl is_www_rentalfixer_app hdr(host) -i www.rentalfixer.app
-    http-request redirect location https://rentalfixer.app code 301 if is_www_rentalfixer_app
-
-    # Set forwarded host
-    http-request set-header X-Forwarded-Host rentalfixer.app if is_rentalfixer_app
-    http-request set-header X-Forwarded-Host staging.rentalfixer.app if is_staging_rentalfixer_app
-
-    # Route to backends
-    use_backend rentalfixer_backend if is_rentalfixer_app
-    use_backend rentalfixer_staging_backend if is_staging_rentalfixer_app
-
-    # Default: 404 for unknown domains
+    # All HTTP requests get 404 (apps route via Traefik)
     default_backend not_found_backend
 ```
 
-### Backends (web_backends.cfg)
-
-All application backends:
-
+**web_https.cfg:**
 ```haproxy
-backend rentalfixer_backend
+frontend web_https
+    bind :443 ssl crt /etc/haproxy/certs/default.pem alpn h2,http/1.1
     mode http
-    balance roundrobin
-    option httpchk GET /
-    http-check expect status 200-499
-    option forwardfor
-    server app1 100.92.26.38:8100 check
-    server app2 100.89.130.19:8100 check
+    # All HTTPS requests get 404 (apps route via Traefik)
+    default_backend not_found_backend
+```
 
-backend rentalfixer_staging_backend
-    mode http
-    balance roundrobin
-    option httpchk GET /
-    http-check expect status 200-499
-    option forwardfor
-    server app1 100.92.26.38:8101 check
-    server app2 100.89.130.19:8101 check
-
+**web_backends.cfg:**
+```haproxy
 backend not_found_backend
     mode http
     http-request deny deny_status 404
 ```
 
+**Note:** Applications no longer route through HAProxy. Use Dokploy/Traefik on app servers for application deployment.
+
 ## DNS Configuration
+
+### CHANGED (2026-04-03): DNS Points to App Servers for Apps
+
+**Application Domains:**
+- DNS A records point to APP SERVER IPs (NOT router IPs)
+- Cloudflare load balances between app servers
+- Example: `myapp.domain.tld → 208.87.128.115, 23.227.173.245`
+
+**Database Connections:**
+- Applications connect via HAProxy router IPs (Tailscale)
+- Use both router IPs for failover
+- Example: `DB_HOST=100.102.220.16` with fallback to `100.116.175.9`
 
 ### For Database Access (PostgreSQL/Redis)
 
-Create A records with both IPs:
+Applications should be configured with HAProxy router IPs:
 
-```
-db.xotec.io          A    172.93.54.112
-db.xotec.io          A    23.29.118.6
-```
+**PostgreSQL Configuration:**
+```bash
+# Primary endpoint (write)
+DB_HOST=100.102.220.16  # or 100.116.175.9 for failover
+DB_PORT=5000            # Read/Write
 
-**PostgreSQL:**
-- Port 5000: Write (primary)
-- Port 5001: Read (replicas)
-
-**Redis:**
-- Port 6379: Write (master)
-- Port 6380: Read (replicas)
-
-### For Web Traffic (Cloudflare Proxied)
-
-```
-domain.tld           A    172.93.54.112  (Proxied)
-domain.tld           A    23.29.118.6    (Proxied)
-www.domain.tld       A    172.93.54.112  (Proxied)
-www.domain.tld       A    23.29.118.6    (Proxied)
-staging.domain.tld   A    172.93.54.112  (Proxied)
-staging.domain.tld   A    23.29.118.6    (Proxied)
+# Replica endpoint (read)
+DB_READ_HOST=100.102.220.16
+DB_READ_PORT=5001       # Read-only
 ```
 
-### Recommended TTL
+**Redis Configuration:**
+```bash
+REDIS_HOST=100.102.220.16  # or 100.116.175.9 for failover
+REDIS_PORT=6379
+```
 
-Set TTL to 60-300 seconds for faster failover:
-- Lower TTL (60s): Faster failover, more DNS queries
-- Higher TTL (300s): Less DNS overhead, slower failover
+**Connection String Examples:**
+```bash
+# PostgreSQL write
+postgres://user:pass@100.102.220.16:5000/database
 
-**Note**: With Cloudflare proxy enabled, TTL is less important as Cloudflare handles the routing.
+# PostgreSQL read
+postgres://user:pass@100.102.220.16:5001/database
+
+# Redis
+redis://:password@100.102.220.16:6379/0
+```
+
+### For Application Domains (Cloudflare Proxied)
+
+Applications are deployed via Dokploy and use direct app server IPs:
+
+```
+myapp.domain.tld       A    208.87.128.115  (re-db, Proxied)
+myapp.domain.tld       A    23.227.173.245  (re-node-02, Proxied)
+```
+
+**Cloudflare handles:**
+- DNS round-robin between app servers
+- HTTP retry if one server fails
+- SSL at edge (Cloudflare certificate)
+- WAF and DDoS protection
+
+**Traefik handles:**
+- SSL termination (Let's Encrypt)
+- Domain routing by Host header
+- Container load balancing
 
 ## Health Check Endpoints
 
@@ -258,66 +273,78 @@ http://23.29.118.6:8404/stats
 
 ## Load Balancing Behavior
 
-### Cloudflare → Routers
+### Application Traffic (CHANGED - No Longer Through HAProxy)
+
+Applications route directly via Cloudflare → Traefik:
 
 ```
 Client Request → Cloudflare
         ↓
-    DNS Round-Robin
+    DNS Round-Robin (App Server IPs)
         ↓
-    ┌───────────┐
-    │ Router-01 │ ← 50% of requests
-    └───────────┘
-    ┌───────────┐
-    │ Router-02 │ ← 50% of requests
-    └───────────┘
+    ┌────────────┐
+    │ App Server │ ← Traefik handles routing
+    │  #1 (re-db)│
+    └────────────┘
+    ┌────────────┐
+    │ App Server │ ← Traefik handles routing
+    │ #2 (ATL)   │
+    └────────────┘
         ↓
     If one fails, Cloudflare HTTP retry
-    attempts the other router
+    attempts the other app server
 ```
 
-**No active health checks** - relies on HTTP retry behavior.
+**HAProxy is NOT involved in application traffic.**
 
-### Router → App Servers
+### Database Traffic (Unchanged - Through HAProxy)
 
 ```
-HAProxy Backend
+Application → HAProxy
         ↓
     Active Health Checks (every 2s)
         ↓
     ┌────────────┐
-    │ App Server │ ← check status
-    │    #1      │
+    │ PostgreSQL │ ← Primary/Replica detection
+    │   Node     │
     └────────────┘
     ┌────────────┐
-    │ App Server │ ← check status
-    │    #2      │
+    │   Redis    │ ← Master/Replica detection
+    │   Node     │
     └────────────┘
         ↓
-    Round-robin between healthy servers
+    Routes to healthy database nodes
 ```
 
-**Active health checks** - automatic failover when servers fail.
+**Active health checks** - automatic failover when nodes fail.
 
 ## Failover Scenarios
 
-### Router Failure
+### Router Failure (Database Access Only)
+
+| Step | What Happens | Application Impact |
+|------|--------------|-------------------|
+| 1 | router-01 goes down | - |
+| 2 | App tries DB connection via router-01 | Connection timeout |
+| 3 | App retries via router-02 | Connection succeeds |
+| 4 | Database operation completes | Slight delay |
+
+**Result**: Brief delay on database operations, no data loss
+
+**Best Practice**: Configure apps with both router IPs for automatic failover
+
+### App Server Failure (Not Related to HAProxy)
+
+Applications handle failover via Cloudflare/Traefik:
 
 | Step | What Happens | User Impact |
 |------|--------------|-------------|
-| 1 | Router-01 goes down | - |
-| 2 | Cloudflare sends request to Router-01 | Connection timeout/failure |
-| 3 | Cloudflare HTTP retry to Router-02 | Request succeeds |
-| 4 | User sees response | Slight delay (1-2 seconds) |
+| 1 | re-db goes down | - |
+| 2 | Cloudflare sends request to re-db | Connection timeout |
+| 3 | Cloudflare retries re-node-02 | Request succeeds |
+| 4 | User sees response | Slight delay |
 
-### App Server Failure
-
-| Step | What Happens | User Impact |
-|------|--------------|-------------|
-| 1 | App Server 1 goes down | - |
-| 2 | HAProxy health check fails (3 failures) | Server marked DOWN |
-| 3 | All traffic goes to App Server 2 | - |
-| 4 | User sees response | No impact |
+**HAProxy is not affected** - continues serving database traffic
 
 ### PostgreSQL Primary Failure
 
@@ -345,7 +372,7 @@ HAProxy Backend
 
 ```bash
 # Validate config first
-haproxy -c -f /etc/haproxy/haproxy.cfg -f /etc/haproxy/domains
+haproxy -c -f /etc/haproxy/haproxy.cfg
 
 # Reload
 systemctl reload haproxy
@@ -357,35 +384,45 @@ systemctl reload haproxy
 # Runtime stats
 echo 'show stat' | socat stdio /run/haproxy/admin.sock
 
-# Filter for specific backend
-echo 'show stat' | socat stdio /run/haproxy/admin.sock | grep rentalfixer
+# Filter for database backends
+echo 'show stat' | socat stdio /run/haproxy/admin.sock | grep -E 'pg_|redis_'
 
-# Show loaded certificates
-echo 'show ssl cert' | socat stdio /run/haproxy/admin.sock
+# Show backend status
+echo 'show stat' | socat stdio /run/haproxy/admin.sock | grep -E 'pxname|pg_primary|pg_replicas|redis_master'
 ```
 
-### Add New Domain
+### Database Backend Management
 
 ```bash
-# Provision new domain (updates registry and rebuilds configs)
-/opt/scripts/provision-domain.sh newdomain.tld appname 8102
+# Check PostgreSQL backend health
+echo 'show stat' | socat stdio /run/haproxy/admin.sock | grep pg_
 
-# Or just rebuild from existing registry
-/opt/scripts/provision-domain.sh --rebuild
+# Check Redis backend health
+echo 'show stat' | socat stdio /run/haproxy/admin.sock | grep redis
+
+# Show all backends
+echo 'show backend' | socat stdio /run/haproxy/admin.sock
 ```
 
-### Remove Domain
+### Connection Testing
 
 ```bash
-# Remove from registry
-sed -i '/^domain.tld=/d' /etc/haproxy/domains/registry.conf
+# Test PostgreSQL write endpoint
+psql -h 100.102.220.16 -p 5000 -U patroni_superuser -d postgres -c "SELECT version();"
 
-# Remove certificate
-rm /etc/haproxy/certs/domain.tld.pem
+# Test PostgreSQL read endpoint
+psql -h 100.102.220.16 -p 5001 -U patroni_superuser -d postgres -c "SELECT version();"
 
-# Rebuild configs
-/opt/scripts/provision-domain.sh --rebuild
+# Test Redis endpoint
+redis-cli -h 100.102.220.16 -p 6379 -a CcPUa3nvcxHtyNYjztbDyfCCuhgix78novmBDNGk PING
 ```
+
+### Application Deployment (NOT Through HAProxy)
+
+Applications are deployed via Dokploy:
+- **Dashboard**: https://deploy.quantyralabs.cc
+- **Documentation**: See `/docs/dokploy_migration_plan.md`
+- **Traffic Flow**: Cloudflare → Traefik → App containers
 
 ## Monitoring
 
@@ -413,27 +450,47 @@ ssh root@100.102.220.16 "systemctl start haproxy"
 
 ## Troubleshooting
 
-### 503 Errors
+### Database Connection Issues
 
 1. Check HAProxy is running: `systemctl status haproxy`
-2. Check backend servers: `echo 'show stat' | socat stdio /run/haproxy/admin.sock`
-3. Check certificate exists: `ls -la /etc/haproxy/certs/`
-4. Validate config: `haproxy -c -f /etc/haproxy/haproxy.cfg -f /etc/haproxy/domains`
+2. Check database backends: `echo 'show stat' | socat stdio /run/haproxy/admin.sock | grep -E 'pg_|redis_'`
+3. Test direct connection: `psql -h 100.102.220.16 -p 5000 -U patroni_superuser -d postgres`
+4. Check Patroni cluster: `patronictl list`
+5. Validate config: `haproxy -c -f /etc/haproxy/haproxy.cfg`
 
-### Certificate Issues
+### Backend Health Issues
 
 ```bash
-# Check certificate validity
-openssl x509 -in /etc/haproxy/certs/domain.tld.pem -noout -dates
+# Check backend status
+echo 'show stat' | socat stdio /run/haproxy/admin.sock
 
-# Renew certificate
-certbot renew
-systemctl reload haproxy
+# Look for:
+# - status: UP or DOWN
+# - lastchg: time since last status change
+# - qlimit: queue limit (should be 0 for healthy backends)
 ```
 
-### Backend Not Routing
+### Router Failover Testing
 
-1. Check ACL matches: `acl is_domain hdr(host) -i domain.tld`
-2. Check backend is defined in `web_backends.cfg`
-3. Check domain is in `registry.conf`
-4. Rebuild configs: `/opt/scripts/provision-domain.sh --rebuild`
+```bash
+# Test failover by stopping HAProxy on one router
+ssh root@100.102.220.16 "systemctl stop haproxy"
+
+# Verify apps can still connect via router-02
+psql -h 100.116.175.9 -p 5000 -U patroni_superuser -d postgres -c "SELECT 1;"
+
+# Restart HAProxy
+ssh root@100.102.220.16 "systemctl start haproxy"
+```
+
+### Application 404 Errors
+
+**IMPORTANT**: Applications NO LONGER route through HAProxy.
+
+If applications return 404:
+1. Check DNS points to app server IPs (NOT router IPs)
+2. Verify Traefik is running on app servers
+3. Check Dokploy dashboard: https://deploy.quantyralabs.cc
+4. See Dokploy documentation for application troubleshooting
+
+**HAProxy handles DATABASE traffic only.**

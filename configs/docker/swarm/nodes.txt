@@ -1,0 +1,3 @@
+ID                            HOSTNAME     STATUS    AVAILABILITY   MANAGER STATUS   ENGINE VERSION
+awu1muk2qyons79g5hey02zef *   re-db        Ready     Active         Leader           29.3.1
+1j9esqshub412w21peic4csbg     re-node-02   Ready     Active                          29.3.1

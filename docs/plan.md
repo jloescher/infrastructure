@@ -616,6 +616,56 @@ HTTP/2 200
 
 ---
 
+## Milestone: Dokploy Migration Complete (2026-04-03)
+
+**Architecture Changed to Option B:**
+- Apps route directly via Cloudflare → Traefik (bypass HAProxy)
+- HAProxy handles database traffic ONLY (PostgreSQL, Redis)
+- Dokploy deployed with 2-node Docker Swarm (1 Manager + 1 Worker)
+- Traefik HA with 2 replicas across both app servers
+- Automatic SSL via Let's Encrypt with DNS-01 challenge
+
+**Completed Phases:**
+- ✅ Phase 0: Coolify cleanup (removed sync services, cleaned HAProxy)
+- ✅ Phase 1: CapRover removal (uninstalled from re-db)
+- ✅ Phase 2: Dokploy installation (Swarm cluster configured)
+- ✅ Phase 3: Traefik HA deployment (2 replicas, SSL working)
+- ✅ Phase 4: Cloudflare DNS API (wildcard certificates)
+- ✅ Phase 5: DNS configuration (app server IPs)
+- ✅ Phase 6: Application deployment verified
+
+**Key Discoveries:**
+1. Docker Swarm: Use 1 manager + workers (not 2 managers) for stable quorum
+2. Docker routing mesh: Essential for cross-node Traefik communication
+3. Swarm advertise address: Must manually specify Tailscale IP
+4. Traefik file provider path: Must match volume mount point
+5. ACME storage path: Must match Let's Encrypt volume location
+6. HAProxy scope: Database-only (apps bypass entirely)
+
+**Architecture Benefits:**
+- Simplified traffic flow (one less hop)
+- Automatic SSL provisioning (no manual certificates)
+- Better performance (direct routing)
+- Cloudflare load balancing (between app servers)
+- Clear separation of concerns (HAProxy=DB, Traefik=Apps)
+
+**Documentation Updated:**
+- ✅ architecture.md - Option B architecture documented
+- ✅ dokploy_migration_plan.md - All phases marked complete
+- ✅ haproxy_ha_dns.md - Database-only scope documented
+- ✅ deployment.md - Dokploy procedures added
+- ✅ disaster_recovery.md - HA considerations updated
+- ✅ infrastructure-complete-overview.md - Architecture updated
+- ✅ getting-started.md - Deployment workflow updated
+
+**Next Steps:**
+- Migrate existing apps from legacy deployment to Dokploy
+- Configure monitoring for Dokploy/Traefik
+- Set up automated backups for Dokploy configuration
+- Document app migration procedures
+
+---
+
 ## Milestone: Laravel PaaS Complete (2026-03-18)
 
 **Working Features:**
@@ -2215,6 +2265,306 @@ export default function handler(req, res) {
 - Started: 2026-03-18
 - Completed: 2026-03-18
 - Status: ✅ Complete
+
+---
+
+## CapRover to Dokploy Migration (Option B Architecture)
+
+**Goal:** Migrate from CapRover to Dokploy with Option B architecture where apps route directly via Cloudflare → Traefik (bypassing HAProxy). HAProxy preserved only for database traffic.
+
+**Started:** 2026-04-03  
+**Completed:** 2026-04-03 18:25 UTC (Phases 0-4)  
+**Status:** ✅ **Phases 0-4 Complete** | ⏳ Phases 5-6 Pending
+
+### Architecture Decision
+
+**Option B Selected:**
+- Apps: Cloudflare → Traefik (re-db, re-node-02) → App Containers
+- Databases: Cloudflare → HAProxy (routers) → Patroni/Redis
+- HAProxy dedicated to database traffic only
+- Traefik handles app SSL via Let's Encrypt
+- DNS points to app server public IPs, NOT routers
+
+---
+
+### Critical Issues Resolved (2026-04-03)
+
+#### 1. Traefik File Provider Path Mismatch ✅ FIXED
+
+**Problem:** Dashboard returning 404, routers not loading.
+
+**Root Cause:** `traefik.yml` specified `/etc/dokploy/traefik/dynamic` but mount was at `/etc/traefik/dynamic`.
+
+**Resolution:**
+```yaml
+# Changed in traefik.yml
+providers:
+  file:
+    directory: /etc/traefik/dynamic  # Match mount point
+```
+
+**Verification:**
+```bash
+curl -I https://deploy.quantyralabs.cc
+# HTTP/2 200 (routers now working)
+```
+
+#### 2. ACME Storage Path Mismatch ✅ FIXED
+
+**Problem:** SSL certificates not generating, "unable to get ACME account" errors.
+
+**Root Cause:** `acme.json` storage path `/etc/dokploy/traefik/dynamic/acme.json` didn't match volume mount `/etc/traefik/acme`.
+
+**Resolution:**
+```yaml
+# Changed in traefik.yml
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      storage: /etc/traefik/acme/acme.json  # Match volume mount
+```
+
+**Verification:**
+```bash
+ls -la /etc/traefik/acme/acme.json
+# File exists with valid Let's Encrypt cert
+```
+
+#### 3. Dokploy PostgreSQL Password Mismatch ✅ FIXED
+
+**Problem:** Dokploy service failing with auth errors.
+
+**Root Cause:** Password mismatch after reinstall attempts between Docker secret and PostgreSQL user.
+
+**Resolution:**
+```bash
+ALTER USER dokploy WITH PASSWORD '5DTiwcIUptDZ2jCygfPp776x8oSyWBu8';
+```
+
+**Verification:**
+```bash
+docker service ps dokploy
+# 1/1 replicas, healthy
+```
+
+---
+
+### Phase 0: Coolify Cleanup ✅ COMPLETE
+
+**Completed:** 2026-04-03 14:30 UTC
+
+**Actions:**
+- Stopped and disabled `sync-coolify-domains.timer` and `.service` on both routers
+- Removed systemd unit files from `/etc/systemd/system/`
+- Removed app SSL certificates from `/etc/haproxy/certs/` (kept only `default.pem`)
+- Updated `/etc/haproxy/domains/web_backends.cfg` - removed `coolify_backend`, only `not_found_backend` remains
+- Updated `/etc/haproxy/domains/web_https.cfg` - simplified to minimal frontend with `default.pem` only
+- HAProxy reloaded successfully on both routers
+- Database connectivity verified: PostgreSQL (ports 5000/5001) and Redis (port 6379) via HAProxy still working
+
+**Backups Created:**
+- `web_backends.cfg.backup.20260403_*`
+- `web_https.cfg.backup.20260403_*`
+- `certs.backup.20260403_*`
+
+---
+
+### Phase 1: CapRover Removal ✅ COMPLETE
+
+**Completed:** 2026-04-03 14:35 UTC
+
+**Actions:**
+- Stopped all CapRover services on re-db (captain-captain, captain-nginx, captain-certbot, captain-registry)
+- Left Docker Swarm
+- Removed all containers, volumes, networks
+- Removed `/captain` directory
+- Docker restarted, ports 80/443/3000 confirmed free
+- Reclaimed 3.8GB disk space
+
+**Verification:**
+- `docker ps -a | grep captain` → No output
+- `ls /captain` → No such file or directory
+- `ss -tulnp | grep -E ':80|:443|:3000'` → No output (ports free)
+
+---
+
+### Phase 2: Dokploy Installation ✅ COMPLETE
+
+**Completed:** 2026-04-03 15:05 UTC
+
+**Actions:**
+- UFW firewall configured on re-db (ports 80, 443, 3000, 2377, 7946, 4789)
+- UFW configured on re-node-02 (ports 80, 443, 2377, 7946, 4789)
+- Dokploy installed successfully on re-db
+- PostgreSQL password mismatch resolved (see Critical Issues)
+- Dokploy service running (1/1 replicas, container healthy)
+- Dashboard accessible at http://100.92.26.38:3000
+- Swarm initialized (re-db as Manager/Leader)
+- re-node-02 joined as worker successfully
+
+**Swarm Status:**
+- re-db: Manager/Leader (Ready, Active)
+- re-node-02: Worker (Ready, Active)
+
+**Join Command:**
+```bash
+docker swarm join --token SWMTKN-1-0e9gwyuuroaw5kexbhba88tawsiufc4p4zomnbhafxc94x4on6-0pnj268h1ml6fe8c0wq1dvyv7 100.92.26.38:2377
+```
+
+---
+
+### Phase 3: Traefik HA Deployment ✅ COMPLETE
+
+**Completed:** 2026-04-03 15:25 UTC
+
+**Actions:**
+- Removed standalone Traefik container
+- Created `/etc/dokploy/traefik/` on re-node-02 (bind mount requirement)
+- Synced Traefik configs from manager to worker
+- Deployed Traefik as Swarm service with 2 replicas
+- Fixed file provider path mismatch (see Critical Issues)
+- Fixed ACME storage path mismatch (see Critical Issues)
+- Ports 80/443 bound on both app servers
+- SSL certificate generated: Let's Encrypt wildcard (*.quantyralabs.cc)
+- Valid until: 2026-06-14
+
+**Traefik Service:**
+```bash
+docker service create \
+  --name dokploy-traefik \
+  --replicas 2 \
+  --network dokploy-network \
+  --publish mode=host,published=80,target=80 \
+  --publish mode=host,published=443,target=443 \
+  --publish mode=host,published=443,target=443,protocol=udp \
+  --mount type=bind,source=/etc/dokploy/traefik/traefik.yml,target=/etc/traefik/traefik.yml \
+  --mount type=bind,source=/etc/dokploy/traefik/dynamic,target=/etc/traefik/dynamic \
+  --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock:ro \
+  --mount type=volume,source=dokploy-letsencrypt,target=/etc/traefik/acme \
+  traefik:v3.6.7
+```
+
+**Verification:**
+- `docker service ps dokploy-traefik` → 2/2 tasks running (HA)
+- `ss -tlnp | grep -E ':80|:443'` → Both ports listening on both servers
+- `curl -I https://deploy.quantyralabs.cc` → HTTP 200 (dashboard accessible)
+- `curl -I https://*.quantyralabs.cc` → SSL certificate valid
+
+### Phase 4: High Availability Setup ✅ COMPLETE
+
+**Completed:** 2026-04-03 18:25 UTC
+
+**Actions:**
+- Fixed Swarm quorum issue: Converted re-node-02 from manager to worker
+- Swarm now stable: 1 manager (re-db) + 1 worker (re-node-02)
+- Traefik service updated to global mode (1 container per node)
+- Fixed Traefik DNS resolution: Updated routing config to use `dokploy.dokploy-network:3000`
+- Synced all Traefik configs to re-node-02
+- Verified HTTPS access working on both app servers
+
+**Swarm Architecture:**
+- **Manager:** re-db (Leader, Active) - Runs Dokploy, PostgreSQL, Redis, Traefik
+- **Worker:** re-node-02 (Active) - Runs Traefik only
+
+**Key Discovery:**
+Two-manager Swarm lacks fault tolerance (requires >50% managers online). Worker-only architecture chosen for stability.
+
+**Services Running:**
+- dokploy: 1/1 replicas (on re-db)
+- dokploy-postgres: 1/1 replicas (on re-db)
+- dokploy-redis: 1/1 replicas (on re-db)
+- dokploy-traefik: 2/2 replicas (global mode, 1 per node)
+
+**DNS Configuration:**
+- Cloudflare DNS: 2 A records for deploy.quantyralabs.cc
+  - → 208.87.128.115 (re-db public IP)
+  - → 23.227.173.245 (re-node-02 public IP)
+- Cloudflare proxy: Enabled (orange cloud)
+- Traffic: Round-robin between both app servers
+
+**Verification:**
+```bash
+curl -I https://deploy.quantyralabs.cc
+# HTTP/2 200 (via re-db)
+
+curl -I --resolve deploy.quantyralabs.cc:443:23.227.173.245 https://deploy.quantyralabs.cc
+# HTTP/2 200 (via re-node-02)
+```
+
+### Phase 5: Cloudflare DNS API Configuration ⏳
+
+**Status:** Not started
+
+**Actions Needed:**
+- Create Cloudflare API token with DNS edit permissions
+- Configure in Dokploy dashboard (Settings → Certificates)
+- Enable DNS-01 challenge for wildcard certificates
+
+### Phase 6: Application Deployment ⏳
+
+**Status:** Not started
+
+**Actions Needed:**
+- Create databases in Patroni cluster
+- Configure application in Dokploy dashboard
+- Connect Git repository
+- Set environment variables (DB, Redis via HAProxy)
+- Deploy application with 2 replicas
+- Verify HTTPS certificate generation
+- Test application accessibility
+
+### Current Infrastructure State
+
+**Dokploy Stack:**
+- **Status:** ✅ Running (HA)
+- **Manager:** re-db (100.92.26.38) - Leader/Active
+- **Worker:** re-node-02 (100.89.130.19) - Active
+- **Dashboard:** https://deploy.quantyralabs.cc (HTTP 200)
+  - DNS: Round-robin (re-db + re-node-02)
+  - Cloudflare proxy: Enabled
+- **Traefik:** 2/2 replicas (global mode - 1 per node)
+  - Ports: 80/443 on both app servers
+  - SSL: Let's Encrypt HTTP-01 challenge
+- **PostgreSQL:** dokploy-postgres (1/1 replicas, on re-db)
+- **Redis:** dokploy-redis (1/1 replicas, on re-db)
+
+**Swarm Architecture:**
+- Single-manager architecture for stability
+- Worker nodes can run app replicas
+- No quorum issues with 1-manager setup
+
+**HAProxy Stack (Database Only):**
+- **Status:** ✅ Running (app routing removed)
+- **router-01:** PostgreSQL (5000/5001), Redis (6379)
+- **router-02:** PostgreSQL (5000/5001), Redis (6379)
+- **Scope:** Database traffic only (Patroni + Redis)
+
+**Preserved Services:**
+- Patroni cluster: re-node-01/03/04 (3-node HA, unchanged)
+- Redis cluster: re-node-01 (master), re-node-03 (replica, unchanged)
+- Prometheus/Grafana/Alertmanager: router-01 (unchanged)
+- Infrastructure dashboard: router-01:8080 (unchanged)
+
+**Architecture Notes:**
+- Apps route via: Cloudflare → Traefik (re-db/re-node-02) → App containers
+- Databases route via: HAProxy (routers) → Patroni/Redis
+- Traefik handles SSL via Let's Encrypt DNS-01 challenge
+- All critical path mismatch bugs resolved (see Critical Issues section)
+
+**Key Discoveries:**
+1. Dokploy installer auto-detects Docker bridge IP (172.17.0.1) instead of Tailscale IP for Swarm advertise address
+2. PostgreSQL password must be manually reset after reinstall if database already exists
+3. Bind mounts in Swarm services require paths to exist on ALL nodes
+4. Traefik standalone container blocks ports 80/443, preventing service deployment
+5. Dokploy installer URL is `https://dokploy.com/install.sh` (NOT get.dokploy.com)
+6. **Two-manager Swarm quorum issue:** With 2 managers, losing 1 causes total cluster failure (requires >50% managers). Solution: Use 1 manager + workers for stability.
+7. **Traefik DNS resolution:** Tailscale DNS interferes with Docker Swarm DNS. Use fully-qualified service names like `dokploy.dokploy-network:3000`.
+8. **Swarm provider error:** Workers can't query Swarm API. Traefik on workers logs errors but still routes traffic correctly via file provider.
+
+**References:**
+- Migration plan: `docs/dokploy_migration_plan.md`
+- Architecture: Option B (Apps bypass HAProxy)
+- Swarm join token: Use Tailscale IP (100.92.26.38:2377), not bridge IP
 
 ---
 

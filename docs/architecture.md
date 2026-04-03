@@ -1,89 +1,72 @@
 # Infrastructure Architecture
 
 > Complete reference for the Quantyra infrastructure architecture, traffic flow, and load balancing.
+>
+> **UPDATED 2026-04-03:** Architecture changed to Option B (Dokploy) - Apps route directly via Traefik, HAProxy handles databases only.
 
 ## Overview
 
 The infrastructure uses a multi-tier architecture with high availability at every layer:
 
+**CHANGED (2026-04-03):** Application traffic now routes directly via Cloudflare → Traefik (bypassing HAProxy). HAProxy handles ONLY database traffic (PostgreSQL and Redis).
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                              TRAFFIC FLOW DIAGRAM                                │
+│                        (Option B - Dokploy Architecture)                         │
 └─────────────────────────────────────────────────────────────────────────────────┘
 
-                                    USER
-                                      │
-                                      ▼
+                                     USER
+                                       │
+                                       ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                           CLOUDFLARE (Anycast Edge)                             │
 │  ┌─────────────────────────────────────────────────────────────────────────┐    │
 │  │  • Global CDN with 300+ PoPs                                            │    │
 │  │  • DDoS Protection & WAF                                                │    │
 │  │  • SSL: Cloudflare Edge Certificate (wildcard *.domain.tld)             │    │
-│  │  • DNS: Round-robin between router IPs                                  │    │
-│  │  • HTTP Retry: If one router fails, retries the other                   │    │
+│  │  • DNS: Round-robin between APP SERVER IPs                              │    │
+│  │  • HTTP Retry: If one app server fails, retries the other               │    │
+│  │                                                                          │    │
+│  │  CHANGED: DNS now points to APP SERVERS, not routers                    │    │
 │  └─────────────────────────────────────────────────────────────────────────┘    │
 │                              │                    │                              │
 │                              │ 50%                │ 50%                          │
 │                              ▼                    ▼                              │
-│                    172.93.54.112          23.29.118.6                           │
+│                    208.87.128.115          23.227.173.245                        │
+│                        (re-db)              (re-node-02)                         │
 └─────────────────────────────────────────────────────────────────────────────────┘
-                       │                              │
-                       │ Encrypted                    │ Encrypted
-                       │ (Cloudflare → Router)        │ (Cloudflare → Router)
-                       ▼                              ▼
+                        │                              │
+                        │ Encrypted                    │ Encrypted
+                        │ (Cloudflare → Traefik)       │ (Cloudflare → Traefik)
+                        ▼                              ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                              ROUTER LAYER (HAProxy)                             │
-│                                                                                 │
-│   ┌─────────────────────────────┐    ┌─────────────────────────────┐           │
-│   │       ROUTER-01             │    │       ROUTER-02             │           │
-│   │    100.102.220.16           │    │    100.116.175.9            │           │
-│   │    Public: 172.93.54.112    │    │    Public: 23.29.118.6      │           │
-│   │                             │    │                             │           │
-│   │  ┌───────────────────────┐  │    │  ┌───────────────────────┐  │           │
-│   │  │ HAProxy Frontend      │  │    │  │ HAProxy Frontend      │  │           │
-│   │  │ (web_https)           │  │    │  │ (web_https)           │  │           │
-│   │  │                       │  │    │  │                       │  │           │
-│   │  │ • Terminates SSL      │  │    │  │ • Terminates SSL      │  │           │
-│   │  │ • Cert: Let's Encrypt │  │    │  │ • Cert: Let's Encrypt │  │           │
-│   │  │ • Routes by Host hdr  │  │    │  │ • Routes by Host hdr  │  │           │
-│   │  └───────────┬───────────┘  │    │  └───────────┬───────────┘  │           │
-│   │              │              │    │              │              │           │
-│   │  ┌───────────▼───────────┐  │    │  ┌───────────▼───────────┐  │           │
-│   │  │ HAProxy Backend       │  │    │  │ HAProxy Backend       │  │           │
-│   │  │ (app_backend)         │  │    │  │ (app_backend)         │  │           │
-│   │  │                       │  │    │  │                       │  │           │
-│   │  │ • Round-robin LB      │  │    │  │ • Round-robin LB      │  │           │
-│   │  │ • Health checks       │  │    │  │ • Health checks       │  │           │
-│   │  │ • Failover if down    │  │    │  │ • Failover if down    │  │           │
-│   │  └───────────┬───────────┘  │    │  └───────────┬───────────┘  │           │
-│   └──────────────┼──────────────┘    └──────────────┼──────────────┘           │
-│                  │                                  │                           │
-└──────────────────┼──────────────────────────────────┼───────────────────────────┘
-                   │                                  │
-                   │         Unencrypted              │
-                   │      (Internal Tailscale)        │
-                   │                                  │
-         ┌─────────┴─────────┐            ┌──────────┴─────────┐
-         ▼                   ▼            ▼                    ▼
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                            APP SERVER LAYER                                      │
+│                         APP SERVER LAYER (Dokploy)                              │
 │                                                                                 │
 │   ┌─────────────────────────────┐    ┌─────────────────────────────┐           │
 │   │       APP SERVER 1          │    │       APP SERVER 2          │           │
 │   │       re-db                 │    │       re-node-02            │           │
 │   │    100.92.26.38             │    │    100.89.130.19            │           │
+│   │    Public: 208.87.128.115   │    │    Public: 23.227.173.245   │           │
 │   │                             │    │                             │           │
 │   │  ┌───────────────────────┐  │    │  ┌───────────────────────┐  │           │
-│   │  │ nginx (port 8100+)    │  │    │  │ nginx (port 8100+)    │  │           │
-│   │  │ • Serves static files │  │    │  │ • Serves static files │  │           │
-│   │  │ • Proxies PHP to FPM  │  │    │  │ • Proxies PHP to FPM  │  │           │
+│   │  │ Dokploy Manager       │  │    │  │ Dokploy Worker        │  │           │
+│   │  │ • Dashboard :3000     │  │    │  │ • Runs app containers │  │           │
+│   │  │ • PostgreSQL/Redis    │  │    │  │ • Traefik replica     │  │           │
+│   │  └───────────────────────┘  │    │  └───────────────────────┘  │           │
+│   │                             │    │                             │           │
+│   │  ┌───────────────────────┐  │    │  ┌───────────────────────┐  │           │
+│   │  │ Traefik (Swarm)       │  │    │  │ Traefik (Swarm)       │  │           │
+│   │  │ • Port 80, 443        │  │    │  │ • Port 80, 443        │  │           │
+│   │  │ • SSL (Let's Encrypt) │  │    │  │ • SSL (Let's Encrypt) │  │           │
+│   │  │ • Routes by Host hdr  │  │    │  │ • Routes by Host hdr  │  │           │
 │   │  └───────────┬───────────┘  │    │  └───────────┬───────────┘  │           │
 │   │              │              │    │              │              │           │
 │   │  ┌───────────▼───────────┐  │    │  ┌───────────▼───────────┐  │           │
-│   │  │ PHP-FPM 8.5           │  │    │  │ PHP-FPM 8.5           │  │           │
-│   │  │ • Laravel app         │  │    │  │ • Laravel app         │  │           │
-│   │  │ • /opt/apps/{appname} │  │    │  │ • /opt/apps/{appname} │  │           │
+│   │  │ Docker Containers     │  │    │  │ Docker Containers     │  │           │
+│   │  │ • Laravel apps        │  │    │  │ • Laravel apps        │  │           │
+│   │  │ • Node.js apps        │  │    │  │ • Node.js apps        │  │           │
+│   │  │ • 2+ replicas (HA)    │  │    │  │ • 2+ replicas (HA)    │  │           │
 │   │  └───────────┬───────────┘  │    │  └───────────┬───────────┘  │           │
 │   └──────────────┼──────────────┘    └──────────────┼──────────────┘           │
 │                  │                                  │                           │
@@ -93,29 +76,38 @@ The infrastructure uses a multi-tier architecture with high availability at ever
                                   │
                                   ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                            DATABASE LAYER                                        │
+│                         DATABASE LAYER (HAProxy → Patroni/Redis)                │
 │                                                                                 │
 │   ┌─────────────────────────────────────────────────────────────────────────┐   │
+│   │                    HAProxy (Database Only)                              │   │
+│   │                    router-01, router-02                                 │   │
+│   │                                                                          │   │
+│   │  CHANGED: HAProxy NO LONGER routes app traffic                          │   │
+│   │  HAProxy handles ONLY: PostgreSQL + Redis                               │   │
+│   │                                                                          │   │
+│   │  • Port 5000: PostgreSQL Read/Write (leader)                            │   │
+│   │  • Port 5001: PostgreSQL Read-only (replicas)                           │   │
+│   │  • Port 6379: Redis Write (master)                                      │   │
+│   └─────────────────────────────────────────────────────────────────────────┘   │
+│                                   │                                             │
+│                                   ▼                                             │
+│   ┌─────────────────────────────────────────────────────────────────────────┐   │
 │   │                    PostgreSQL / Patroni Cluster                         │   │
-│   │                                                                         │   │
+│   │                                                                          │   │
 │   │   re-node-01 (100.126.103.51) ─┐                                       │   │
 │   │   re-node-03 (100.114.117.46) ─┼─► HA via Patroni (leader election)    │   │
 │   │   re-node-04 (100.115.75.119) ─┘                                       │   │
-│   │                                                                         │   │
-│   │   Access via HAProxy on routers:                                       │   │
-│   │   • Port 5000: Read/Write (leader)                                     │   │
-│   │   • Port 5001: Read-only (replicas)                                    │   │
+│   │                                                                          │   │
+│   │   UNCHANGED: Patroni cluster configuration remains the same             │   │
 │   └─────────────────────────────────────────────────────────────────────────┘   │
 │                                                                                 │
 │   ┌─────────────────────────────────────────────────────────────────────────┐   │
 │   │                    Redis Cluster with Sentinel                          │   │
-│   │                                                                         │   │
+│   │                                                                          │   │
 │   │   re-node-01 (100.126.103.51) ─► Master                                │   │
 │   │   re-node-03 (100.114.117.46) ─► Replica                               │   │
-│   │                                                                         │   │
-│   │   Access via HAProxy on routers:                                       │   │
-│   │   • Port 6379: Write (master)                                          │   │
-│   │   • Port 6380: Read (replicas)                                         │   │
+│   │                                                                          │   │
+│   │   UNCHANGED: Redis cluster configuration remains the same               │   │
 │   └─────────────────────────────────────────────────────────────────────────┘   │
 │                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
@@ -123,21 +115,37 @@ The infrastructure uses a multi-tier architecture with high availability at ever
 
 ## Server Inventory
 
-### Routers (HAProxy Load Balancers)
+### App Servers (Dokploy Cluster)
+
+**CHANGED (2026-04-03):** Now running Dokploy with Docker Swarm
+
+| Name | Tailscale IP | Public IP | Location | Dokploy Role | Services |
+|------|--------------|-----------|----------|--------------|----------|
+| re-db | 100.92.26.38 | 208.87.128.115 | NYC | **Manager** | Dokploy Dashboard, Traefik, Docker containers |
+| re-node-02 | 100.89.130.19 | 23.227.173.245 | ATL | **Worker** | Traefik, Docker containers |
+
+**Swarm Architecture:**
+- 1 Manager + 1 Worker (stable quorum)
+- Docker routing mesh for cross-node communication
+- Traefik: 2 replicas (one per node)
+- Apps: Can deploy 2+ replicas for HA
+
+### Routers (HAProxy - Database Only)
+
+**CHANGED (2026-04-03):** HAProxy now handles ONLY database traffic
 
 | Name | Tailscale IP | Public IP | Location | Role |
 |------|--------------|-----------|----------|------|
-| router-01 | 100.102.220.16 | 172.93.54.112 | NYC | Primary |
-| router-02 | 100.116.175.9 | 23.29.118.6 | ATL | Secondary |
+| router-01 | 100.102.220.16 | 172.93.54.112 | NYC | Database Load Balancer |
+| router-02 | 100.116.175.9 | 23.29.118.6 | ATL | Database Load Balancer (Secondary) |
 
-### App Servers
+**HAProxy Scope:**
+- PostgreSQL: Ports 5000 (RW), 5001 (RO)
+- Redis: Port 6379
+- Stats: Port 8404
+- **NO LONGER routes application traffic**
 
-| Name | Tailscale IP | Public IP | Location | PHP | Node.js |
-|------|--------------|-----------|----------|-----|---------|
-| re-db | 100.92.26.38 | 208.87.128.115 | NYC | 8.5 | 20 |
-| re-node-02 | 100.89.130.19 | 23.227.173.245 | ATL | 8.5 | 20 |
-
-### Database Servers
+### Database Servers (Unchanged)
 
 | Name | Tailscale IP | Role | Services |
 |------|--------------|------|----------|
@@ -147,233 +155,281 @@ The infrastructure uses a multi-tier architecture with high availability at ever
 
 ## Load Balancing Strategy
 
-### Layer 1: Cloudflare → Routers
+### CHANGED (2026-04-03): Option B Architecture
+
+**Application Traffic:**
+- Cloudflare DNS points to app server IPs (NOT router IPs)
+- Cloudflare load balances between re-db and re-node-02
+- Traefik on each app server handles SSL and routing
+- Docker Swarm routing mesh enables cross-node communication
+
+**Database Traffic (Unchanged):**
+- HAProxy on routers proxies to Patroni/Redis
+- Applications connect via HAProxy endpoints
+
+### Layer 1: Cloudflare → App Servers (CHANGED)
 
 **Method**: DNS Round-Robin with HTTP Retry
 
 ```
 Client Request → Cloudflare DNS
                     ↓
-        ┌───────────┴───────────┐
-        ▼                       ▼
-    Router-01               Router-02
-   (172.93.54.112)        (23.29.118.6)
-        │                       │
-        │ (if fails)            │
-        └───────────────────────┘
+         ┌───────────┴───────────┐
+         ▼                       ▼
+     App Server 1           App Server 2
+    (208.87.128.115)       (23.227.173.245)
+    (re-db)                 (re-node-02)
+         │                       │
+         │ (if fails)            │
+         └───────────────────────┘
                     ↓
-            Retry on other router
+            Retry on other app server
 ```
 
 **Behavior**:
-- Cloudflare returns both IPs in random order
+- Cloudflare returns both app server IPs in random order
 - Client connects to first IP
 - If connection fails, Cloudflare HTTP retry attempts the other IP
-- No active health checks (requires Cloudflare Load Balancer - paid add-on)
+- Traefik terminates SSL on each app server
+- Docker routing mesh routes to available container
 
-**Limitations**:
-- No automatic failover at DNS level
-- Relies on HTTP client retry behavior
-- Slight delay on first failed request
+**Key Difference from Before**:
+- **Before**: Cloudflare → Routers → App Servers
+- **Now**: Cloudflare → App Servers (bypasses routers)
 
-### Layer 2: Router → App Servers
+### Layer 2: Traefik → App Containers (NEW)
+
+**Method**: Docker Swarm Routing Mesh
+
+```
+Traefik (Swarm Service)
+         ↓
+    Docker Routing Mesh
+         ↓
+    ┌────────────┐
+    │ Container  │ ← Replica 1 (any node)
+    │   #1       │
+    └────────────┘
+    ┌────────────┐
+    │ Container  │ ← Replica 2 (any node)
+    │   #2       │
+    └────────────┘
+```
+
+**Behavior**:
+- Traefik runs as Swarm service with 2 replicas
+- Each replica listens on ports 80/443
+- Docker routing mesh distributes traffic across replicas
+- If one node fails, other replica continues serving
+- Zero downtime during node failure
+
+### Layer 3: HAProxy → Database Servers (Unchanged)
 
 **Method**: HAProxy Round-Robin with Active Health Checks
 
+**PostgreSQL**:
 ```
 HAProxy Backend Configuration:
 ┌─────────────────────────────────────────┐
-│  backend app_backend                     │
-│    mode http                             │
-│    balance roundrobin                    │
-│    option httpchk GET /                  │
-│    http-check expect status 200-499      │
-│    server app1 100.92.26.38:8100 check   │
-│    server app2 100.89.130.19:8100 check  │
+│  frontend pg_rw                          │
+│    bind 100.102.220.16:5000             │
+│    mode tcp                              │
+│    default_backend pg_primary            │
+│                                          │
+│  backend pg_primary                       │
+│    mode tcp                              │
+│    option httpchk GET /primary           │
+│    server node1 100.126.103.51:5432 check│
+│    server node2 100.114.117.46:5432 check│
+│    server node3 100.115.75.119:5432 check│
 └─────────────────────────────────────────┘
 ```
 
 **Behavior**:
-- Health check every 2 seconds
-- If server fails 3 checks → marked DOWN
-- If server passes 2 checks → marked UP
-- Traffic distributed evenly between healthy servers
-- Zero downtime during server failure
+- Port 5000: Routes to current Patroni leader
+- Port 5001: Load balances across replicas
+- Automatic failover when leader changes
+- Health checks every 2 seconds
 
 ## SSL/TLS Architecture
 
-### Certificate Chain
+**CHANGED (2026-04-03):** SSL termination moved from HAProxy to Traefik
+
+### Certificate Chain (NEW Architecture)
 
 ```
 Let's Encrypt (CA)
-    │
-    ├── rentalfixer.app (on router-01)
-    │   └── /etc/haproxy/certs/rentalfixer.app.pem
-    │
-    ├── rentalfixer.app (on router-02)
-    │   └── /etc/haproxy/certs/rentalfixer.app.pem
-    │
-    ├── staging.rentalfixer.app (on router-01)
-    │   └── /etc/haproxy/certs/staging.rentalfixer.app.pem
-    │
-    └── staging.rentalfixer.app (on router-02)
-        └── /etc/haproxy/certs/staging.rentalfixer.app.pem
+     │
+     ├── *.quantyralabs.cc (Traefik on re-db/re-node-02)
+     │   └── Wildcard certificate managed by Dokploy
+     │   └── DNS-01 challenge via Cloudflare API
+     │   └── Auto-renewal by Traefik
+     │
+     └── app-specific domains (Traefik on re-db/re-node-02)
+         └── Per-domain certificates
+         └── Auto-provisioned by Dokploy
 ```
 
-### SSL Termination Points
+### SSL Termination Points (CHANGED)
 
 ```
-User ──HTTPS──► Cloudflare ──HTTPS──► Router ──HTTP──► App Server
-       (Edge Cert)      (Origin Cert)    (Unencrypted internally)
+User ──HTTPS──► Cloudflare ──HTTPS──► Traefik ──HTTP──► App Container
+       (Edge Cert)      (Origin Cert)    (Container)
 ```
 
 **Certificate Types**:
 1. **Cloudflare Edge Certificate** - Managed by Cloudflare
    - Wildcard certificate for *.domain.tld
    - Automatic renewal by Cloudflare
-   
-2. **Origin Certificate** - Let's Encrypt on routers
-   - Per-domain certificates
-   - DNS-01 challenge for validation
-   - Auto-renewal via certbot timer
+    
+2. **Origin Certificate** - Let's Encrypt on Traefik
+   - Wildcard certificates via DNS-01 challenge
+   - Per-domain certificates auto-provisioned
+   - Auto-renewal by Traefik
 
-### Why No SSL Issues with Multiple Routers
+### Why No SSL Issues with Multiple App Servers
 
-Each router has its own independent Let's Encrypt certificate:
-- Certificates are obtained separately on each router
-- Both are valid for the same domain
-- Cloudflare accepts either certificate
-- No shared state required between routers
+Each app server has Traefik with shared certificate storage:
+- Certificates stored in Docker volume `dokploy-letsencrypt`
+- Both Traefik replicas access same certificate store
+- Let's Encrypt validates via DNS-01 (works behind Cloudflare proxy)
+- No shared state required between app servers
+
+### SSL Migration Notes
+
+**Before (CapRover/HAProxy)**:
+- HAProxy terminated SSL with per-domain certificates
+- Certbot managed certificates via DNS-01 challenge
+- Manual certificate provisioning per domain
+
+**After (Dokploy/Traefik)**:
+- Traefik terminates SSL with Let's Encrypt
+- Automatic certificate provisioning via DNS-01
+- Wildcard certificates supported
+- Cloudflare API integration for DNS-01 challenge
+- No manual certificate management required
 
 ## HAProxy Configuration
 
-### Consolidated Frontend Architecture
+**CHANGED (2026-04-03):** HAProxy now handles DATABASE TRAFFIC ONLY
 
-HAProxy uses a **single frontend** for all domains instead of separate frontends per domain:
+### Database-Only Architecture
+
+HAProxy no longer routes application traffic. Applications route directly via Cloudflare → Traefik.
 
 ```
-/etc/haproxy/domains/
-├── web_http.cfg       # Single HTTP frontend (redirects to HTTPS)
-├── web_https.cfg      # Single HTTPS frontend (all certificates)
-├── web_backends.cfg   # All application backends
-└── registry.conf      # Domain → App → Port mapping
+/etc/haproxy/
+├── haproxy.cfg              # Main config (PostgreSQL, Redis, Stats)
+└── domains/
+    ├── web_http.cfg         # Minimal (returns 404 for all HTTP)
+    ├── web_https.cfg        # Minimal (returns 404 for all HTTPS)
+    └── web_backends.cfg     # not_found_backend only
 ```
 
-**Why Consolidated?**
-- Multiple frontends on port 443 cause SNI routing issues
-- Single frontend with multiple certificates works reliably
-- ACLs route traffic based on Host header
-- Easier to manage and debug
+**What Changed:**
+- ❌ Removed: App routing ACLs and backends
+- ❌ Removed: App SSL certificates from HAProxy
+- ❌ Removed: coolify_backend, rentalfixer_backend, etc.
+- ✅ Kept: PostgreSQL frontends (5000, 5001)
+- ✅ Kept: Redis frontends (6379)
+- ✅ Kept: Stats frontend (8404)
 
-### HTTP Frontend (web_http.cfg)
+### Main Config (haproxy.cfg)
+
+Handles infrastructure services only:
 
 ```haproxy
+# Stats page - http://router:8404/stats
+frontend stats
+    bind *:8404
+    mode http
+    stats enable
+    stats uri /stats
+    stats auth admin:jFNeZ2bhfrTjTK7aKApD
+
+# Prometheus metrics - http://router:8405/metrics
+frontend haproxy_metrics
+    bind :8405
+    mode http
+    http-request use-service prometheus-exporter if { path /metrics }
+
+# PostgreSQL read/write
+frontend pg_rw
+    bind 100.102.220.16:5000
+    mode tcp
+    default_backend pg_primary
+
+# PostgreSQL read-only
+frontend pg_ro
+    bind 100.102.220.16:5001
+    mode tcp
+    default_backend pg_replicas
+
+# Redis write
+frontend redis_write
+    bind 100.102.220.16:6379
+    mode tcp
+    default_backend redis_master
+
+# Redis read
+frontend redis_read
+    bind 100.102.220.16:6380
+    mode tcp
+    default_backend redis_replicas
+```
+
+### HTTP/HTTPS Frontends (Minimal - Returns 404)
+
+```haproxy
+# web_http.cfg - All HTTP requests get 404
 frontend web_http
     bind :80
     mode http
-    
-    # Redirect each domain to HTTPS
-    http-request redirect scheme https code 301 if { hdr(host) -i rentalfixer.app }
-    http-request redirect scheme https code 301 if { hdr(host) -i staging.rentalfixer.app }
-```
-
-### HTTPS Frontend (web_https.cfg)
-
-```haproxy
-frontend web_https
-    # All certificates in one bind line
-    bind :443 ssl \
-        crt /etc/haproxy/certs/rentalfixer.app.pem \
-        crt /etc/haproxy/certs/staging.rentalfixer.app.pem \
-        alpn h2,http/1.1
-    mode http
-    
-    # Client IP forwarding
-    http-request set-header X-Real-IP %[req.hdr(CF-Connecting-IP)] if { req.hdr(CF-Connecting-IP) -m found }
-    http-request set-header X-Real-IP %[src] unless { req.hdr(CF-Connecting-IP) -m found }
-    http-request set-header X-Forwarded-For %[req.hdr(CF-Connecting-IP)] if { req.hdr(CF-Connecting-IP) -m found }
-    http-request set-header X-Forwarded-For %[src] unless { req.hdr(CF-Connecting-IP) -m found }
-    http-request set-header X-Forwarded-Proto https
-    
-    # ACLs for routing
-    acl is_rentalfixer_app hdr(host) -i rentalfixer.app
-    acl is_staging_rentalfixer_app hdr(host) -i staging.rentalfixer.app
-    
-    # Host-specific headers
-    http-request set-header X-Forwarded-Host rentalfixer.app if is_rentalfixer_app
-    http-request set-header X-Forwarded-Host staging.rentalfixer.app if is_staging_rentalfixer_app
-    
-    # Routing
-    use_backend rentalfixer_backend if is_rentalfixer_app
-    use_backend rentalfixer_staging_backend if is_staging_rentalfixer_app
-    
-    # Default: 404
     default_backend not_found_backend
-```
 
-### Backends (web_backends.cfg)
-
-```haproxy
-backend rentalfixer_backend
+# web_https.cfg - All HTTPS requests get 404
+frontend web_https
+    bind :443 ssl crt /etc/haproxy/certs/default.pem alpn h2,http/1.1
     mode http
-    balance roundrobin
-    option httpchk GET /
-    http-check expect status 200-499
-    option forwardfor
-    server app1 100.92.26.38:8100 check
-    server app2 100.89.130.19:8100 check
+    default_backend not_found_backend
 
-backend rentalfixer_staging_backend
-    mode http
-    balance roundrobin
-    option httpchk GET /
-    http-check expect status 200-499
-    option forwardfor
-    server app1 100.92.26.38:8101 check
-    server app2 100.89.130.19:8101 check
-
+# web_backends.cfg - Only not_found_backend
 backend not_found_backend
     mode http
     http-request deny deny_status 404
 ```
 
-### Domain Registry
+**Note:** Apps no longer route through HAProxy. Use Traefik on app servers instead.
 
-The `registry.conf` file tracks all domains:
+### Why This Change?
 
-```
-rentalfixer.app=rentalfixer=8100
-staging.rentalfixer.app=rentalfixer_staging=8101
-www.rentalfixer.app=rentalfixer_www_redirect=8100
-```
-
-Format: `domain=app_name=port`
+1. **Simplified Architecture**: Apps bypass HAProxy entirely
+2. **Better Performance**: One less hop in the traffic path
+3. **Automatic SSL**: Traefik handles Let's Encrypt automatically
+4. **Cloudflare Load Balancing**: Direct to app servers
+5. **Clear Separation**: HAProxy = Databases, Traefik = Apps
 
 ## Failover Scenarios
 
-### Scenario 1: Router Failure
+**CHANGED (2026-04-03):** Updated for Option B architecture
+
+### Scenario 1: App Server Failure
 
 | Step | What Happens | User Impact |
 |------|--------------|-------------|
-| 1 | Router-01 goes down | - |
-| 2 | Cloudflare sends request to Router-01 | Connection timeout/failure |
-| 3 | Cloudflare HTTP retry to Router-02 | Request succeeds on Router-02 |
-| 4 | User sees response | Slight delay (1-2 seconds) |
+| 1 | re-db goes down | - |
+| 2 | Cloudflare sends request to re-db | Connection timeout/failure |
+| 3 | Cloudflare HTTP retry to re-node-02 | Request succeeds |
+| 4 | Traefik on re-node-02 routes to container | - |
+| 5 | User sees response | Slight delay (1-2 seconds) |
 
 **Result**: Zero downtime, slight latency increase on first failed request
 
-### Scenario 2: App Server Failure
+**Note**: Apps should be deployed with 2+ replicas for full HA
 
-| Step | What Happens | User Impact |
-|------|--------------|-------------|
-| 1 | App Server 1 goes down | - |
-| 2 | HAProxy health check fails | Server marked DOWN after 6 seconds |
-| 3 | HAProxy routes all traffic to App Server 2 | - |
-| 4 | User sees response | No impact |
+### Scenario 2: Database Server Failure (Unchanged)
 
-**Result**: Zero downtime, no user-visible impact
-
-### Scenario 3: PostgreSQL Primary Failure
+**PostgreSQL Primary Failure:**
 
 | Step | What Happens | User Impact |
 |------|--------------|-------------|
@@ -385,7 +441,7 @@ Format: `domain=app_name=port`
 
 **Result**: ~15-20 seconds of write unavailability, reads continue
 
-### Scenario 4: Redis Master Failure
+**Redis Master Failure:**
 
 | Step | What Happens | User Impact |
 |------|--------------|-------------|
@@ -396,6 +452,19 @@ Format: `domain=app_name=port`
 | 5 | Applications reconnect | Automatic |
 
 **Result**: ~10 seconds of write unavailability, reads continue
+
+### Scenario 3: Router Failure (Database Access Only)
+
+| Step | What Happens | User Impact |
+|------|--------------|-------------|
+| 1 | router-01 goes down | - |
+| 2 | App tries to connect via router-01:5000 | Connection timeout |
+| 3 | App retries via router-02:5000 | Connection succeeds |
+| 4 | Database operation completes | Slight delay |
+
+**Result**: Apps experience brief delay on database operations, no data loss
+
+**Note**: Applications should be configured with both router IPs for database connections
 
 ## Client IP Forwarding
 
@@ -584,6 +653,117 @@ Each server has:
 - HSTS enabled
 - OCSP stapling enabled
 - Automatic HTTP→HTTPS redirect
+
+## Dokploy Architecture (NEW 2026-04-03)
+
+### Overview
+
+Dokploy is the primary deployment platform, replacing CapRover and the legacy Flask dashboard. It runs on a Docker Swarm cluster with Traefik for load balancing and SSL termination.
+
+### Docker Swarm Configuration
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        DOKPLOY SWARM CLUSTER                             │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│   re-db (Manager)                    re-node-02 (Worker)                │
+│   100.92.26.38                       100.89.130.19                      │
+│                                                                          │
+│   • Dokploy Dashboard (:3000)        • App containers                   │
+│   • dokploy-postgres                 • Traefik replica                  │
+│   • dokploy-redis                                                       │
+│   • Traefik replica                 (1 Manager + 1 Worker)              │
+│                                                                          │
+│   Swarm Services:                                                        │
+│   - dokploy: 1/1 replicas (manager only)                                │
+│   - dokploy-traefik: 2/2 replicas (HA)                                  │
+│   - dokploy-postgres: 1/1 replicas                                      │
+│   - dokploy-redis: 1/1 replicas                                         │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key Design Decisions:**
+- **1 Manager + 1 Worker**: Avoids split-brain scenarios with 2 managers
+- **Docker Routing Mesh**: Enables cross-node communication
+- **Traefik HA**: 2 replicas (one per node) with shared certificate storage
+- **Management UI NOT HA**: Dashboard runs on manager only (acceptable for admin tool)
+
+### Traffic Flow Through Dokploy
+
+```
+Cloudflare DNS
+      ↓ (A records: both app server IPs)
+      ├─ 208.87.128.115 (re-db)
+      └─ 23.227.173.245 (re-node-02)
+      ↓
+Traefik (Docker Swarm service, 2 replicas)
+      ↓ (SSL termination, Let's Encrypt)
+      ↓ (Routes by Host header)
+      ↓
+Docker Containers (distributed via Swarm)
+      ↓ (Connect to databases)
+      ↓
+HAProxy (router-01/02) → Patroni/Redis
+```
+
+### Dokploy Key Features
+
+1. **Automatic SSL**: Let's Encrypt with DNS-01 challenge via Cloudflare API
+2. **Git Integration**: Deploy from GitHub/GitLab with auto-deploy on push
+3. **Environment Variables**: Secrets management per application
+4. **Domain Management**: Automatic DNS and SSL provisioning
+5. **Database Connections**: Connect to external Patroni cluster or managed containers
+6. **Monitoring**: Built-in metrics and logs
+7. **Multi-Replica Apps**: Deploy with 2+ replicas for HA
+
+### Application Deployment Model
+
+| Setting | Value | Reason |
+|---------|-------|--------|
+| Port | 0 (auto) | Detect from Dockerfile EXPOSE |
+| Replicas | 2+ | High availability across nodes |
+| Domain | *.domain.tld | Wildcard or per-domain SSL |
+| Database | External | Use Patroni cluster via HAProxy |
+
+### Connecting to External Databases
+
+Applications deployed via Dokploy should connect to the existing Patroni cluster:
+
+```bash
+# PostgreSQL connection
+DB_HOST=100.102.220.16  # or 100.116.175.9
+DB_PORT=5000            # RW endpoint
+DB_PORT=5001            # RO endpoint
+
+# Redis connection
+REDIS_HOST=100.102.220.16  # or 100.116.175.9
+REDIS_PORT=6379
+```
+
+**Note**: Database endpoints are UNCHANGED from previous architecture.
+
+### Dokploy Dashboard Access
+
+```
+URL: https://deploy.quantyralabs.cc
+Location: re-db only (not HA)
+Purpose: Application and domain management
+```
+
+### Comparison: Old vs New Deployment
+
+| Aspect | Before (CapRover/Flask) | After (Dokploy) |
+|--------|-------------------------|-----------------|
+| App Routing | Cloudflare → HAProxy → Traefik | Cloudflare → Traefik |
+| SSL Management | Certbot on HAProxy | Traefik Let's Encrypt |
+| Deployment | Flask dashboard or CapRover UI | Dokploy UI |
+| Database | External Patroni | External Patroni (unchanged) |
+| HA Model | HAProxy round-robin | Docker Swarm + Traefik |
+| SSL Certificates | Manual provisioning | Automatic DNS-01 |
+
+---
 
 ## Disaster Recovery
 
