@@ -203,6 +203,182 @@ Key metrics:
 - `redis_commands_processed_total` - Commands processed
 - `redis_connected_slaves` - Connected slaves
 
+### Traefik Exporter
+
+**NEW (2026-04-03)**: Traefik metrics are now collected for monitoring the Dokploy deployment platform.
+
+Traefik exposes metrics via its internal metrics endpoint. Configuration is handled automatically by Dokploy.
+
+**Location**: App servers (re-db, re-node-02)
+**Port**: 8080 (internal API endpoint)
+
+**Key Metrics**:
+- `traefik_config_reloads_total` - Number of configuration reloads
+- `traefik_entrypoint_requests_total` - Total requests per entrypoint
+- `traefik_entrypoint_request_duration_seconds` - Request duration histograms
+- `traefik_router_requests_total` - Requests per router
+- `traefik_service_requests_total` - Requests per service
+- `traefik_tls_certs_expiry_seconds` - Certificate expiration times
+
+**Prometheus Scrape Configuration**:
+
+```yaml
+# Traefik metrics (via internal API)
+- job_name: 'traefik'
+  metrics_path: /metrics
+  static_configs:
+    - targets: ['100.92.26.38:8080']
+      labels: {node: 're-db', role: 'app'}
+    - targets: ['100.89.130.19:8080']
+      labels: {node: 're-node-02', role: 'app'}
+```
+
+**Verify Metrics**:
+```bash
+# Test Traefik metrics endpoint
+curl http://100.92.26.38:8080/metrics | grep traefik_config_reloads_total
+
+# Check in Prometheus UI
+# http://100.102.220.16:9090/targets
+# Look for "traefik" job with status "UP"
+```
+
+### Docker Swarm Metrics
+
+**NEW (2026-04-03)**: Docker daemon metrics are collected for monitoring container orchestration and Swarm health.
+
+**Location**: App servers (re-db, re-node-02)
+**Port**: 9323
+
+**Enable Docker Metrics**:
+
+Docker metrics are enabled via daemon configuration:
+
+```json
+# /etc/docker/daemon.json
+{
+  "metrics-addr": "0.0.0.0:9323",
+  "experimental": true
+}
+```
+
+Restart Docker after configuration changes:
+```bash
+systemctl restart docker
+```
+
+**Key Metrics**:
+- `engine_daemon_container_actions_seconds` - Container action durations
+- `engine_daemon_container_states_containers` - Containers by state (running, paused, stopped)
+- `swarm_manager_node_count` - Number of nodes in Swarm
+- `swarm_manager_node_health` - Node health status
+- `swarm_manager_services_count` - Number of services
+- `swarm_manager_tasks_count` - Number of tasks
+- `engine_daemon_network_actions_seconds` - Network operation durations
+
+**Prometheus Scrape Configuration**:
+
+```yaml
+# Docker daemon metrics
+- job_name: 'docker'
+  static_configs:
+    - targets: ['100.92.26.38:9323']
+      labels: {node: 're-db', role: 'app'}
+    - targets: ['100.89.130.19:9323']
+      labels: {node: 're-node-02', role: 'app'}
+```
+
+**Verify Metrics**:
+```bash
+# Test Docker metrics endpoint
+curl http://100.92.26.38:9323/metrics | grep engine_daemon_container_states_containers
+
+# Check in Prometheus UI
+# http://100.102.220.16:9090/targets
+# Look for "docker" job with status "UP"
+```
+
+**Useful Queries**:
+
+```promql
+# Total containers running across both app servers
+sum(engine_daemon_container_states_containers{state="running"})
+
+# Container actions rate (create, start, stop, destroy)
+rate(engine_daemon_container_actions_seconds_count[5m])
+
+# Swarm node health
+swarm_manager_node_health
+
+# Number of services in Swarm
+swarm_manager_services_count
+
+# Average container action duration
+rate(engine_daemon_container_actions_seconds_sum[5m]) / rate(engine_daemon_container_actions_seconds_count[5m])
+```
+
+## Grafana Dashboards for Traefik and Docker
+
+### Traefik Dashboard
+
+**NEW (2026-04-03)**: Pre-configured dashboard for Traefik metrics.
+
+**Dashboard Name**: Quantyra - Traefik
+**UID**: traefik-quantyra
+
+**Panels Include**:
+- Configuration reloads count
+- Request rate per entrypoint (web, websecure)
+- Request rate per service
+- Response time percentiles (p50, p95, p99)
+- Active TLS certificates
+- HTTP status codes distribution
+- Open connections
+
+**Access**: http://100.102.220.16:3000 → Dashboards → Quantyra - Traefik
+
+### Docker Swarm Dashboard
+
+**NEW (2026-04-03)**: Pre-configured dashboard for Docker Swarm metrics.
+
+**Dashboard Name**: Quantyra - Docker Swarm
+**UID**: docker-swarm-quantyra
+
+**Panels Include**:
+- Cluster overview (node count, service count, task count)
+- Node health status
+- Container states (running, paused, stopped) by node
+- Container action rates (create, start, stop, destroy)
+- Network actions
+- Average container action duration
+- Swarm manager metrics
+
+**Access**: http://100.102.220.16:3000 → Dashboards → Quantyra - Docker Swarm
+
+### Dashboard JSON Files
+
+Dashboard JSON files are provisioned automatically from:
+
+```
+/var/lib/grafana/dashboards/
+├── traefik_dashboard.json
+├── docker_swarm_dashboard.json
+├── node_exporter_dashboard.json
+├── postgres_haproxy_dashboard.json
+├── redis_dashboard.json
+├── nginx_dashboard.json
+└── phpfpm_dashboard.json
+```
+
+**Reload Dashboards**:
+```bash
+# Restart Grafana to reload dashboards
+systemctl restart grafana-server
+
+# Or via API (if configured)
+curl -X POST http://admin:password@localhost:3000/api/admin/reload
+```
+
 ## Alerting Rules
 
 Located at `/etc/prometheus/rules/`:
@@ -296,6 +472,112 @@ groups:
         annotations:
           summary: "Redis memory usage high"
           description: "Redis memory usage is above 90%."
+```
+
+### Traefik Alerts
+
+**NEW (2026-04-03)**: Alerts for Dokploy/Traefik load balancer.
+
+```yaml
+  - name: traefik
+    rules:
+      - alert: TraefikDown
+        expr: up{job="traefik"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Traefik instance down on {{ $labels.node }}"
+          description: "Traefik is not responding on {{ $labels.node }}. Applications may be inaccessible."
+
+      - alert: TraefikConfigReloadFailure
+        expr: increase(traefik_config_reloads_total{success="false"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Traefik configuration reload failed on {{ $labels.node }}"
+          description: "Traefik failed to reload configuration. Check Traefik logs for errors."
+
+      - alert: TraefikHighErrorRate
+        expr: sum(rate(traefik_entrypoint_requests_total{code=~"5.."}[5m])) / sum(rate(traefik_entrypoint_requests_total[5m])) * 100 > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate in Traefik"
+          description: "More than 10% of requests are returning 5xx errors."
+
+      - alert: TraefikCertificateExpiringSoon
+        expr: (traefik_tls_certs_expiry_seconds - time()) / 86400 < 14
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "TLS certificate expiring soon"
+          description: "TLS certificate will expire in less than 14 days. Auto-renewal should handle this, but verify."
+
+      - alert: TraefikCertificateExpired
+        expr: (traefik_tls_certs_expiry_seconds - time()) / 86400 < 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "TLS certificate has expired"
+          description: "TLS certificate has expired. HTTPS will fail for affected domains."
+```
+
+### Docker Swarm Alerts
+
+**NEW (2026-04-03)**: Alerts for Docker Swarm cluster health.
+
+```yaml
+  - name: docker_swarm
+    rules:
+      - alert: DockerSwarmNodeDown
+        expr: swarm_manager_node_health == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Docker Swarm node unhealthy"
+          description: "Docker Swarm node is unhealthy or unreachable."
+
+      - alert: DockerSwarmManagerDown
+        expr: count(up{job="docker"} == 1) < 2
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Docker Swarm manager unreachable"
+          description: "Docker Swarm manager (re-db) is unreachable. Cannot deploy or manage services."
+
+      - alert: DockerSwarmServiceReplicasUnhealthy
+        expr: count by (service_name) (engine_daemon_container_states_containers{state="running"} < 1)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Service has no running replicas"
+          description: "Service {{ $labels.service_name }} has no running replicas."
+
+      - alert: DockerHighContainerRestarts
+        expr: rate(engine_daemon_container_actions_seconds_count{action="start"}[10m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High container restart rate on {{ $labels.node }}"
+          description: "Containers are being restarted frequently. Check application logs for crashes."
+
+      - alert: DockerSwarmServiceCountChanged
+        expr: delta(swarm_manager_services_count[10m]) != 0
+        for: 1m
+        labels:
+          severity: info
+        annotations:
+          summary: "Docker Swarm service count changed"
+          description: "Number of services in Swarm changed from {{ $labels.value }}. This may be expected if deploying or removing services."
 ```
 
 ## Alertmanager Configuration

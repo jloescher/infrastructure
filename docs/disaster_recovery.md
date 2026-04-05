@@ -190,113 +190,326 @@ This document outlines disaster recovery procedures for the Quantyra infrastruct
 
 ### Application Recovery
 
-#### Dashboard-Based Recovery (Recommended)
+#### Dokploy Dashboard Recovery (Recommended)
 
-The Quantyra PaaS Dashboard provides a web interface for application management:
+**NEW (2026-04-03)**: Applications are deployed and managed via Dokploy.
 
-**Access:** `http://100.102.220.16:8080` (Tailscale only)
-**Credentials:** admin / DbAdmin2026!
+**Access:** https://deploy.quantyralabs.cc
+**Location:** re-db (Manager node only)
 
 **Recovery Actions:**
 
 1. **Redeploy Application:**
    - Navigate to Applications → [App Name] → Deploy
-   - Click "Deploy Production" or "Deploy Staging"
-   - Monitor two-phase progress (Deploy → Domain Provisioning)
+   - Click "Deploy" button
+   - Monitor build and deployment logs
+   - Verify health checks pass
 
-2. **Force Domain Provisioning:**
-   - If deploy succeeds but domains fail
-   - Applications → [App Name] → Force Provision Pending Domains
+2. **Rollback to Previous Deployment:**
+   - Applications → [App Name] → Deployments
+   - Find previous successful deployment
+   - Click "Rollback"
+   - Service updates automatically with zero downtime
 
-3. **Rollback to Previous Commit:**
-   - Applications → [App Name] → Rollback
-   - Select previous known-good commit
+3. **Scale Application:**
+   - Applications → [App Name] → Settings
+   - Change Replicas value
+   - Click "Save & Redeploy"
+   - Docker Swarm redistributes containers
 
-4. **Restart Services:**
-   - Applications → [App Name] → Restart App / Reload Nginx / Reload PHP-FPM
+4. **View Logs:**
+   - Applications → [App Name] → Logs
+   - Real-time log streaming
+   - Filter by time range
+   - Identify errors or issues
+
+5. **Update Environment Variables:**
+   - Applications → [App Name] → Environment
+   - Add/Update/Delete variables
+   - Click "Save"
+   - Redeploy to apply changes
 
 #### Single App Server Failure
 
-1. Traffic automatically fails over to other app server (HAProxy round-robin)
+**Scenario**: re-db (manager) or re-node-02 (worker) fails
 
-2. Replace or repair failed server
+**Impact**: Applications with 2+ replicas continue running on remaining node
 
-3. Run deployment from Dashboard or via webhook:
+**Recovery Steps**:
+
+1. **Identify Failed Node**:
    ```bash
-   # Trigger redeploy via webhook
-   curl -X POST https://hooks.quantyralabs.cc/{app_name} \
-     -H "X-Hub-Signature-256: {secret}" \
-     -d '{"ref": "refs/heads/main"}'
+   # Check Swarm node status
+   ssh root@100.92.26.38 "docker node ls"
+
+   # Expected output shows failed node as "Down" or "Unavailable"
    ```
 
-4. Verify application health:
+2. **Verify Applications Running**:
    ```bash
-   # Check local health
-   ssh root@100.92.26.38 "curl -s -o /dev/null -w '%{http_code}' http://localhost:8100"
-   ssh root@100.89.130.19 "curl -s -o /dev/null -w '%{http_code}' http://localhost:8100"
+   # Check service status
+   ssh root@100.92.26.38 "docker service ls"
+
+   # Check service distribution
+   ssh root@100.92.26.38 "docker service ps my_app"
+   ```
+
+3. **Traffic Automatic Failover**:
+   - Cloudflare DNS returns both app server IPs
+   - Clients automatically retry on other IP
+   - Traefik on remaining node continues routing
+   - No manual intervention required
+
+4. **Replace or Repair Failed Node**:
+   - Provision new server if hardware failure
+   - Or repair existing server
+   - Rejoin to Docker Swarm cluster:
+   ```bash
+   # On manager node (re-db)
+   docker swarm join-token worker
+
+   # On worker node (re-node-02)
+   docker swarm join --token SWMTKN-1-xxx 100.92.26.38:2377
+   ```
+
+5. **Redistribute Services**:
+   ```bash
+   # Force service redistribution
+   ssh root@100.92.26.38 "docker service update --force my_app"
+   ```
+
+6. **Verify Recovery**:
+   ```bash
+   # Check node status
+   docker node ls
+
+   # Check service distribution
+   docker service ps my_app
+
+   # Test application accessibility
+   curl -I https://myapp.example.com
+   ```
+
+#### Dokploy Manager Failure (Critical)
+
+**Scenario**: re-db (Dokploy manager) fails completely
+
+**Impact**:
+- Dokploy dashboard unavailable
+- Applications continue running (Traefik on both nodes)
+- Cannot deploy new applications or updates
+- Services running on re-node-02 continue serving traffic
+
+**Recovery Steps**:
+
+1. **Verify Applications Still Running**:
+   ```bash
+   # SSH to worker node
+   ssh root@100.89.130.19
+
+   # Check running services
+   docker service ls
+
+   # Check Traefik is running
+   docker ps | grep traefik
+   ```
+
+2. **Verify Traffic Still Flowing**:
+   ```bash
+   # Test application accessibility
+   curl -I https://myapp.example.com
+
+   # Expected: HTTP/2 200 (served by re-node-02)
+   ```
+
+3. **Restore Dokploy Manager**:
+
+   **Option A: Repair Existing Manager**:
+   ```bash
+   # SSH to manager node (if accessible)
+   ssh root@100.92.26.38
+
+   # Check Dokploy service
+   docker service ls | grep dokploy
+
+   # Restart Dokploy
+   docker service update dokploy --force
+
+   # Check logs
+   docker service logs dokploy --tail 100
+   ```
+
+   **Option B: Promote Worker to Manager** (if manager unrecoverable):
+   ```bash
+   # On worker node (re-node-02)
+   ssh root@100.89.130.19
+
+   # Promote to manager
+   docker node promote re-node-02
+
+   # Initialize new Dokploy instance
+   # (requires Dokploy reinstallation)
+   curl -sSL https://dokploy.com/install.sh | bash
+   ```
+
+4. **Restore Dokploy Database** (if needed):
+   ```bash
+   # Restore from backup
+   cat dokploy_backup_YYYYMMDD.sql | docker exec -i dokploy-postgres psql -U dokploy dokploy
+   ```
+
+5. **Verify Dashboard Access**:
+   ```bash
+   curl -I https://deploy.quantyralabs.cc
+   # Expected: HTTP/2 200
    ```
 
 #### Complete Application Failure
 
-1. Verify app servers are accessible:
+**Scenario**: Both app servers fail or all containers stop
+
+**Recovery Steps**:
+
+1. **Verify Server Accessibility**:
    ```bash
-   ssh root@100.92.26.38 "hostname"
-   ssh root@100.89.130.19 "hostname"
+   ping 100.92.26.38      # re-db
+   ping 100.89.130.19     # re-node-02
    ```
 
-2. Check runtime user exists:
+2. **Check Docker Swarm Status**:
    ```bash
-   id webapps
-   # If missing: useradd --system --create-home --home-dir /home/webapps --shell /usr/sbin/nologin webapps
+   ssh root@100.92.26.38 "docker node ls"
+   ssh root@100.89.130.19 "docker node ls"
    ```
 
-3. Redeploy from Dashboard or trigger webhook
+3. **Restart Docker Services**:
+   ```bash
+   # On both app servers
+   systemctl restart docker
 
-4. Verify both environments:
-   - Production: `https://{domain}.tld`
-   - Staging: `https://staging.{domain}.tld`
+   # Wait for Swarm to stabilize
+   sleep 30
 
-#### Application Port Configuration
+   # Check services
+   docker service ls
+   ```
 
-Each application uses separate ports for production and staging:
+4. **Redeploy All Applications**:
+   ```bash
+   # Via Dokploy Dashboard
+   # Applications → [Each App] → Deploy
 
-| Environment | Port Range | Example |
-|-------------|------------|---------|
-| Production | 8100-8199 | rentalfixer: 8100 |
-| Staging | 9200-9299 | rentalfixer-staging: 9200 |
+   # Or via CLI
+   for service in $(docker service ls -q); do
+     docker service update --force $service
+   done
+   ```
 
-**Port Assignment:**
-- Ports are automatically assigned by dashboard during app creation
-- Production port stored in `/opt/dashboard/config/applications.yml`
-- Staging port = production_port + 1100
+5. **Verify Applications**:
+   ```bash
+   # Check all services running
+   docker service ls
 
-**Verify Port Configuration:**
+   # Check service distribution
+   docker service ps my_app
+
+   # Test accessibility
+   curl -I https://myapp.example.com
+   ```
+
+#### Traefik Failure
+
+**Scenario**: Traefik load balancer fails
+
+**Symptoms**:
+- Applications return 502/503 errors
+- SSL certificates not working
+- Routing broken
+
+**Recovery Steps**:
+
+1. **Check Traefik Service Status**:
+   ```bash
+   ssh root@100.92.26.38
+   docker service ps dokploy-traefik
+   ```
+
+2. **Check Traefik Logs**:
+   ```bash
+   docker service logs dokploy-traefik --tail 100
+   ```
+
+3. **Restart Traefik**:
+   ```bash
+   # Force update
+   docker service update dokploy-traefik --force
+
+   # Wait for replicas to start
+   sleep 10
+
+   # Verify
+   docker service ps dokploy-traefik
+   ```
+
+4. **Verify Traefik Configuration**:
+   ```bash
+   # Check config file
+   cat /etc/dokploy/traefik/traefik.yml
+
+   # Check dynamic configs
+   ls -la /etc/dokploy/traefik/dynamic/
+   ```
+
+5. **Test Routing**:
+   ```bash
+   curl -I https://myapp.example.com
+   curl -I https://deploy.quantyralabs.cc
+   ```
+
+#### Docker Swarm Split-Brain
+
+**Scenario**: Network partition causes both nodes to act as managers
+
+**Prevention**: Use 1 manager + 1 worker (odd number of managers)
+
+**Recovery**:
 ```bash
-# Check nginx configs
-ls -la /etc/nginx/sites-enabled/
+   # On manager node
+   ssh root@100.92.26.38
+   docker node ls
 
-# Check which ports are listening
-ss -tlnp | grep nginx
-```
+   # If both show as managers, demote worker
+   docker node demote re-node-02
 
-#### Permission Model Recovery
+   # Verify
+   docker node ls
+   ```
 
-Applications use a non-root permission model:
+#### Database Connection Issues from Applications
 
-| Path | Owner | Group | Mode | Purpose |
-|------|-------|-------|------|---------|
-| `/opt/apps/{app}` | webapps | webapps | 755/644 | Application code |
-| `storage/` | webapps | www-data | 2775 | Laravel writable (setgid) |
-| `bootstrap/cache/` | webapps | www-data | 2775 | Laravel writable (setgid) |
-| `.env` | webapps | www-data | 640 | Environment config |
+**Symptoms**: Application logs show database connection refused or timeout
 
-**Fix Permissions:**
+**Diagnosis**:
 ```bash
-APP_NAME="rentalfixer"
-APP_DIR="/opt/apps/$APP_NAME"
+   # Test HAProxy endpoint from app server
+   ssh root@100.92.26.38
+   psql -h 100.102.220.16 -p 5000 -U patroni_superuser -d myapp_production -c "SELECT 1;"
 
-# Fix ownership
-chown -R webapps:webapps $APP_DIR
+   # Test Redis
+   redis-cli -h 100.102.220.16 -p 6379 -a CcPUa3nvcxHtyNYjztbDyfCCuhgix78novmBDNGk PING
+   ```
+
+**Common Causes**:
+1. HAProxy down (check `systemctl status haproxy` on routers)
+2. Database credentials wrong in environment variables
+3. Database not created
+4. Network partition between app servers and routers
+
+**Solutions**:
+1. Restart HAProxy: `systemctl restart haproxy` (on both routers)
+2. Verify credentials in Dokploy environment variables
+3. Create database: See Database Creation section
+4. Check Tailscale connectivity: `tailscale ping 100.102.220.16`
 
 # Fix writable directories
 chgrp -R www-data $APP_DIR/storage $APP_DIR/bootstrap/cache

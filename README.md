@@ -1,76 +1,85 @@
 # Quantyra Infrastructure
 
-Infrastructure-as-code repository for managing Quantyra VPS infrastructure.
+Infrastructure-as-code repository for managing Quantyra VPS infrastructure with Dokploy deployment platform.
 
 ## Architecture
 
+**UPDATED (2026-04-03)**: Architecture changed to Option B with Dokploy.
+
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Cloudflare DNS                          │
-└───────────────────────────┬─────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         CLOUDFLARE (Anycast Edge)                              │
+│  • DNS: Round-robin between APP SERVER IPs                                     │
+│  • WAF + DDoS Protection                                                       │
+│  • SSL: Cloudflare Edge Certificate                                            │
+└───────────────────────────┬─────────────────────────────────────────────────────┘
                             │
-        ┌───────────────────┼───────────────────┐
-        │                   │                   │
-   ┌────▼────┐         ┌────▼────┐
-   │router-01│         │router-02│
-   │ HAProxy │◄───────►│ HAProxy │
-   │  etcd   │         │         │
-   │Prometheus│        │  Web    │
-   │ Grafana │         │  :80/443│
-   └────┬────┘         └────┬────┘
-        │                   │
-        │    HAProxy PG     │
-        │   Write: 5000     │
-        │   Read: 5001      │
-        │                   │
-   ┌────▼───────────────────▼────┐
-   │    Patroni PostgreSQL       │
-   │  ┌────────┐  ┌────────┐  ┌────────┐
-   │  │re-node-│  │re-node-│  │re-node-│
-   │  │   01   │  │   03   │  │   04   │
-   │  │Redis   │  │Redis   │  │        │
-   │  │Master  │  │Replica │  │        │
-   │  └────────┘  └────────┘  └────────┘
-   └─────────────────────────────────────┘
+         ┌───────────────────┼───────────────────┐
+         │                   │                   │
+    ┌────▼────┐         ┌────▼────┐
+    │  re-db  │         │re-node-02│
+    │Traefik  │◄───────►│ Traefik  │
+    │ Dokploy │         │  Worker  │
+    │ Manager │         │          │
+    └────┬────┘         └────┬────┘
+         │                   │
+         │    App Traffic    │
+         │   (HTTP/HTTPS)    │
+         │                   │
+    ┌────▼───────────────────▼────┐
+    │   Docker Swarm Containers    │
+    │   • Laravel apps             │
+    │   • Node.js apps             │
+    │   • 2+ replicas (HA)         │
+    └──────────────┬───────────────┘
+                   │
+         ┌─────────┴─────────┐
+         │   DB Traffic      │
+         │  (HAProxy only)   │
+         ▼                   ▼
+    ┌────────┐          ┌────────┐
+    │router-01│          │router-02│
+    │ HAProxy │◄────────►│ HAProxy │
+    │Prometheus│         │         │
+    │ Grafana │          │         │
+    └────┬────┘          └────┬────┘
+         │                    │
+         │    HAProxy PG      │
+         │   Write: 5000      │
+         │   Read: 5001       │
+         │                    │
+    ┌────▼───────────────────▼────┐
+    │    Patroni PostgreSQL       │
+    │  ┌────────┐  ┌────────┐  ┌────────┐
+    │  │re-node-│  │re-node-│  │re-node-│
+    │  │   01   │  │   03   │  │   04   │
+    │  │Redis   │  │Redis   │  │        │
+    │  │Master  │  │Replica │  │        │
+    │  └────────┘  └────────┘  └────────┘
+    └─────────────────────────────────────┘
 
-   ┌─────────────────────────────────────┐
-   │     re-db (XOTEC Data Layer)        │
-   │  ┌──────────────────────────────┐   │
-   │  │ Caddy (Reverse Proxy)        │   │
-   │  │ :80, :443                    │   │
-   │  │ quantyra.io, lzrcdn.com         │   │
-   │  └──────────────┬───────────────┘   │
-   │                 │                    │
-   │  ┌──────────────┴───────────────┐   │
-   │  │ App Blue :8001  App Green :8002 │
-   │  └──────────────┬───────────────┘   │
-   │                 │                    │
-   │  ┌──────────────┴───────────────┐   │
-   │  │ Workers (Ingest/Media/Maint) │   │
-   │  │ Scheduler | Asynqmon :9090   │   │
-   │  └──────────────────────────────┘   │
-   └─────────────────────────────────────┘
-
-   ┌─────────────────────────────────────┐
-   │        re-node-02 (Idle)            │
-   │        Ready for deployment         │
-   └─────────────────────────────────────┘
-
+┌──────────────────────────────────────────────────┐
+                      Tailscale VPN                │
 └──────────────────────────────────────────────────┘
-                     Tailscale VPN
 ```
+
+**Key Changes (2026-04-03)**:
+- **App Traffic**: Routes directly via Cloudflare → Traefik (bypasses HAProxy)
+- **Database Traffic**: HAProxy handles PostgreSQL and Redis only
+- **Deployment**: Dokploy with Docker Swarm (2 nodes)
+- **SSL**: Automatic Let's Encrypt via Traefik with DNS-01 challenge
 
 ## Server Inventory
 
-| Server | IP (Tailscale) | Role | Specs |
-|--------|----------------|------|-------|
-| re-node-01 | 100.126.103.51 | DB Server | 8 vCPU, 32GB RAM, 640GB NVMe |
-| re-node-03 | 100.114.117.46 | DB Server | 8 vCPU, 32GB RAM, 640GB NVMe |
-| re-node-04 | 100.115.75.119 | DB Server | 8 vCPU, 32GB RAM, 640GB NVMe |
-| router-01 | 100.102.220.16 | Router/Monitoring | 2 vCPU, 8GB RAM, 160GB SSD |
-| router-02 | 100.116.175.9 | Router | 2 vCPU, 8GB RAM, 160GB SSD |
-| re-db | 100.92.26.38 | App Server | 12 vCPU, 48GB RAM, 720GB NVMe |
-| re-node-02 | 100.89.130.19 | App Server | 12 vCPU, 48GB RAM, 720GB NVMe |
+| Server | Tailscale IP | Public IP | Role | Specs |
+|--------|--------------|-----------|------|-------|
+| re-db | 100.92.26.38 | 208.87.128.115 | Dokploy Manager, App Server | 12 vCPU, 48GB RAM |
+| re-node-02 | 100.89.130.19 | 23.227.173.245 | Dokploy Worker, App Server | 12 vCPU, 48GB RAM |
+| router-01 | 100.102.220.16 | 172.93.54.112 | HAProxy (DB), Monitoring | 2 vCPU, 8GB RAM |
+| router-02 | 100.116.175.9 | 23.29.118.6 | HAProxy (DB) | 2 vCPU, 8GB RAM |
+| re-node-01 | 100.126.103.51 | 104.225.216.26 | PostgreSQL, Redis Master | 8 vCPU, 32GB RAM |
+| re-node-03 | 100.114.117.46 | 172.93.54.145 | PostgreSQL Leader, Redis Replica | 8 vCPU, 32GB RAM |
+| re-node-04 | 100.115.75.119 | 172.93.54.122 | PostgreSQL Replica, etcd | 8 vCPU, 32GB RAM |
 
 ## Directory Structure
 
@@ -83,77 +92,87 @@ infrastructure/
 ├── backups/                    # Backup scripts and configs
 │   ├── scripts/                # Backup scripts
 │   └── configs/                # Backup configurations
-├── configs/                    # Service configurations
-│   ├── caddy/                  # Caddy reverse proxy
+├── configs/                    # Service configurations (synced from servers)
+│   ├── dokploy/                # Dokploy configurations
+│   ├── docker/                 # Docker daemon configs
 │   ├── haproxy/                # HAProxy configs
 │   ├── patroni/                # Patroni configs
 │   ├── postgresql/             # PostgreSQL configs
 │   ├── redis/                  # Redis configs
-│   └── quantyra/                  # XOTEC application configs
-├── docker/                     # Docker Compose files
-│   ├── app-servers/            # App server compose files
-│   └── monitoring/             # Monitoring stack compose
-├── monitoring/                 # Monitoring configs
-│   ├── prometheus/             # Prometheus config
-│   ├── grafana/                # Grafana dashboards
-│   └── alertmanager/           # Alertmanager config
-├── reports/                    # Server reports
+│   ├── prometheus/             # Prometheus rules and alerts
+│   └── grafana/                # Grafana dashboards
 ├── scripts/                    # Utility scripts
-├── security/                   # Security configs
-│   ├── firewall/               # UFW rules
-│   └── ssh/                    # SSH hardening
+│   └── sync-configs.sh         # Config synchronization
 ├── docs/                       # Documentation
-│   ├── runbook.md              # Operational runbook
+│   ├── plan.md                 # Current tasks and priorities
+│   ├── architecture.md         # Infrastructure architecture
+│   ├── dokploy-operations.md   # Dokploy operational guide
 │   ├── deployment.md           # Deployment guide
-│   ├── disaster_recovery.md    # DR procedures
-│   ├── action_items.md         # Prioritized tasks
-│   └── quantyra_application.md    # XOTEC app docs
+│   ├── getting-started.md      # Quick start guide
+│   ├── monitoring.md           # Monitoring setup
+│   └── disaster_recovery.md    # DR procedures
+├── reports/                    # Server reports
 └── .github/                    # GitHub Actions
     └── workflows/              # CI/CD workflows
 ```
 
 ## Quick Start
 
+### Deploy Your First Application
+
+1. **Access Dokploy Dashboard**: https://deploy.quantyralabs.cc
+
+2. **Create Application**:
+   - Click **Applications** → **Create Application**
+   - Connect GitHub repository
+   - Configure build settings (Dockerfile or Nixpacks)
+   - Set replicas: 2
+
+3. **Configure Environment**:
+   ```bash
+   DB_HOST=100.102.220.16
+   DB_PORT=5000
+   DB_DATABASE=myapp_production
+   DB_USERNAME=patroni_superuser
+   DB_PASSWORD=2e7vBpaaVK4vTJzrKebC
+   ```
+
+4. **Add Domain**: myapp.example.com
+
+5. **Deploy**: Click **Deploy** button
+
+Total time: ~5-10 minutes
+
+See [Getting Started Guide](docs/getting-started.md) for detailed instructions.
+
 ### Prerequisites
 
-- Ansible 2.12+
-- SSH access to all servers
-- Tailscale connected
+- Dokploy dashboard access: https://deploy.quantyralabs.cc
+- SSH access via Tailscale (for troubleshooting)
+- GitHub repository with Dockerfile
 
-### Initial Setup
-
-```bash
-# Install dependencies
-pip install ansible
-
-# Test connectivity
-ansible all -m ping
-
-# Collect current configuration
-bash scripts/collect_quantyra_infra_report.sh
-```
-
-### Provisioning
+### Git-Based Deployment
 
 ```bash
-# Provision all servers
-ansible-playbook ansible/playbooks/provision.yml
-
-# Provision specific group
-ansible-playbook ansible/playbooks/provision.yml --limit db_servers
-```
-
-### Deployment
-
-```bash
-# Deploy applications
-ansible-playbook ansible/playbooks/deploy.yml
-
-# Deploy via CI/CD
+# Production deployment
 git push origin main
+
+# Staging deployment
+git push origin staging
 ```
 
 ## Key Services
+
+### Dokploy (Deployment Platform)
+
+- **Dashboard**: https://deploy.quantyralabs.cc
+- **Manager**: re-db (100.92.26.38)
+- **Worker**: re-node-02 (100.89.130.19)
+- **Services**:
+  - dokploy: 1/1 replicas (manager only)
+  - dokploy-traefik: 2/2 replicas (HA)
+  - dokploy-postgres: 1/1 replicas
+  - dokploy-redis: 1/1 replicas
 
 ### PostgreSQL/Patroni
 
@@ -181,16 +200,31 @@ patronictl switchover
 redis-cli -h 100.126.103.51 INFO replication
 ```
 
-### HAProxy
+### HAProxy (Database Only)
 
+**UPDATED (2026-04-03)**: HAProxy now handles ONLY database traffic.
+
+- **PostgreSQL Write**: Port 5000 (routes to leader)
+- **PostgreSQL Read**: Port 5001 (load balanced replicas)
+- **Redis**: Port 6379 (routes to master)
 - **Stats**: http://router-01:8404/stats
-- **Metrics**: Port 9101
+
+### Traefik (App Load Balancer)
+
+**NEW (2026-04-03)**: Traefik handles all application traffic.
+
+- **Ports**: 80, 443
+- **SSL**: Let's Encrypt with DNS-01 challenge
+- **Replicas**: 2 (one per app server)
+- **Automatic routing**: Based on Host header
 
 ### Monitoring
 
 - **Prometheus**: http://router-01:9090
-- **Grafana**: https://grafana.quantyra.com
+- **Grafana**: http://router-01:3000
 - **Alertmanager**: http://router-01:9093
+- **Traefik Metrics**: http://re-db:8080/metrics
+- **Docker Metrics**: http://re-db:9323/metrics
 
 ## Backup & Recovery
 
@@ -204,13 +238,10 @@ redis-cli -h 100.126.103.51 INFO replication
 
 ```bash
 # PostgreSQL
-/usr/local/bin/postgres_backup.sh full
+PGPASSWORD=2e7vBpaaVK4vTJzrKebC pg_dump -h 100.102.220.16 -p 5000 -U patroni_superuser myapp_production > backup.sql
 
 # Redis
-/usr/local/bin/redis_backup.sh
-
-# Sync to S3
-/usr/local/bin/sync_to_s3.sh /backup
+redis-cli -h 100.126.103.51 -a CcPUa3nvcxHtyNYjztbDyfCCuhgix78novmBDNGk BGSAVE
 ```
 
 ### Recovery
@@ -221,21 +252,16 @@ See [Disaster Recovery Guide](docs/disaster_recovery.md)
 
 ### Dashboards
 
-- PostgreSQL & HAProxy: Grafana → Quantyra → PostgreSQL & HAProxy
-- Redis: Grafana → Quantyra → Redis
-- Infrastructure: Grafana → Quantyra → Node Exporter
+- **Traefik**: Grafana → Quantyra - Traefik
+- **Docker Swarm**: Grafana → Quantyra - Docker Swarm
+- **PostgreSQL & HAProxy**: Grafana → Quantyra - PostgreSQL & HAProxy
+- **Redis**: Grafana → Quantyra - Redis
+- **Infrastructure**: Grafana → Quantyra - Node Exporter
 
 ### Alerts
 
-- Critical: Slack #critical-alerts + PagerDuty
+- Critical: Slack #critical-alerts
 - Warning: Slack #infrastructure-alerts
-
-### Health Check
-
-```bash
-# Run health check script
-/usr/local/bin/health_check.sh
-```
 
 ## Security
 
@@ -244,122 +270,73 @@ See [Disaster Recovery Guide](docs/disaster_recovery.md)
 - UFW configured on all servers
 - Tailscale network (100.64.0.0/10) allowed
 - SSH rate-limited
-- Application ports restricted
+- Application ports from Cloudflare IPs
 
 ### SSH
 
 - Key-based authentication only
 - Password authentication disabled
 - Root login: prohibit-password
+- Tailscale SSH disabled (using standard SSH keys)
 
-### fail2ban
+### Cloudflare WAF
 
-- SSH protection enabled
-- HAProxy, PostgreSQL, Redis protection enabled
+5 security rules applied:
+1. Allow legitimate bots
+2. Challenge suspicious traffic (managed_challenge)
+3. Challenge known attackers (managed_challenge)
+4. Challenge rate-limited requests (managed_challenge)
+5. Block SQL injection attempts
 
 ## Documentation
 
-- [Runbook](docs/runbook.md) - Operational procedures
-- [Deployment Guide](docs/deployment.md) - Deployment instructions
+- [Plan](docs/plan.md) - Current tasks, priorities, and milestones
+- [Architecture](docs/architecture.md) - Complete infrastructure architecture
+- [Dokploy Operations](docs/dokploy-operations.md) - Operational guide for Dokploy
+- [Deployment Guide](docs/deployment.md) - Application deployment procedures
+- [Getting Started](docs/getting-started.md) - Quick start guide
+- [Monitoring](docs/monitoring.md) - Monitoring and alerting setup
 - [Disaster Recovery](docs/disaster_recovery.md) - DR procedures
-- [Infrastructure Overview](quantyra_infrastructure_overview.md) - Architecture details
 
-## Maintenance
+## Common Operations
 
-### Update System Packages
+### Deploy Application
 
 ```bash
-ansible-playbook ansible/playbooks/update.yml
+# Via Git (auto-deploy)
+git push origin main
+
+# Via Dokploy Dashboard
+# https://deploy.quantyralabs.cc
 ```
 
-### Update Specific Service
+### Check Service Status
 
 ```bash
-# PostgreSQL
-ansible-playbook ansible/playbooks/update.yml --tags postgresql
+# Dokploy services
+ssh root@100.92.26.38 "docker service ls"
+
+# PostgreSQL cluster
+ssh root@100.102.220.16 "patronictl list"
 
 # Redis
-ansible-playbook ansible/playbooks/update.yml --tags redis
-
-# HAProxy
-ansible-playbook ansible/playbooks/update.yml --tags haproxy
+ssh root@100.126.103.51 "redis-cli INFO replication"
 ```
 
-### Planned Maintenance
-
-1. Create silence in Alertmanager
-2. Perform maintenance
-3. Verify services
-4. Remove silence
-
-## Troubleshooting
-
-### Common Issues
-
-See [Runbook](docs/runbook.md) for detailed troubleshooting procedures.
-
-### Logs
+### View Logs
 
 ```bash
-# PostgreSQL
-journalctl -u patroni -f
+# Application logs (via Dokploy Dashboard)
+# Applications → [App] → Logs
 
-# Redis
-journalctl -u redis -f
-
-# HAProxy
-journalctl -u haproxy -f
-
-# Prometheus
-journalctl -u prometheus -f
+# Or via CLI
+ssh root@100.92.26.38
+docker service logs my_app --tail 100 --follow
 ```
-
-## XOTEC Application
-
-The XOTEC Data Layer is a Go application running on `re-db` that processes MLS real estate data.
-
-### Services
-
-| Service | Port | Description |
-|---------|------|-------------|
-| `quantyra-app-blue` | 8001 | HTTP server (active) |
-| `quantyra-app-green` | 8002 | HTTP server (standby) |
-| `quantyra-scheduler` | - | Job scheduler |
-| `quantyra-asynqmon` | 9090 | Queue monitor |
-| `quantyra-worker-*` | - | Background workers |
-| `caddy` | 80, 443 | Reverse proxy |
-
-### Domains
-
-- `quantyra.io` - Main application
-- `lzrcdn.com` - CDN/Media
-- `media.lzrcdn.com` - Media proxy
-
-### Quick Commands
-
-```bash
-# Check service status
-ssh root@100.92.26.38 'systemctl status quantyra-* --no-pager'
-
-# View logs
-journalctl -u quantyra-app-blue -f
-
-# Health check
-curl https://quantyra.io/health
-```
-
-See [XOTEC Application Documentation](docs/quantyra_application.md) for details.
-
-## Contributing
-
-1. Create feature branch
-2. Make changes
-3. Test on staging environment
-4. Submit PR for review
-5. Deploy after approval
 
 ## Support
 
-- **Slack**: #infrastructure-alerts
-- **On-call**: PagerDuty
-- **Documentation**: This repository
+- **Dokploy Dashboard**: https://deploy.quantyralabs.cc
+- **Prometheus**: http://100.102.220.16:9090
+- **Grafana**: http://100.102.220.16:3000
+- **HAProxy Stats**: http://100.102.220.16:8404/stats

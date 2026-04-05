@@ -5,12 +5,12 @@ This file contains instructions for AI agents working on this infrastructure rep
 ## Project Overview
 
 Infrastructure-as-code repository for managing Quantyra VPS infrastructure with:
+- **Dokploy deployment platform** with Docker Swarm (2 nodes)
+- **Traefik load balancer** with automatic SSL via Let's Encrypt
 - PostgreSQL/Patroni cluster (3 nodes)
 - Redis cluster with Sentinel (2 nodes)
-- HAProxy routers (2 nodes)
-- App servers (2 nodes)
+- HAProxy routers for database traffic (2 nodes)
 - Monitoring stack (Prometheus, Grafana, Alertmanager)
-- Web-based management dashboard (Flask)
 
 ## Tech Stack
 
@@ -72,9 +72,10 @@ infrastructure/
 ## Key Information
 
 ### Server Access
-- **Dashboard**: http://100.102.220.16:8080 (admin / DbAdmin2026!)
+- **Dokploy Dashboard**: https://deploy.quantyralabs.cc (primary deployment interface)
 - **App Servers**: re-db (100.92.26.38), re-node-02 (100.89.130.19, public: 23.227.173.245)
 - **Routers**: router-01 (100.102.220.16), router-02 (100.116.175.9)
+- **Monitoring**: Prometheus (100.102.220.16:9090), Grafana (100.102.220.16:3000)
 
 ### Critical Credentials
 - **PostgreSQL Leader**: re-node-03 (100.114.117.46)
@@ -121,33 +122,66 @@ infrastructure/
 
 ## Architecture Notes
 
-### HAProxy Configuration (CRITICAL)
-**Consolidated Frontend Architecture**: All domains share a SINGLE HAProxy frontend, not separate frontends per domain.
+### Current Architecture (Dokploy-Based)
 
+**UPDATED (2026-04-03)**: The infrastructure now uses Option B architecture with Dokploy.
+
+**Traffic Flow**:
+- **App Traffic**: Cloudflare → Traefik (on app servers) → Docker containers
+- **Database Traffic**: Applications → HAProxy (routers) → Patroni/Redis
+
+**Key Changes**:
+- HAProxy handles ONLY database traffic (PostgreSQL, Redis)
+- Application traffic bypasses HAProxy entirely
+- Traefik handles all app routing and SSL termination
+- Dokploy manages deployments via Docker Swarm
+
+### Dokploy Configuration (CRITICAL)
+
+**Dokploy is the primary deployment platform**, replacing the legacy Flask dashboard and CapRover.
+
+**Dashboard**: https://deploy.quantyralabs.cc
+
+**Architecture**:
 ```
-/etc/haproxy/domains/
-├── web_http.cfg       # Single HTTP frontend (redirects)
-├── web_https.cfg      # Single HTTPS frontend (ALL certificates)
-├── web_backends.cfg   # All application backends
-└── registry.conf      # Domain → App → Port mapping
+Docker Swarm Cluster:
+- re-db (Manager): Dokploy dashboard, PostgreSQL, Redis, Traefik replica
+- re-node-02 (Worker): Traefik replica, app containers
+
+Services:
+- dokploy: 1/1 replicas (manager only)
+- dokploy-traefik: 2/2 replicas (HA on both nodes)
+- dokploy-postgres: 1/1 replicas (Dokploy internal DB)
+- dokploy-redis: 1/1 replicas (Dokploy internal cache)
 ```
 
-**Why consolidated?**
-- Multiple frontends on port 443 cause SNI routing issues
-- Single frontend with multiple certificates works reliably
-- HAProxy routes by Host header after SSL termination
+**Deployment Workflow**:
+1. Create application in Dokploy dashboard
+2. Connect GitHub repository
+3. Configure environment variables
+4. Add domains
+5. Deploy with 2+ replicas for HA
 
-**Never create per-domain frontend configs.** Always use the registry and rebuild:
-```bash
-/opt/scripts/provision-domain.sh --rebuild
-```
+**Never manually create Docker Swarm services**. Always use Dokploy dashboard or API.
+
+### HAProxy Configuration (Database Only)
+
+**UPDATED (2026-04-03)**: HAProxy now handles DATABASE TRAFFIC ONLY.
+
+**Scope**:
+- PostgreSQL: Port 5000 (write), Port 5001 (read)
+- Redis: Port 6379
+- Stats: Port 8404
+
+**Application traffic NO LONGER routes through HAProxy**. Apps route directly via Cloudflare → Traefik.
 
 ### Key Architectural Decisions
 
-- **Consolidated HAProxy Frontend**: All domains share a SINGLE frontend on port 443 with multiple certificates. Routing uses Host header ACLs after SSL termination.
-- **DNS Round-Robin + HTTP Retry**: Cloudflare DNS returns both router IPs; clients retry the other on failure.
-- **Tailscale VPN**: All server-to-server communication uses encrypted Tailscale network (100.64.0.0/10).
-- **Separate Production/Staging Ports**: Production (8100-8199), Staging (9200-9299) to avoid conflicts with system services.
+- **Dokploy for Deployment**: All application deployments via Dokploy dashboard, not Ansible or manual scripts
+- **Traefik for App Routing**: Traefik handles app traffic, SSL, and load balancing
+- **HAProxy for Databases**: HAProxy provides database connection pooling and failover
+- **DNS Round-Robin**: Cloudflare returns both app server IPs; clients retry on failure
+- **Tailscale VPN**: All server-to-server communication uses encrypted Tailscale network (100.64.0.0/10)
 
 ### Port Allocation Scheme
 
@@ -168,10 +202,16 @@ infrastructure/
 **Important:** The nginx stub_status must listen on port **9114** (not 9113) to avoid conflict with the prometheus-nginx-exporter which listens on port 9113 (Tailscale IP).
 
 ### Traffic Flow
-1. **Cloudflare** terminates SSL at edge, routes to routers via DNS round-robin
-2. **HAProxy routers** (consolidated frontend) route by Host header to app backends
-3. **App servers** run nginx + PHP-FPM (Laravel) or systemd + Node.js
+1. **Cloudflare** terminates SSL at edge, routes to APP SERVERS via DNS round-robin
+2. **Traefik** (on app servers) routes by Host header to Docker containers
+3. **Docker containers** run applications (Laravel, Node.js, etc.)
 4. **Database layer** accessed via HAProxy ports 5000 (write) / 5001 (read)
+
+**Application Deployment**:
+- Via Dokploy dashboard: https://deploy.quantyralabs.cc
+- Git push to main/staging branches triggers auto-deploy
+- Deploy with 2+ replicas for high availability
+- Traefik automatically configures routing and SSL
 
 ### Client IP Forwarding
 ```
@@ -228,9 +268,9 @@ python3 app.py
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/provision-domain.sh` | Provision domain with SSL, HAProxy config |
-| `scripts/deploy-app.sh` | Deploy Laravel/Node.js app to servers |
-| `scripts/sync-configs.sh` | Sync configs from repo to servers |
+| `scripts/sync-configs.sh` | Sync configs from servers to repo (includes Dokploy, Docker, Swarm) |
+
+**Note**: Domain provisioning and app deployment are now handled via Dokploy dashboard, not scripts.
 
 ## Environment Variables
 
@@ -292,28 +332,20 @@ redis-cli -h 100.126.103.51 -p 6379 -a CcPUa3nvcxHtyNYjztbDyfCCuhgix78novmBDNGk 
 
 ## Development Workflow
 
-### Dashboard Changes
+### Dokploy Dashboard Changes
 
-1. **Local Development**:
-   ```bash
-   cd dashboard
-   pip3 install -r requirements.txt
-   export PG_HOST=100.102.220.16
-   export PG_PORT=5000
-   export PG_USER=patroni_superuser
-   export PG_PASSWORD=2e7vBpaaVK4vTJzrKebC
-   export REDIS_HOST=100.126.103.51
-   export REDIS_PASSWORD=CcPUa3nvcxHtyNYjztbDyfCCuhgix78novmBDNGk
-   export PROMETHEUS_URL=http://100.102.220.16:9090
-   python3 app.py
-   ```
+The Dokploy dashboard is the primary interface for deployment and application management.
 
-2. **Deploy**:
-   ```bash
-   scp dashboard/app.py root@100.102.220.16:/opt/dashboard/app.py
-   scp dashboard/templates/*.html root@100.102.220.16:/opt/dashboard/templates/
-   ssh root@100.102.220.16 "systemctl restart dashboard"
-   ```
+**Access**: https://deploy.quantyralabs.cc
+
+**Common Operations**:
+1. **Deploy Application**: Applications → [App Name] → Deploy
+2. **Add Environment Variables**: Applications → [App Name] → Environment
+3. **Add Domain**: Applications → [App Name] → Domains → Add Domain
+4. **View Logs**: Applications → [App Name] → Logs
+5. **Scale Replicas**: Applications → [App Name] → Settings → Replicas
+
+**No code deployment needed**. All changes are made via the web UI.
 
 ### Docker Compose Deployment
 
@@ -418,17 +450,36 @@ Follow Conventional Commits:
 
 ## Common Tasks
 
-### Provision New Domain
-1. Dashboard → Applications → [App] → Domains
-2. Select Cloudflare zones
-3. Configure production root + staging
-4. Provision
+### Deploy New Application
+
+1. Access Dokploy dashboard: https://deploy.quantyralabs.cc
+2. Click **Applications** → **Create Application**
+3. Connect GitHub repository
+4. Configure build settings (Dockerfile or Nixpacks)
+5. Set replicas: 2 (recommended for HA)
+6. Add environment variables (database credentials, app secrets)
+7. Add domains (production and/or staging)
+8. Click **Deploy**
+9. Monitor build and deployment logs
+10. Verify application is accessible
+
+### Add New Domain to Existing Application
+
+1. Dokploy → Applications → [App Name] → Domains
+2. Click **Add Domain**
+3. Enter domain name (e.g., myapp.example.com)
+4. Enable HTTPS
+5. Click **Save**
+6. SSL certificate auto-provisioned by Let's Encrypt
+7. DNS auto-configured via Cloudflare API
 
 ### Delete Application
-1. Dashboard → Applications → [App] → Delete
-2. Choose: Delete Staging or Delete Entire App
-3. Confirm database deletion if prompted
-4. Note: DNS and WAF rules are NOT deleted (manual cleanup in Cloudflare if needed)
+
+1. Dokploy → Applications → [App Name] → Settings
+2. Scroll to bottom
+3. Click **Delete Application**
+4. Confirm deletion
+5. Note: DNS records remain in Cloudflare (manual cleanup if needed)
 
 ### Check Service Status
 ```bash
@@ -442,17 +493,16 @@ ssh root@100.89.130.19 "systemctl status nginx php8.5-fpm"
 
 ## Important Notes
 
-1. **Always deploy to both app servers** for redundancy
-2. **WWW redirect is automatic** for production root domains
-3. **Staging is always password protected**
-4. **Delete staging** keeps production intact
-5. **PHP 8.5** is installed on app servers
-6. **Node.js 20** is installed on app servers
-7. **No linting/tests** configured - manual testing required
-8. **HAProxy uses consolidated frontends** - never create per-domain frontend configs
-9. **Use registry.conf** to manage domains, then rebuild configs
-10. **SSL uses DNS-01 challenge** - works with Cloudflare proxy enabled
-11. **Always sync configs after server changes** - see Config Sync Workflow below
+1. **Deploy via Dokploy** - Always use Dokploy dashboard for application deployments
+2. **Use 2+ replicas** - For high availability across both app servers
+3. **Database via HAProxy** - Always use HAProxy endpoints (router IPs) for database connections
+4. **Traefik handles SSL** - Let's Encrypt certificates are automatic via DNS-01 challenge
+5. **Cloudflare proxy enabled** - All domains use Cloudflare proxy (orange cloud)
+6. **DNS round-robin** - Cloudflare returns both app server IPs automatically
+7. **Tailscale for SSH** - All SSH access via Tailscale network (100.64.0.0/10)
+8. **Sync configs after changes** - Run `scripts/sync-configs.sh` after any server changes
+9. **HAProxy is database-only** - Application traffic bypasses HAProxy entirely
+10. **Monitoring is comprehensive** - Traefik, Docker, PostgreSQL, Redis, and more all monitored
 
 ## Config Sync Workflow
 
@@ -603,15 +653,12 @@ If SSH connectivity issues arise after disabling Tailscale SSH:
 
 - `/docs/plan.md` - Current tasks, priorities, and future improvements
 - `/docs/architecture.md` - Complete infrastructure architecture and traffic flow
-- `/docs/docker_compose_plan.md` - Docker deployment for NAS and Tailscale
-- `/docs/dashboard.md` - Dashboard features and API
-- `/docs/domain_provisioning.md` - Domain provisioning system
-- `/docs/haproxy_ha_dns.md` - HAProxy configuration and load balancing
-- `/docs/cloudflare.md` - Cloudflare integration
-- `/docs/monitoring.md` - Monitoring setup
-- `/docs/framework_builds.md` - Build process for each framework
-- `/docs/staging_production.md` - Staging and production deployment
-- `/docs/disaster_recovery.md` - DR procedures
+- `/docs/dokploy-operations.md` - Operational guide for Dokploy platform
+- `/docs/deployment.md` - Application deployment procedures
+- `/docs/getting-started.md` - Quick start guide for new users
+- `/docs/monitoring.md` - Monitoring setup (includes Traefik and Docker Swarm)
+- `/docs/disaster_recovery.md` - DR procedures including Dokploy recovery
+- `/docs/dokploy_migration_plan.md` - Migration plan from CapRover to Dokploy (complete)
 
 ## Skill Usage Guide
 
