@@ -37,7 +37,7 @@ class DeployAction(BaseAction):
     5. Update deployment status
     
     Supports all PaaS frameworks:
-    - Laravel (PHP with nginx + PHP-FPM)
+    - Laravel (PHP in Dokploy-managed Docker containers)
     - Next.js (Node.js with systemd)
     - SvelteKit (Node.js with systemd)
     - Python (Flask/Django with Gunicorn)
@@ -450,8 +450,8 @@ class DeployAction(BaseAction):
         if step == 'restart_services':
             runtime = config.get('runtime', '')
             
-            if 'php-fpm' in runtime:
-                return 'sudo systemctl reload php8.5-fpm && sudo systemctl reload nginx'
+            if 'docker' in runtime:
+                return None
             elif 'systemd' in runtime:
                 return f'sudo systemctl restart {self.app_name}'
             return None

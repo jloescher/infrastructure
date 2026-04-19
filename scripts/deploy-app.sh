@@ -137,7 +137,7 @@ rollback_deployment() {
         run_as_app_user "cd '$APP_DIR' && php artisan config:cache" 2>/dev/null || true
         run_as_app_user "cd '$APP_DIR' && php artisan route:cache" 2>/dev/null || true
         run_as_app_user "cd '$APP_DIR' && php artisan view:cache" 2>/dev/null || true
-        sudo systemctl reload php8.5-fpm
+        echo "Skipping host PHP-FPM reload (runtime is containerized under Dokploy)."
     fi
 
     ensure_app_permissions
@@ -172,75 +172,9 @@ check_pending_migrations() {
 # Detect framework
 if [ -f "composer.json" ]; then
     echo "Detected: Laravel/PHP"
-
-    if [ ! -f ".env" ]; then
-        echo "Error: Missing $APP_DIR/.env"
-        echo "Generate .env from SOPS-managed dashboard secrets on router-01 before deploy."
-        exit 1
-    fi
-    
-    # Load custom commands from .env.deploy if exists
-    if [ -f ".env.deploy" ]; then
-        source .env.deploy
-    fi
-    
-    INSTALL_CMD="${DEPLOY_INSTALL_CMD:-composer install --no-dev --optimize-autoloader}"
-    BUILD_CMD="${DEPLOY_BUILD_CMD:-npm ci && npm run build}"
-    MIGRATE_CMD="${DEPLOY_MIGRATE_CMD:-php artisan migrate --force}"
-    
-    echo "Running install: $INSTALL_CMD"
-    run_as_app_user "cd '$APP_DIR' && $INSTALL_CMD" 2>&1
-    
-    if [ -f "package.json" ]; then
-        echo "Building frontend assets..."
-        echo "Running build: $BUILD_CMD"
-        run_as_app_user "cd '$APP_DIR' && $BUILD_CMD" 2>/dev/null || run_as_app_user "cd '$APP_DIR' && npm run prod" 2>/dev/null || echo "No build script"
-    fi
-    
-    echo "Running Laravel optimizations..."
-    run_as_app_user "cd '$APP_DIR' && php artisan config:clear" 2>/dev/null || true
-    run_as_app_user "cd '$APP_DIR' && php artisan cache:clear" 2>/dev/null || true
-    run_as_app_user "cd '$APP_DIR' && php artisan route:clear" 2>/dev/null || true
-    run_as_app_user "cd '$APP_DIR' && php artisan view:clear" 2>/dev/null || true
-    
-    # Pre-migration backup
-    DB_NAME=$(grep '^DB_DATABASE=' .env 2>/dev/null | cut -d'=' -f2)
-    if [ -n "$DB_NAME" ]; then
-        backup_database
-        
-        # Check migration status
-        if ! check_pending_migrations; then
-            echo "Running migrations: $MIGRATE_CMD"
-            if ! run_as_app_user "cd '$APP_DIR' && $MIGRATE_CMD" 2>&1; then
-                echo "ERROR: Migration failed!"
-                rollback_deployment
-                exit 1
-            fi
-        fi
-    fi
-    
-    echo "Caching config..."
-    run_as_app_user "cd '$APP_DIR' && php artisan config:cache" 2>/dev/null || true
-    run_as_app_user "cd '$APP_DIR' && php artisan route:cache" 2>/dev/null || true
-    run_as_app_user "cd '$APP_DIR' && php artisan view:cache" 2>/dev/null || true
-    ensure_app_permissions
-    
-    echo "Reloading PHP-FPM..."
-    sudo systemctl reload php8.5-fpm
-    
-    echo "Testing application..."
-    sleep 2
-    PORT=$(grep -oP 'listen\s+\K\d+' /etc/nginx/sites-enabled/$APP_NAME 2>/dev/null | head -1 || echo "80")
-    RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$PORT 2>/dev/null || echo "000")
-    if [ "$RESPONSE" = "200" ] || [ "$RESPONSE" = "302" ]; then
-        echo "Health check passed (HTTP $RESPONSE)"
-    else
-        echo "Error: Health check returned HTTP $RESPONSE"
-        echo "Check logs: journalctl -u php8.5-fpm -n 50"
-        rollback_deployment
-        exit 1
-    fi
-    
+    echo "Error: Host-level Laravel deployments are deprecated."
+    echo "Use Dokploy to deploy this application (PHP runtime is bundled in Docker image)."
+    exit 1
 elif [ -f "package.json" ]; then
     echo "Detected: Node.js"
     

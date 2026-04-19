@@ -129,21 +129,13 @@
             <span class="status-badge status-warning">No</span>
             {% endif %}
         </div>
-        <div class="status-item">
-            <span class="status-label">Nginx:</span>
-            {% if server_status[server.name].nginx_status == 'active' %}
-            <span class="status-badge status-healthy">Running</span>
-            {% else %}
-            <span class="status-badge status-error">{{ server_status[server.name].nginx_status }}</span>
-            {% endif %}
-        </div>
         {% if app.framework == 'laravel' %}
         <div class="status-item">
-            <span class="status-label">PHP-FPM:</span>
-            {% if server_status[server.name].phpfpm_status == 'active' %}
+            <span class="status-label">Docker Runtime:</span>
+            {% if server_status[server.name].docker_status == 'active' %}
             <span class="status-badge status-healthy">Running</span>
             {% else %}
-            <span class="status-badge status-error">{{ server_status[server.name].phpfpm_status }}</span>
+            <span class="status-badge status-error">{{ server_status[server.name].docker_status }}</span>
             {% endif %}
         </div>
         {% endif %}
@@ -151,9 +143,7 @@
     
     <div style="margin: 15px 0; display: flex; gap: 10px; flex-wrap: wrap;">
         <button class="btn" onclick="restartApp('{{ server.name }}', '{{ server.ip }}')">Restart App</button>
-        <button class="btn btn-secondary" onclick="reloadNginx('{{ server.ip }}')">Reload Nginx</button>
         {% if app.framework == 'laravel' %}
-        <button class="btn btn-secondary" onclick="reloadPhpFpm('{{ server.ip }}')">Reload PHP-FPM</button>
         <button class="btn btn-secondary" onclick="clearCache('{{ server.ip }}', '{{ app_name }}')">Clear Cache</button>
         <button class="btn btn-secondary" onclick="showSeedModal('production')">Run Seeds</button>
         {% endif %}
@@ -164,10 +154,10 @@
     {% if app.framework == 'laravel' %}
     <div class="command-box">
         <div class="command-header">
-            <span>Restart App (nginx + PHP-FPM)</span>
+            <span>Check App Containers (Dokploy)</span>
             <button class="btn btn-sm btn-secondary" onclick="copyCommand('restart-{{ server.name }}')">Copy</button>
         </div>
-        <pre id="restart-{{ server.name }}" class="code-block">ssh root@{{ server.ip }} "systemctl reload nginx && systemctl reload php8.5-fpm"</pre>
+        <pre id="restart-{{ server.name }}" class="code-block">ssh root@{{ server.ip }} "docker service ls && docker ps"</pre>
     </div>
     
     <div class="command-box">
@@ -199,16 +189,16 @@
             <span>Restart App</span>
             <button class="btn btn-sm btn-secondary" onclick="copyCommand('restart-{{ server.name }}')">Copy</button>
         </div>
-        <pre id="restart-{{ server.name }}" class="code-block">ssh root@{{ server.ip }} "systemctl reload nginx"</pre>
+        <pre id="restart-{{ server.name }}" class="code-block">ssh root@{{ server.ip }} "systemctl restart {{ app_name }} || systemctl start {{ app_name }}"</pre>
     </div>
     {% endif %}
-    
+
     <div class="command-box">
         <div class="command-header">
-            <span>View Nginx Logs</span>
-            <button class="btn btn-sm btn-secondary" onclick="copyCommand('nginx-logs-{{ server.name }}')">Copy</button>
+            <span>View Docker Logs</span>
+            <button class="btn btn-sm btn-secondary" onclick="copyCommand('docker-logs-{{ server.name }}')">Copy</button>
         </div>
-        <pre id="nginx-logs-{{ server.name }}" class="code-block">ssh root@{{ server.ip }} "tail -f /var/log/nginx/error.log"</pre>
+        <pre id="docker-logs-{{ server.name }}" class="code-block">ssh root@{{ server.ip }} "docker service ls && docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'"</pre>
     </div>
     
     {% if app.framework == 'laravel' %}
@@ -351,42 +341,6 @@ function restartApp(serverName, serverIp) {
         if (data.success) {
             alert('App restarted on ' + serverName);
             location.reload();
-        } else {
-            alert('Error: ' + data.error);
-        }
-    });
-}
-
-function reloadNginx(serverIp) {
-    if (!confirm('Reload nginx on server?')) return;
-    
-    fetch('/api/apps/{{ app_name }}/reload-nginx', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({server: serverIp})
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.success) {
-            alert('Nginx reloaded');
-        } else {
-            alert('Error: ' + data.error);
-        }
-    });
-}
-
-function reloadPhpFpm(serverIp) {
-    if (!confirm('Reload PHP-FPM on server?')) return;
-    
-    fetch('/api/apps/{{ app_name }}/reload-phpfpm', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({server: serverIp})
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.success) {
-            alert('PHP-FPM reloaded');
         } else {
             alert('Error: ' + data.error);
         }

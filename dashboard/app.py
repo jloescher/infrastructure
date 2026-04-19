@@ -4,7 +4,6 @@ import os
 import subprocess
 import time
 import psycopg2
-import redis
 import requests
 from functools import wraps
 import secrets
@@ -54,13 +53,8 @@ try:
 except ImportError:
     PAAS_DB_AVAILABLE = False
 
-try:
-    from websocket import init_socketio, emit_progress, socketio
-    from tasks.deploy import deploy_application_task
-    WEBSOCKET_AVAILABLE = True
-except ImportError:
-    WEBSOCKET_AVAILABLE = False
-    socketio = None
+# Simple in-memory task storage (replaces Redis for task queuing)
+task_storage = {}
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
@@ -205,16 +199,6 @@ PG_PORT = int(os.environ.get("PG_PORT", 5000))
 PG_USER = os.environ.get("PG_USER", "patroni_superuser")
 PG_PASSWORD = os.environ.get("PG_PASSWORD", "2e7vBpaaVK4vTJzrKebC")
 
-REDIS_HOST = os.environ.get("REDIS_HOST", "100.126.103.51")
-REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
-REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD", "CcPUa3nvcxHtyNYjztbDyfCCuhgix78novmBDNGk")
-
-# Redis client for caching (package updates, task status, etc.)
-redis_client = redis.Redis(
-    host=REDIS_HOST, port=REDIS_PORT, password=REDIS_PASSWORD,
-    decode_responses=True, socket_connect_timeout=5
-)
-
 PROMETHEUS_URL = os.environ.get("PROMETHEUS_URL", "http://100.102.220.16:9090")
 GRAFANA_URL = os.environ.get("GRAFANA_URL", "http://100.102.220.16:3000")
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "").strip()
@@ -234,27 +218,6 @@ APP_SERVERS = [
 APP_PORT_RANGE = {"production": {"start": 8100, "end": 8199}, "staging": {"start": 9200, "end": 9299}}
 allocated_ports = {}
 
-def get_next_redis_db():
-    """
-    Get the next available Redis DB number.
-    DB 0 is reserved for system/monitoring.
-    Apps start from DB 1.
-    """
-    applications = load_applications()
-    used_dbs = set()
-    
-    for app_name, app in applications.items():
-        if app.get("redis_enabled") and app.get("redis_db") is not None:
-            used_dbs.add(app["redis_db"])
-    
-    # Start from DB 1 (DB 0 is reserved for system)
-    next_db = 1
-    while next_db in used_dbs:
-        next_db += 1
-    
-    return next_db
-
-
 def get_next_port(app_name):
     applications = load_applications()
     used_ports = set()
@@ -272,96 +235,35 @@ def get_staging_port(production_port):
 
 
 def configure_laravel_nginx(app_name, server_ip, port):
-    nginx_config = f"""server {{
-    listen {port};
-    server_name _;
-    root /opt/apps/{app_name}/public;
-    index index.php;
-
-    add_header X-Frame-Options "SAMEORIGIN";
-    add_header X-Content-Type-Options "nosniff";
-
-    location / {{
-        try_files $uri $uri/ /index.php?$query_string;
-    }}
-
-    location ~ \\.php$ {{
-        fastcgi_pass unix:/run/php/php8.5-fpm-{app_name}.sock;
-        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
-        include fastcgi_params;
-        fastcgi_hide_header X-Powered-By;
-    }}
-
-    location ~ /\\.(?!well-known).* {{
-        deny all;
-    }}
-}}
-"""
-    
-    config_path = f"/etc/nginx/sites-available/{app_name}"
-    enabled_path = f"/etc/nginx/sites-enabled/{app_name}"
-    
-    escaped_config = nginx_config.replace("'", "'\"'\"'")
-    result = ssh_command(server_ip, f"echo '{escaped_config}' > {config_path} && ln -sf {config_path} {enabled_path} && nginx -t && systemctl reload nginx")
-    return result
+    return {
+        "success": False,
+        "error": "Host nginx configuration for Laravel apps is deprecated. Use Dokploy-managed routing."
+    }
 
 
 def configure_php_fpm_pool(app_name, server_ip, is_staging=False):
-    max_children = 40 if is_staging else 80
-    start_servers = 4 if is_staging else 8
-    min_spare = 2 if is_staging else 4
-    max_spare = 8 if is_staging else 16
-    max_requests = 500 if is_staging else 1000
-    
-    pool_config = f"""[{app_name}]
-user = www-data
-group = www-data
-listen = /run/php/php8.5-fpm-{app_name}.sock
-listen.owner = www-data
-listen.group = www-data
-pm = dynamic
-pm.max_children = {max_children}
-pm.start_servers = {start_servers}
-pm.min_spare_servers = {min_spare}
-pm.max_spare_servers = {max_spare}
-pm.process_idle_timeout = 10s
-pm.max_requests = {max_requests}
-request_slowlog_timeout = 5s
-slowlog = /var/log/php8.5-fpm/{app_name}-slow.log
-php_admin_value[disable_functions] = exec,passthru,shell_exec,system
-php_admin_flag[log_errors] = on
-php_admin_value[error_log] = /var/log/php8.5-fpm/{app_name}-error.log
-"""
-    
-    pool_path = f"/etc/php/8.5/fpm/pool.d/{app_name}.conf"
-    
-    escaped_config = pool_config.replace("'", "'\"'\"'")
-    result = ssh_command(server_ip, f"echo '{escaped_config}' > {pool_path} && systemctl restart php8.5-fpm")
-    return result
+    return {
+        "success": False,
+        "error": "Host PHP-FPM pool management is deprecated. PHP runtime is containerized in Dokploy deployments."
+    }
 
 
 def setup_laravel_app(app_name, server_ip, port):
-    results = []
-    
-    fpm_result = configure_php_fpm_pool(app_name, server_ip)
-    if not fpm_result["success"]:
-        return {"success": False, "error": f"PHP-FPM pool failed: {fpm_result.get('stderr', 'Unknown error')}"}
-    
-    nginx_result = configure_laravel_nginx(app_name, server_ip, port)
-    if not nginx_result["success"]:
-        return {"success": False, "error": f"nginx config failed: {nginx_result.get('stderr', 'Unknown error')}"}
-    
-    return {"success": True, "port": port}
+    return {
+        "success": False,
+        "error": "Laravel host setup is deprecated. Deploy Laravel apps via Dokploy."
+    }
 
 
 def remove_laravel_app(app_name, server_ip, port):
-    ssh_command(server_ip, f"rm -f /etc/php/8.5/fpm/pool.d/{app_name}.conf && systemctl restart php8.5-fpm")
-    ssh_command(server_ip, f"rm -f /etc/nginx/sites-enabled/{app_name} /etc/nginx/sites-available/{app_name} && systemctl reload nginx")
-    return {"success": True}
+    return {
+        "success": False,
+        "error": "Host nginx cleanup for Laravel apps is deprecated. App routing is Dokploy-managed."
+    }
 
 DB_SERVERS = [
-    {"name": "re-node-01", "ip": "100.126.103.51", "public_ip": "104.225.216.26", "role": "PostgreSQL + Redis"},
-    {"name": "re-node-03", "ip": "100.114.117.46", "public_ip": "172.93.54.145", "role": "PostgreSQL + Redis"},
+    {"name": "re-node-01", "ip": "100.126.103.51", "public_ip": "104.225.216.26", "role": "PostgreSQL"},
+    {"name": "re-node-03", "ip": "100.114.117.46", "public_ip": "172.93.54.145", "role": "PostgreSQL"},
     {"name": "re-node-04", "ip": "100.115.75.119", "public_ip": "172.93.54.122", "role": "PostgreSQL"}
 ]
 
@@ -552,8 +454,6 @@ def load_applications():
                         'staging_env': bool(app.get('create_staging', 1)),
                         'target_servers': json.loads(app.get('target_servers', '[]')),
                         'port': app.get('port'),
-                        'redis_enabled': bool(app.get('redis_enabled', 0)),
-                        'redis_db': app.get('redis_db'),
                         'domains': [],
                         'server_commits': {},
                         'created_at': app.get('created_at', '')
@@ -602,20 +502,18 @@ def save_applications(applications):
             for app_name, app in applications.items():
                 existing = paas_db.get_application(name=app_name)
                 
-                app_data = {
-                    'name': app_name,
-                    'display_name': app.get('display_name', app_name),
-                    'description': app.get('description', ''),
-                    'framework': app.get('framework', 'laravel'),
-                    'repository': app.get('git_repo', ''),
-                    'production_branch': app.get('production_branch', 'main'),
-                    'staging_branch': app.get('staging_branch', 'staging'),
-                    'create_staging': app.get('staging_env', True),
-                    'target_servers': app.get('target_servers', []),
-                    'port': app.get('port'),
-                    'redis_enabled': app.get('redis_enabled', False),
-                    'redis_db': app.get('redis_db')
-                }
+                    app_data = {
+                        'name': app_name,
+                        'display_name': app.get('display_name', app_name),
+                        'description': app.get('description', ''),
+                        'framework': app.get('framework', 'laravel'),
+                        'repository': app.get('git_repo', ''),
+                        'production_branch': app.get('production_branch', 'main'),
+                        'staging_branch': app.get('staging_branch', 'staging'),
+                        'create_staging': app.get('staging_env', True),
+                        'target_servers': app.get('target_servers', []),
+                        'port': app.get('port')
+                    }
                 
                 if existing:
                     paas_db.update_application(existing['id'], app_data)
@@ -1239,7 +1137,7 @@ def ensure_nodejs_20(server_ip):
     return {"success": False, "message": f"Failed to install Node.js 20: {install_result.get('stderr', '')}"}
 
 
-def run_framework_setup(app_name, framework, servers, db_config=None, redis_config=None, app_url=None, environment="production"):
+def run_framework_setup(app_name, framework, servers, db_config=None, app_url=None, environment="production"):
     """
     Run framework setup on servers.
     
@@ -1248,7 +1146,6 @@ def run_framework_setup(app_name, framework, servers, db_config=None, redis_conf
         framework: Framework type (laravel, nextjs, etc.)
         servers: List of server dicts
         db_config: Database configuration dict
-        redis_config: Redis configuration dict
         app_url: Application URL (e.g., https://example.com)
         environment: Environment name (production, staging, development)
     """
@@ -1263,116 +1160,8 @@ def run_framework_setup(app_name, framework, servers, db_config=None, redis_conf
             continue
         ensure_app_directory_permissions(server["ip"], app_name)
 
-        if framework == "laravel":
-            composer_cmd = run_as_app_user(f"cd {app_dir} && composer install --no-dev --optimize-autoloader 2>&1")
-            composer_result = ssh_command(server["ip"], composer_cmd, timeout=300)
-            
-            if composer_result["success"]:
-                build_result = run_frontend_build(server["ip"], app_dir)
-                if not build_result["success"]:
-                    results.append({"server": server["name"], "status": "error", "message": build_result["message"]})
-                    continue
-                
-                env_result = ssh_command(server["ip"], run_as_app_user(f"cd {app_dir} && cp .env.example .env 2>/dev/null || true"))
-                
-                env_updates = [
-                    f"sed -i 's/APP_ENV=.*/APP_ENV={environment}/' {app_dir}/.env",
-                    f"sed -i 's/^DB_CONNECTION=.*/DB_CONNECTION=pgsql/' {app_dir}/.env",
-                    f"grep -q '^DB_CONNECTION=' {app_dir}/.env || echo 'DB_CONNECTION=pgsql' >> {app_dir}/.env",
-                ]
-                
-                if environment == "staging":
-                    env_updates.append(f"sed -i 's/APP_DEBUG=.*/APP_DEBUG=true/' {app_dir}/.env")
-                else:
-                    env_updates.append(f"sed -i 's/APP_DEBUG=.*/APP_DEBUG=false/' {app_dir}/.env")
-                
-                if db_config:
-                    db_vars = {
-                        "DB_HOST": db_config['host'],
-                        "DB_PORT": db_config['port'],
-                        "DB_DATABASE": db_config['database'],
-                        "DB_USERNAME": db_config['username'],
-                        "DB_PASSWORD": db_config['password'],
-                    }
-                    for var_name, var_value in db_vars.items():
-                        env_updates.append(f"sed -i 's/^{var_name}=.*/{var_name}={var_value}/' {app_dir}/.env")
-                        env_updates.append(f"grep -q '^{var_name}=' {app_dir}/.env || echo '{var_name}={var_value}' >> {app_dir}/.env")
-                        
-                if redis_config:
-                    redis_vars = {
-                        "REDIS_HOST": redis_config['host'],
-                        "REDIS_PASSWORD": redis_config['password'],
-                        "REDIS_PORT": redis_config['port'],
-                    }
-                    if redis_config.get('db') is not None:
-                        redis_vars["REDIS_DB"] = str(redis_config['db'])
-                    for var_name, var_value in redis_vars.items():
-                        env_updates.append(f"sed -i 's/^{var_name}=.*/{var_name}={var_value}/' {app_dir}/.env")
-                        env_updates.append(f"grep -q '^{var_name}=' {app_dir}/.env || echo '{var_name}={var_value}' >> {app_dir}/.env")
-                        
-                if app_url:
-                    env_updates.extend([
-                        f"sed -i 's|APP_URL=.*|APP_URL={app_url}|' {app_dir}/.env",
-                        f"grep -q '^APP_URL=' {app_dir}/.env || echo 'APP_URL={app_url}' >> {app_dir}/.env",
-                    ])
-                ssh_command(server["ip"], run_as_app_user(" && ".join(env_updates)))
 
-                ssh_command(server["ip"], run_as_app_user(f"cd {app_dir} && php artisan key:generate --force 2>/dev/null || true"))
-
-                ssh_command(server["ip"], run_as_app_user(f"cd {app_dir} && php artisan storage:link 2>/dev/null || true"))
-                ensure_laravel_runtime_permissions(server["ip"], app_name)
-                results.append({
-                    "server": server["name"],
-                    "status": "composer_installed",
-                    "output": f"Composer installed, {build_result['message']}"
-                })
-            else:
-                results.append({"server": server["name"], "status": "error", "message": composer_result["stderr"][-500:] if composer_result["stderr"] else "Unknown error"})
-                
-        elif framework in ["nextjs", "svelte", "vue", "nuxt", "gatsby", "angular"]:
-            build_result = run_frontend_build(server["ip"], app_dir)
-            if build_result["success"]:
-                detected_framework = build_result.get("framework", framework)
-                results.append({
-                    "server": server["name"], 
-                    "status": "built", 
-                    "output": f"{detected_framework} build completed: {build_result['message']}"
-                })
-            else:
-                results.append({"server": server["name"], "status": "error", "message": build_result["message"]})
-                
-        elif framework == "go":
-            build_result = ssh_command(server["ip"], run_as_app_user(f"cd {app_dir} && go build -o bin/{app_name} . 2>&1"), timeout=300)
-            
-            if build_result["success"]:
-                results.append({"server": server["name"], "status": "built", "output": "Go binary built"})
-            else:
-                results.append({"server": server["name"], "status": "error", "message": build_result["stderr"][-500:] if build_result.get("stderr") else "Unknown error"})
-    
-        elif framework == "python":
-            venv_path = f"{app_dir}/venv"
-            venv_result = ssh_command(server["ip"], run_as_app_user(f"python3 -m venv {venv_path} 2>&1"))
-            
-            if venv_result["success"]:
-                requirements_check = ssh_command(server["ip"], f"test -f {app_dir}/requirements.txt && echo exists")
-                pip_output = ""
-                
-                if "exists" in requirements_check.get("stdout", ""):
-                    pip_result = ssh_command(server["ip"], run_as_app_user(f"{venv_path}/bin/pip install -r {app_dir}/requirements.txt 2>&1"), timeout=300)
-                    pip_output = " dependencies installed" if pip_result["success"] else f" pip failed: {pip_result.get('stderr', '')[:100]}"
-                
-                results.append({
-                    "server": server["name"], 
-                    "status": "venv_created", 
-                    "output": f"Python venv created{pip_output}"
-                })
-            else:
-                results.append({"server": server["name"], "status": "error", "message": venv_result["stderr"][-500:] if venv_result.get("stderr") else "Unknown error"})
-    
-    return results
-
-
-def get_framework_env_vars(framework, environment="production", app_url=None, db_config=None, redis_config=None):
+def get_framework_env_vars(framework, environment="production", app_url=None, db_config=None):
     """
     Get framework-specific environment variables.
     
@@ -1407,23 +1196,16 @@ def get_framework_env_vars(framework, environment="production", app_url=None, db
         else:
             env_vars["DATABASE_URL"] = f"postgres://{db_config['username']}:{db_config['password']}@{db_config['host']}:{db_config['port']}/{db_config['database']}"
     
-    if redis_config:
-        if framework == "laravel":
-            pass
-        else:
-            redis_db = redis_config.get('db', 0)
-            env_vars["REDIS_URL"] = f"redis://:{redis_config['password']}@{redis_config['host']}:{redis_config['port']}/{redis_db}"
-    
     return {k: v for k, v in env_vars.items() if v is not None}
 
 
-def create_systemd_service(app_name, framework, server_ip, db_url=None, redis_url=None, env_vars=None):
+def create_systemd_service(app_name, framework, server_ip, db_url=None, env_vars=None):
     user_result = ensure_app_runtime_user(server_ip)
     if not user_result["success"]:
         return {"success": False, "stdout": "", "stderr": f"Failed to ensure runtime user '{APP_RUNTIME_USER}': {summarize_command_error(user_result)}"}
 
     if framework == "laravel":
-        return {"success": True, "message": "Laravel uses nginx + PHP-FPM, not systemd service"}
+        return {"success": True, "message": "Laravel is deployed via Dokploy-managed containers (no host systemd service)"}
     elif framework == "nextjs":
         service_content = f"""[Unit]
 Description={app_name} Next.js Application
@@ -1481,12 +1263,10 @@ Restart=always
 RestartSec=5
 """
     
-    if db_url or redis_url or env_vars:
+    if db_url or env_vars:
         env_section = "\nEnvironment="
         if db_url:
             env_section += f"DATABASE_URL={db_url} "
-        if redis_url:
-            env_section += f"REDIS_URL={redis_url} "
         if env_vars:
             for key, value in env_vars.items():
                 env_section += f"{key}={value} "
@@ -1597,11 +1377,6 @@ def build_deploy_env_material(app_name, app, environment="production"):
                 additional_vars.setdefault("DB_USERNAME", selected_user.get("name", ""))
                 additional_vars.setdefault("DB_PASSWORD", selected_user.get("password", ""))
 
-        if app.get("redis_enabled"):
-            additional_vars["REDIS_HOST"] = str(REDIS_HOST)
-            additional_vars["REDIS_PORT"] = str(REDIS_PORT)
-            additional_vars["REDIS_PASSWORD"] = str(REDIS_PASSWORD)
-
     merged_vars = export_secrets_for_deployment(app_name, environment)
     for k, v in additional_vars.items():
         merged_vars[k] = v
@@ -1617,8 +1392,6 @@ def build_deploy_env_material(app_name, app, environment="production"):
             "DB_USERNAME",
             "DB_PASSWORD",
         ]
-        if app.get("redis_enabled"):
-            required_keys.extend(["REDIS_HOST", "REDIS_PORT", "REDIS_PASSWORD"])
 
     missing_keys = [k for k in required_keys if not str(merged_vars.get(k, "")).strip()]
     env_content = generate_env_file_content(app_name, environment, additional_vars)
@@ -1807,7 +1580,7 @@ def list_github_secrets(owner, repo, token):
         return None, str(e)
 
 
-def push_app_secrets_to_github(app_name, app_data, db_password=None, redis_url=None):
+def push_app_secrets_to_github(app_name, app_data, db_password=None):
     git_repo = app_data.get("git_repo")
     if not git_repo:
         return {"success": False, "error": "No git repo configured"}
@@ -2002,22 +1775,7 @@ def get_pg_cluster_status():
         return {"status": "error", "error": str(e)}
 
 
-def get_redis_info():
-    try:
-        r = redis.Redis(
-            host=REDIS_HOST, port=REDIS_PORT, password=REDIS_PASSWORD,
-            decode_responses=True, socket_connect_timeout=5
-        )
-        info = r.info()
-        return {
-            "status": "healthy",
-            "connected_clients": info.get("connected_clients", 0),
-            "used_memory_human": info.get("used_memory_human", "0B"),
-            "uptime_in_seconds": info.get("uptime_in_seconds", 0),
-            "role": info.get("role", "unknown")
-        }
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
+
 
 
 def get_prometheus_alerts():
@@ -2114,16 +1872,6 @@ def get_server_updates(server_ip, force_refresh=False):
             "last_checked": str (ISO timestamp)
         }
     """
-    cache_key = f"server_updates:{server_ip}"
-    
-    if not force_refresh:
-        try:
-            cached = redis_client.get(cache_key)
-            if cached:
-                return json.loads(cached)
-        except Exception:
-            pass
-    
     if force_refresh:
         ssh_command(server_ip, "apt-get update -qq 2>/dev/null", timeout=60)
     
@@ -2187,11 +1935,6 @@ def get_server_updates(server_ip, force_refresh=False):
         "last_checked": datetime.utcnow().isoformat() + "Z"
     }
     
-    try:
-        redis_client.setex(cache_key, 3600, json.dumps(response))
-    except Exception:
-        pass
-    
     return response
 
 
@@ -2225,7 +1968,6 @@ def get_services_needing_restart(server_ip):
                 "postgres": "postgresql",
                 "redis-server": "redis-server",
                 "node": "node",
-                "php-fpm": "php8.5-fpm",
                 "haproxy": "haproxy",
                 "patroni": "patroni",
                 "etcd": "etcd"
@@ -2274,10 +2016,6 @@ def update_packages(server_ip, packages=None):
                     if pkg not in updated:
                         updated.append(pkg)
         
-        try:
-            redis_client.delete(f"server_updates:{server_ip}")
-        except Exception:
-            pass
     else:
         errors.append(result.get("stderr") or result.get("stdout", "Unknown error")[-500:])
     
@@ -2382,14 +2120,12 @@ def find_server_by_name(server_name):
 @requires_auth
 def index():
     pg_status = get_pg_cluster_status()
-    redis_info = get_redis_info()
     alerts = get_prometheus_alerts()
     pg_databases = get_pg_databases()
     databases = load_databases()
     
     return render_template("index.html",
         pg_status=pg_status,
-        redis_info=redis_info,
         alerts=alerts,
         pg_databases=pg_databases,
         databases=databases,
@@ -2488,7 +2224,7 @@ def connection_string(db_name):
     if db_name not in databases:
         flash("Database not found", "error")
         return redirect(url_for("databases"))
-    return render_template("connection.html", db_name=db_name, db=databases[db_name], redis_password=REDIS_PASSWORD)
+    return render_template("connection.html", db_name=db_name, db=databases[db_name])
 
 
 def get_servers_by_role():
@@ -2684,7 +2420,6 @@ def create_app():
         create_db = "create_db" in request.form
         db_name = request.form.get("db_name", app_name).strip().lower()
         pool_size = int(request.form.get("db_pool_size", 20))
-        create_redis = "create_redis" in request.form
         deploy_now = "deploy_now" in request.form
         production_domain = request.form.get("production_domain", "").strip().lower()
         domain_configs_json = request.form.get("domain_configs", "[]")
@@ -2901,14 +2636,12 @@ def create_app():
                 return render_template("create_app_result.html", results=results, 
                     app_name=app_name, framework=framework, git_repo=git_repo,
                     target_servers=target_servers, staging_env=create_staging,
-                    create_db=create_db, db_name=db_name, create_redis=create_redis,
+                    create_db=create_db, db_name=db_name,
                     workflow="", app_servers=APP_SERVERS,
                     webhook_secret="", webhook_base_url=get_webhook_base_url())
         
         pending_domains = build_domains_from_configs(domain_configs, enable_security)
         webhook_secret = secrets.token_urlsafe(32)
-        
-        redis_db = get_next_redis_db() if create_redis else None
 
         applications[app_name] = {
             "name": app_name,
@@ -2929,8 +2662,6 @@ def create_app():
             "staging_db_user_password": results.get("staging_db_user_password") if create_staging else None,
             "staging_db_admin": results.get("staging_db_admin") if create_staging else None,
             "staging_db_admin_password": results.get("staging_db_admin_password") if create_staging else None,
-            "redis_enabled": create_redis,
-            "redis_db": redis_db,
             "port": port if framework == "laravel" else None,
             "domains": pending_domains,
             "production_domain": production_domain,
@@ -3006,7 +2737,7 @@ def create_app():
         return render_template("create_app_result.html", results=results, 
             app_name=app_name, framework=framework, git_repo=git_repo,
             target_servers=target_servers, staging_env=create_staging,
-            create_db=create_db, db_name=db_name, create_redis=create_redis,
+            create_db=create_db, db_name=db_name,
             workflow=workflow, app_servers=APP_SERVERS, production_domain=production_domain,
             public_base_url=get_public_base_url(), webhook_secret=webhook_secret,
             webhook_base_url=get_webhook_base_url())
@@ -3044,16 +2775,7 @@ def delete_app(app_name):
         ssh_command(server_ip, f"rm -rf /opt/apps/{app_name}")
         ssh_command(server_ip, f"rm -rf /opt/apps/{app_name}-staging")
         
-        ssh_command(server_ip, f"rm -f /etc/nginx/sites-available/{app_name}")
-        ssh_command(server_ip, f"rm -f /etc/nginx/sites-enabled/{app_name}")
-        ssh_command(server_ip, f"rm -f /etc/nginx/sites-available/{app_name}-staging")
-        ssh_command(server_ip, f"rm -f /etc/nginx/sites-enabled/{app_name}-staging")
-        
-        ssh_command(server_ip, f"rm -f /etc/php/8.5/fpm/pool.d/{app_name}.conf")
-        ssh_command(server_ip, f"rm -f /etc/php/8.5/fpm/pool.d/{app_name}-staging.conf")
-        
-        ssh_command(server_ip, "systemctl reload nginx || true")
-        ssh_command(server_ip, "systemctl reload php8.5-fpm || true")
+        # Host nginx no longer manages app workloads on app servers.
     
     for domain in app.get("domains", []):
         domain_name = domain.get("name")
@@ -3102,13 +2824,7 @@ def delete_staging(app_name):
         
         ssh_command(server_ip, f"rm -rf /opt/apps/{app_name}-staging")
         
-        ssh_command(server_ip, f"rm -f /etc/nginx/sites-available/{app_name}-staging")
-        ssh_command(server_ip, f"rm -f /etc/nginx/sites-enabled/{app_name}-staging")
-        
-        ssh_command(server_ip, f"rm -f /etc/php/8.5/fpm/pool.d/{app_name}-staging.conf")
-        
-        ssh_command(server_ip, "systemctl reload nginx || true")
-        ssh_command(server_ip, "systemctl reload php8.5-fpm || true")
+        # Host nginx no longer manages app workloads on app servers.
     
     staging_domains = [d for d in app.get("domains", []) if d.get("type") == "staging"]
     for domain in staging_domains:
@@ -3423,21 +3139,7 @@ def run_pull_deploy(app_name, branch="main", rolling=True):
 
     framework = app.get("framework", "")
     if framework == "laravel":
-        for server in APP_SERVERS:
-            pool_check = ssh_command(server["ip"], f"test -f /etc/php/8.5/fpm/pool.d/{deploy_target_name}.conf && echo exists", timeout=10)
-            if "exists" not in (pool_check.get("stdout") or ""):
-                setup_result = setup_laravel_app(deploy_target_name, server["ip"], app_port)
-                if not setup_result.get("success"):
-                    results["errors"].append(f"{server['name']}: Laravel setup failed - {setup_result.get('error', 'unknown error')}")
-                    results["phases"]["deploy"]["status"] = "failed"
-                    results["phases"]["deploy"]["completed_at"] = datetime.utcnow().isoformat()
-                    results["phases"]["domain_provisioning"] = {"status": "skipped", "reason": "Deploy phase failed"}
-                    results["success_flag"] = False
-                    update_last_deploy_status(app, results)
-                    applications[app_name] = app
-                    save_applications(applications)
-                    return results
-                results["success"].append(f"{server['name']}: Laravel nginx+php-fpm configured")
+        results["success"].append("Laravel runtime is containerized and managed via Dokploy")
 
     primary_server = APP_SERVERS[0]
     secondary_servers = APP_SERVERS[1:]
@@ -3964,7 +3666,6 @@ def deploy_app(app_name):
         framework = app.get("framework", "go")
         
         db_url = None
-        redis_url = None
         db_name = app.get("database")
         
         if db_name:
@@ -3997,30 +3698,16 @@ def deploy_app(app_name):
                     results["errors"].append(f"Clone on {server_name}: {r['message']}")
             
             db_config = None
-            redis_config = None
-            if db_name:
-                databases = load_databases()
-                if db_name in databases:
-                    db_admin = databases[db_name].get("owner", f"{app_name}_admin")
-                    for user in databases[db_name].get("users", []):
-                        if user.get("name") == db_admin:
-                            db_password = user.get("password", "")
-                            db_config = {
-                                "host": PG_HOST,
-                                "port": str(PG_PORT),
-                                "database": db_name,
-                                "username": db_admin,
-                                "password": db_password
-                            }
-                            break
+            app_url = None
+            domains = app.get("domains", [])
+            for d in domains:
+                if d.get("type") == "production" and d.get("name"):
+                    app_url = f"https://{d['name']}"
+                    break
             
             if app.get("redis_enabled"):
-                redis_config = {
-                    "host": REDIS_HOST,
-                    "port": str(REDIS_PORT),
-                    "password": REDIS_PASSWORD,
-                    "db": app.get("redis_db", 0)
-                }
+                # Redis removed - using PostgreSQL for job queues
+                pass
             
             app_url = None
             domains = app.get("domains", [])
@@ -4029,7 +3716,7 @@ def deploy_app(app_name):
                     app_url = f"https://{d['name']}"
                     break
             
-            setup_results = run_framework_setup(app_name, framework, target_servers, db_config, redis_config, app_url)
+            setup_results = run_framework_setup(app_name, framework, target_servers, db_config, app_url)
             for r in setup_results:
                 server_name = r["server"]
                 if server_name not in results["servers"]:
@@ -4054,14 +3741,14 @@ def deploy_app(app_name):
                 results=results,
                 selected_servers=selected_servers)
 
-        env_vars = {
-            "APP_NAME": app_name,
-            "APP_ENV": "production",
-            "NODE_ENV": "production"
-        }
-        
-        for server in target_servers:
-            svc_result = create_systemd_service(app_name, framework, server["ip"], db_url, redis_url, env_vars)
+            env_vars = {
+                "APP_NAME": app_name,
+                "APP_ENV": "production",
+                "NODE_ENV": "production"
+            }
+            
+            for server in target_servers:
+                svc_result = create_systemd_service(app_name, framework, server["ip"], db_url, env_vars)
             if server["name"] not in results["servers"]:
                 results["servers"][server["name"]] = {}
             results["servers"][server["name"]]["systemd"] = "created" if svc_result["success"] else "failed"
@@ -4117,21 +3804,19 @@ def app_status(app_name):
     for server in APP_SERVERS:
         cloned_check = ssh_command(server["ip"], f"test -d /opt/apps/{app_name} && echo exists || echo missing")
         
-        nginx_status = ssh_command(server["ip"], "systemctl is-active nginx 2>/dev/null || echo inactive")
-        phpfpm_status = ssh_command(server["ip"], "systemctl is-active php8.5-fpm 2>/dev/null || echo inactive")
+        docker_status = ssh_command(server["ip"], "docker info >/dev/null 2>&1 && echo active || echo inactive")
         
         app_active_check = ssh_command(server["ip"], f"curl -s -o /dev/null -w '%{{http_code}}' http://localhost:{app_port} 2>/dev/null || echo '000'")
         app_http_code = app_active_check.get("stdout", "000").strip()
         app_active = app_http_code not in ["000", "502", "503"]
         
-        logs_result = ssh_command(server["ip"], f"tail -n 20 /var/log/nginx/error.log 2>/dev/null || echo 'No logs available'")
+        logs_result = ssh_command(server["ip"], "docker ps --format 'table {{.Names}}\\t{{.Status}}\\t{{.Image}}' 2>/dev/null || echo 'No Docker runtime info available'")
         
         server_status[server["name"]] = {
             "ip": server["ip"],
             "public_ip": server.get("public_ip", ""),
             "cloned": "exists" in cloned_check.get("stdout", ""),
-            "nginx_status": nginx_status.get("stdout", "").strip(),
-            "phpfpm_status": phpfpm_status.get("stdout", "").strip(),
+            "docker_status": docker_status.get("stdout", "").strip(),
             "app_active": app_active,
             "app_http_code": app_http_code,
             "logs": logs_result.get("stdout", "Unable to fetch logs")
@@ -4146,9 +3831,8 @@ def app_status(app_name):
         pending_domain_count=pending_domain_count,
         last_deploy=app.get("last_deploy", {}),
         pg_host=PG_HOST,
-        pg_port=PG_PORT,
-        redis_host=REDIS_HOST,
-        redis_port=REDIS_PORT)
+        pg_port=PG_PORT
+    )
 
 
 @app.route("/api/apps/<app_name>/restart", methods=["POST"])
@@ -4165,9 +3849,12 @@ def api_restart_app(app_name):
     framework = app.get("framework", "laravel")
     
     if framework == "laravel":
-        result = ssh_command(server_ip, "systemctl reload nginx && systemctl reload php8.5-fpm")
+        return jsonify({
+            "success": False,
+            "error": "Laravel app restart is Dokploy-managed. Use Dokploy to restart/redeploy containers."
+        })
     else:
-        result = ssh_command(server_ip, "systemctl reload nginx")
+        result = ssh_command(server_ip, f"systemctl restart {app_name} || systemctl start {app_name}")
     
     return jsonify({"success": result.get("returncode", 1) == 0, "error": result.get("stderr", "")})
 
@@ -4175,21 +3862,19 @@ def api_restart_app(app_name):
 @app.route("/api/apps/<app_name>/reload-nginx", methods=["POST"])
 @requires_auth
 def api_reload_nginx(app_name):
-    data = request.get_json() or {}
-    server_ip = data.get("server")
-    
-    result = ssh_command(server_ip, "systemctl reload nginx")
-    return jsonify({"success": result.get("returncode", 1) == 0, "error": result.get("stderr", "")})
+    return jsonify({
+        "success": False,
+        "error": "Host nginx is deprecated on app servers. Use Dokploy/Traefik-managed deployments."
+    })
 
 
 @app.route("/api/apps/<app_name>/reload-phpfpm", methods=["POST"])
 @requires_auth
 def api_reload_phpfpm(app_name):
-    data = request.get_json() or {}
-    server_ip = data.get("server")
-    
-    result = ssh_command(server_ip, "systemctl reload php8.5-fpm")
-    return jsonify({"success": result.get("returncode", 1) == 0, "error": result.get("stderr", "")})
+    return jsonify({
+        "success": False,
+        "error": "Host PHP-FPM is deprecated for app workloads. Use Dokploy-managed containers."
+    })
 
 
 @app.route("/api/apps/<app_name>/clear-cache", methods=["POST"])
@@ -4876,44 +4561,17 @@ def delete_app_domain(app_name, domain):
 
 
 def configure_nginx_for_app(app_name, domain, framework, ssl_enabled):
-    results = []
-    
-    if framework == "laravel":
-        port = 8000
-    elif framework in ["nextjs", "svelte"]:
-        port = 3000
-    else:
-        port = 8080
-    
-    nginx_config = f"""server {{
-    listen 80;
-    server_name {domain};
-    
-    location / {{
-        proxy_pass http://127.0.0.1:{port};
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }}
-}}
-"""
-    
-    for server in APP_SERVERS:
-        config_path = f"/etc/nginx/sites-available/{domain}"
-        enabled_path = f"/etc/nginx/sites-enabled/{domain}"
-        
-        escaped_config = nginx_config.replace("'", "'\"'\"'")
-        result = ssh_command(server["ip"], f"echo '{escaped_config}' > {config_path} && ln -sf {config_path} {enabled_path} && nginx -t && systemctl reload nginx")
-        results.append({"server": server["name"], "success": result["success"], "error": result.get("stderr", "")})
-    
-    all_success = all(r["success"] for r in results)
-    return {"success": all_success, "results": results}
+    return {
+        "success": False,
+        "error": "Host nginx provisioning is deprecated. Configure domains through Dokploy/Traefik."
+    }
 
 
 def remove_nginx_config(app_name, domain):
-    for server in APP_SERVERS:
-        ssh_command(server["ip"], f"rm -f /etc/nginx/sites-enabled/{domain} /etc/nginx/sites-available/{domain} && systemctl reload nginx")
+    return {
+        "success": False,
+        "error": "Host nginx config removal is deprecated. Manage domains through Dokploy/Traefik."
+    }
 
 
 @app.route("/databases/<db_name>/delete", methods=["POST"])
@@ -5067,7 +4725,7 @@ def generate_github_workflow(framework, app_name, target_servers, staging_env, c
             composer install --no-dev --optimize-autoloader 2>/dev/null || true
             npm ci && npm run build 2>/dev/null || true
             php artisan migrate --force 2>/dev/null || true
-            sudo systemctl restart {app_name}-staging 2>/dev/null || sudo systemctl reload php8.5-fpm
+            sudo systemctl restart {app_name}-staging 2>/dev/null || true
 """
     
     staging_branch = "\n      - staging" if staging_env else ""
@@ -5099,8 +4757,6 @@ def settings():
         cf_zone_name=CLOUDFLARE_ZONE_NAME,
         pg_host=PG_HOST,
         pg_port=PG_PORT,
-        redis_host=REDIS_HOST,
-        redis_port=REDIS_PORT,
         prometheus_url=PROMETHEUS_URL,
         grafana_url=GRAFANA_URL,
         app_servers=APP_SERVERS)
@@ -6007,12 +5663,6 @@ def export_app_secrets(app_name):
                         })
                         break
         
-        if app.get("redis_enabled"):
-            additional_vars.update({
-                "REDIS_HOST": REDIS_HOST,
-                "REDIS_PORT": str(REDIS_PORT),
-                "REDIS_PASSWORD": REDIS_PASSWORD,
-            })
     
     env_content = generate_env_file_content(app_name, "production", additional_vars)
     
@@ -6117,13 +5767,13 @@ def api_check_updates():
     all_servers = DB_SERVERS + APP_SERVERS + ROUTERS
     
     try:
-        redis_client.setex(f"task:{task_id}", 3600, json.dumps({
+        task_storage[task_id] = {
             "status": "running",
             "progress": 0,
             "total": len(all_servers),
             "servers_completed": [],
             "started_at": datetime.utcnow().isoformat()
-        }))
+        }
     except Exception:
         pass
     
@@ -6136,25 +5786,25 @@ def api_check_updates():
             completed.append(server["name"])
             
             try:
-                redis_client.setex(f"task:{task_id}", 3600, json.dumps({
+                task_storage[task_id] = {
                     "status": "running",
                     "progress": i + 1,
                     "total": len(all_servers),
                     "servers_completed": completed,
                     "started_at": datetime.utcnow().isoformat()
-                }))
+                }
             except Exception:
                 pass
         
         try:
-            redis_client.setex(f"task:{task_id}", 3600, json.dumps({
+            task_storage[task_id] = {
                 "status": "complete",
                 "progress": len(all_servers),
                 "total": len(all_servers),
                 "servers_completed": completed,
                 "started_at": datetime.utcnow().isoformat(),
                 "completed_at": datetime.utcnow().isoformat()
-            }))
+            }
         except Exception:
             pass
     
@@ -6174,11 +5824,11 @@ def api_task_status(task_id):
     Get status of a background task.
     """
     try:
-        task_data = redis_client.get(f"task:{task_id}")
+        task_data = task_storage.get(task_id)
         if not task_data:
             return jsonify({"success": False, "error": "Task not found"}), 404
         
-        return jsonify(json.loads(task_data))
+        return jsonify(task_data)
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -6230,14 +5880,14 @@ def api_update_all_servers():
     all_servers = DB_SERVERS + APP_SERVERS + ROUTERS
     
     try:
-        redis_client.setex(f"task:{task_id}", 7200, json.dumps({
+        task_storage[task_id] = {
             "status": "running",
             "progress": 0,
             "total": len(all_servers),
             "servers_completed": [],
             "servers_failed": [],
             "started_at": datetime.utcnow().isoformat()
-        }))
+        }
     except Exception:
         pass
     
@@ -6255,19 +5905,19 @@ def api_update_all_servers():
                 failed.append({"name": server["name"], "error": result["errors"]})
             
             try:
-                redis_client.setex(f"task:{task_id}", 7200, json.dumps({
+                task_storage[task_id] = {
                     "status": "running",
                     "progress": i + 1,
                     "total": len(all_servers),
                     "servers_completed": completed,
                     "servers_failed": failed,
                     "started_at": datetime.utcnow().isoformat()
-                }))
+                }
             except Exception:
                 pass
         
         try:
-            redis_client.setex(f"task:{task_id}", 7200, json.dumps({
+            task_storage[task_id] = {
                 "status": "complete",
                 "progress": len(all_servers),
                 "total": len(all_servers),
@@ -6275,7 +5925,7 @@ def api_update_all_servers():
                 "servers_failed": failed,
                 "started_at": datetime.utcnow().isoformat(),
                 "completed_at": datetime.utcnow().isoformat()
-            }))
+            }
         except Exception:
             pass
     

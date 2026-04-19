@@ -16,7 +16,6 @@ The monitoring stack includes:
 - **Redis Exporter**: Redis metrics
 - **HAProxy Exporter**: Load balancer metrics
 - **Nginx Exporter**: Web server metrics
-- **PHP-FPM Exporter**: PHP process manager metrics
 
 ## Access
 
@@ -110,21 +109,6 @@ scrape_configs:
       - targets: ['100.115.75.119:2379']
         labels: {node: 're-node-04'}
 
-  # Nginx Exporter (with node labels)
-  - job_name: 'nginx_exporter'
-    static_configs:
-      - targets: ['100.92.26.38:9113']
-        labels: {node: 're-db'}
-      - targets: ['100.89.130.19:9113']
-        labels: {node: 're-node-02'}
-
-  # PHP-FPM Exporter (with node labels)
-  - job_name: 'php_fpm_exporter'
-    static_configs:
-      - targets: ['100.92.26.38:9253']
-        labels: {node: 're-db'}
-      - targets: ['100.89.130.19:9253']
-        labels: {node: 're-node-02'}
 ```
 
 ## Exporter Configuration
@@ -146,42 +130,6 @@ Key metrics:
 - `node_memory_MemAvailable_bytes` - Available memory
 - `node_filesystem_avail_bytes` - Disk space
 - `node_network_receive_bytes_total` - Network traffic
-
-### Nginx Exporter
-
-Installed on app servers. Monitors nginx stub_status.
-
-```bash
-# Status
-systemctl status prometheus-nginx-exporter
-
-# Manual test
-curl http://localhost:9113/metrics
-```
-
-Key metrics:
-- `nginx_connections_active` - Active connections
-- `nginx_connections_reading` - Connections reading
-- `nginx_connections_writing` - Connections writing
-- `nginx_requests_total` - Total requests
-
-### PHP-FPM Exporter
-
-Installed on app servers. Monitors PHP-FPM pools.
-
-```bash
-# Status
-systemctl status php-fpm-exporter
-
-# Manual test
-curl http://localhost:9253/metrics
-```
-
-Key metrics:
-- `phpfpm_processes_total` - Total processes
-- `phpfpm_processes_active` - Active processes
-- `phpfpm_processes_idle` - Idle processes
-- `phpfpm_requests_total` - Total requests
 
 ### PostgreSQL Exporter
 
@@ -365,9 +313,7 @@ Dashboard JSON files are provisioned automatically from:
 ├── docker_swarm_dashboard.json
 ├── node_exporter_dashboard.json
 ├── postgres_haproxy_dashboard.json
-├── redis_dashboard.json
-├── nginx_dashboard.json
-└── phpfpm_dashboard.json
+└── redis_dashboard.json
 ```
 
 **Reload Dashboards**:
@@ -667,7 +613,7 @@ Each server has a customized Promtail config collecting relevant logs:
 | Server | Logs Collected |
 |--------|----------------|
 | router-01/02 | syslog, auth, haproxy, prometheus, alertmanager, dashboard |
-| re-db, re-node-02 | syslog, auth, nginx, php-fpm |
+| re-db, re-node-02 | syslog, auth, docker-related syslog |
 | re-node-01/03/04 | syslog, auth, postgresql, patroni, redis |
 
 ### HAProxy Log Collection
@@ -727,8 +673,8 @@ systemctl restart rsyslog
 # Logs from specific host
 {host="re-db"}
 
-# Nginx logs
-{job="nginx"}
+# Docker-related syslog lines
+{job="syslog"} |= "docker"
 
 # Search for errors
 {job="syslog"} |= "error"
@@ -753,8 +699,6 @@ Pre-configured dashboards for the infrastructure:
 | Node Exporter | node-exporter-quantyra | System metrics (CPU, Memory, Disk, Network) |
 | PostgreSQL & HAProxy | postgres-haproxy-quantyra | Database cluster status and connections |
 | Redis | redis-quantyra | Redis memory, connections, operations |
-| Nginx | nginx-quantyra | Web server connections and requests |
-| PHP-FPM | phpfpm-quantyra | PHP process pool metrics |
 | Loki Logs | loki-logs-quantyra | Centralized log viewing and analysis |
 
 ### Grafana Datasources

@@ -52,13 +52,11 @@ curl -X POST -u admin:DbAdmin2026! \
   -d '{"branch": "main", "environment": "production"}'
 ```
 
-**Via SSH:**
+**Via SSH (validation only):**
 ```bash
 ssh root@100.92.26.38
-cd /opt/apps/my-app
-git pull origin main
-php artisan optimize
-sudo systemctl restart php8.5-fpm
+docker service ls
+docker ps
 ```
 
 ### Rollback a Deployment
@@ -68,14 +66,10 @@ sudo systemctl restart php8.5-fpm
 2. Find last successful deployment
 3. Click "Rollback"
 
-**Via SSH:**
-```bash
-ssh root@100.92.26.38
-cd /var/www/myapp
-git checkout <previous-commit>
-php artisan optimize
-sudo systemctl restart php8.5-fpm
-```
+**Via Dokploy:**
+1. Open application in Dokploy
+2. Select previous successful deployment/image
+3. Trigger rollback/redeploy
 
 ### Provision a New Domain
 
@@ -269,20 +263,19 @@ curl -X POST http://100.102.220.16:9090/-/reload
 1. Check application status:
    ```bash
    ssh root@100.92.26.38
-   systemctl status php8.5-fpm
-   systemctl status nginx
+   docker service ls
+   docker ps
    ```
 
 2. Check logs:
    ```bash
-   tail -f /var/log/nginx/error.log
-   tail -f /var/log/php8.5-fpm/error.log
+   docker service logs <service_name> --tail 100
+   docker logs <container_name> --tail 100 -f
    ```
 
-3. Restart services:
+3. Restart workload:
    ```bash
-   systemctl restart php8.5-fpm
-   systemctl restart nginx
+   docker service update --force <service_name>
    ```
 
 ### Database Issues

@@ -26,6 +26,8 @@ This document tracks current tasks, priorities, and future improvements for the 
 | SOPS-Driven Deploy Env Generation | ✅ Complete | Deploy now materializes runtime `.env` from SOPS on router-01 and pushes to app servers |
 | Branch-Gated Dual-Env Deploy + Scoped Secrets | ✅ Complete | Enforced branch gating, scoped secrets, dual deploy targets, and runtime `.env` sync |
 | Package Update Dashboard | ✅ Complete | Server package updates visible with security highlighting and bulk update |
+| Host PHP-FPM Decommissioning | ✅ Complete | Removed PHP 8.5/PHP-FPM operational assumptions from scripts, monitoring, and runbooks |
+| Host Nginx Decommissioning (App Servers) | ✅ Complete | Removed host nginx assumptions for app workloads; Dokploy/Traefik is the only app routing layer |
 | PaaS Portability (Phase 0) | ✅ Complete | SQLite backend, export/import, Gist sync, setup wizard |
 | UX Foundation (Phase 1) | ✅ Complete | WebSocket, Celery, real-time progress, toast notifications |
 | Feature Parity (Phase 2) | ✅ Complete | Multi-framework, blue-green, hooks, notifications, database UX |

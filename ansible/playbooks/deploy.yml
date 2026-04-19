@@ -24,16 +24,15 @@
         mode: '0644'
 
     - name: Create environment file
-      copy:
-        content: |
-          NODE_ENV=production
-          DATABASE_URL=postgres://user:pass@100.102.220.16:5000/dbname
-          DATABASE_READ_URL=postgres://user:pass@100.102.220.16:5001/dbname
-          REDIS_URL=redis://100.126.103.51:6379
-        dest: "{{ deploy_dir }}/.env"
-        owner: deploy
-        group: deploy
-        mode: '0600'
+       copy:
+         content: |
+           NODE_ENV=production
+           DATABASE_URL=postgres://user:pass@100.102.220.16:5000/dbname
+           DATABASE_READ_URL=postgres://user:pass@100.102.220.16:5001/dbname
+         dest: "{{ deploy_dir }}/.env"
+         owner: deploy
+         group: deploy
+         mode: '0600'
 
     - name: Pull latest images
       command: docker-compose pull

@@ -16,34 +16,6 @@ from typing import Dict, List, Optional, Any
 
 
 SERVICE_TEMPLATES = {
-    'redis': {
-        'name': 'Redis',
-        'description': 'In-memory data store for caching',
-        'docker_image': 'redis:7-alpine',
-        'port': 6379,
-        'port_range': (6379, 6399),
-        'environment': {
-            'REDIS_PASSWORD': '{password}'
-        },
-        'volumes': [
-            {'container': '/data', 'host': '/var/lib/redis/{app_name}'}
-        ],
-        'health_check': {
-            'type': 'command',
-            'command': 'redis-cli -a {password} ping',
-            'expected': 'PONG'
-        },
-        'connection_template': 'redis://:{password}@{host}:{port}',
-        'backup': {
-            'command': 'redis-cli -a {password} BGSAVE',
-            'path': '/var/lib/redis/{app_name}/dump.rdb'
-        },
-        'memory_limit': '256M',
-        'cpu_limit': 0.5,
-        'icon': '📦',
-        'category': 'caching'
-    },
-    
     'meilisearch': {
         'name': 'Meilisearch',
         'description': 'Search engine for fast, relevant search',
@@ -357,9 +329,7 @@ def generate_service_config(service_type: str, app_name: str, environment: str) 
     }
     
     # Generate credentials based on service type
-    if service_type == 'redis':
-        config['credentials']['password'] = generate_password()
-    elif service_type == 'valkey':
+    if service_type == 'valkey':
         config['credentials']['password'] = generate_password()
     elif service_type == 'meilisearch':
         config['credentials']['api_key'] = generate_api_key()

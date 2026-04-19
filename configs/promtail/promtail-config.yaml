@@ -33,27 +33,6 @@ scrape_configs:
       - regex:
           expression: '^(?P<timestamp>\w+\s+\d+\s+\d+:\d+:\d+)\s+(?P<hostname>\S+)\s+(?P<program>\S+?)(?:\[(?P<pid>\d+)\])?:\s+(?P<message>.*)$'
 
-  - job_name: nginx
-    static_configs:
-      - targets:
-          - localhost
-        labels:
-          job: nginx
-          host: __HOST__
-          __path__: /var/log/nginx/*.log
-    pipeline_stages:
-      - regex:
-          expression: '^(?P<remote_addr>[\d\.]+) - (?P<remote_user>\S+) \[(?P<time_local>[^\]]+)\] "(?P<request>[^"]+)" (?P<status>\d+) (?P<body_bytes_sent>\d+) "(?P<http_referer>[^"]*)" "(?P<http_user_agent>[^"]*)"'
-
-  - job_name: php-fpm
-    static_configs:
-      - targets:
-          - localhost
-        labels:
-          job: php-fpm
-          host: __HOST__
-          __path__: /var/log/php8.5-fpm/*.log
-
   - job_name: postgresql
     static_configs:
       - targets:

@@ -25,8 +25,8 @@
 ┌───────────────────┐                       ┌───────────────────┐
 │     re-db         │                       │    re-node-02     │
 │  App Server       │                       │  App Server (ATL) │
-│  nginx + PHP-FPM  │                       │  nginx + PHP-FPM  │
-│  Node.js apps     │                       │  Node.js apps     │
+│  Dokploy + Traefik│                       │  Dokploy + Traefik│
+│  Docker workloads │                       │  Docker workloads │
 └───────────────────┘                       └───────────────────┘
         │                                             │
         └─────────────────┬───────────────────────────┘
@@ -55,8 +55,8 @@ All servers connected via Tailscale (100.64.0.0/10)
 |--------|--------------|-----------|----------|
 | router-01 | 100.102.220.16 | 172.93.54.112 | HAProxy, Dashboard, Prometheus, Grafana |
 | router-02 | 100.116.175.9 | 23.29.118.6 | HAProxy |
-| re-db | 100.92.26.38 | 208.87.128.115 | nginx, PHP-FPM, Node.js |
-| re-node-02 | 100.89.130.19 | 23.227.173.245 | nginx, PHP-FPM, Node.js |
+| re-db | 100.92.26.38 | 208.87.128.115 | Dokploy manager, Traefik, Docker |
+| re-node-02 | 100.89.130.19 | 23.227.173.245 | Dokploy worker, Traefik, Docker |
 | re-node-01 | 100.126.103.51 | 104.225.216.26 | PostgreSQL, Redis |
 | re-node-03 | 100.114.117.46 | 172.93.54.145 | PostgreSQL, Redis |
 | re-node-04 | 100.115.75.119 | 172.93.54.122 | PostgreSQL, etcd |
@@ -75,8 +75,8 @@ All servers connected via Tailscale (100.64.0.0/10)
 | Grafana | 3000 | Dashboards |
 | Alertmanager | 9093 | Alerts |
 | Dashboard | 8080 | PaaS UI |
-| App Production | 8100-8199 | Laravel apps |
-| App Staging | 9200-9299 | Staging apps |
+| App Production | 8100-8199 | Containerized app workloads |
+| App Staging | 9200-9299 | Containerized staging workloads |
 
 ## Traffic Flow
 
@@ -93,20 +93,14 @@ User Request
      │
      ▼ (Round-Robin DNS)
 ┌─────────────┐
-│   HAProxy   │ ← Load Balancing
-│  (router)   │ ← SSL Termination (internal)
-└─────────────┘
-     │
-     ▼ (Host Header Routing)
-┌─────────────┐
-│   nginx     │ ← Static Files
-│  (app)      │ ← PHP-FPM Proxy
+│  Traefik    │ ← Host header routing + TLS
+│ (app nodes) │ ← Dokploy managed
 └─────────────┘
      │
      ▼
 ┌─────────────┐
-│  PHP-FPM    │ ← Laravel Application
-│  Node.js    │ ← Next.js/Svelte App
+│  Docker     │ ← Laravel/Node/Python/Go runtimes
+│ Containers  │ ← PHP bundled in app images
 └─────────────┘
      │
      ▼
@@ -237,44 +231,33 @@ Application
                          │ HTTPS
                          ▼
 ┌─────────────────────────────────────────────────────────┐
-│                     HAProxy                              │
-│    Let's Encrypt Certificates (DNS-01 Challenge)         │
-│          Stored in /etc/haproxy/ssl/                     │
-│          Auto-renewal via certbot                        │
-└─────────────────────────────────────────────────────────┘
-                         │
-                         │ HTTP (internal)
-                         ▼
-┌─────────────────────────────────────────────────────────┐
-│                    nginx                                 │
-│                 (No SSL - internal)                      │
+│                 Dokploy Traefik (Swarm)                 │
+│      Let's Encrypt Certificates (DNS-01 Challenge)      │
+│       Auto-managed by Dokploy across app servers        │
 └─────────────────────────────────────────────────────────┘
 ```
 
 ## Application Deployment Architecture
 
-### Laravel Application
+### Laravel Application (Current)
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                      nginx                               │
-│                  /etc/nginx/sites-available/             │
-│                         :8100                            │
+│                    Dokploy/Traefik                       │
+│             Host-based routing + TLS handling            │
 └─────────────────────────────────────────────────────────┘
                          │
-                         │ FastCGI
+                         │ HTTP
                          ▼
 ┌─────────────────────────────────────────────────────────┐
-│                     PHP-FPM                              │
-│              /etc/php/8.5/fpm/pool.d/                    │
-│                (per-application pool)                    │
+│                 Docker Application Container             │
+│                  PHP runtime bundled in image            │
 └─────────────────────────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────┐
-│                    Laravel                               │
-│              /var/www/app-name/                          │
-│                 (git checkout)                           │
+│                    Laravel Runtime                       │
+│             Managed by Dokploy deployment pipeline       │
 └─────────────────────────────────────────────────────────┘
 ```
 

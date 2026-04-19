@@ -8,7 +8,6 @@ Infrastructure-as-code repository for managing Quantyra VPS infrastructure with:
 - **Dokploy deployment platform** with Docker Swarm (2 nodes)
 - **Traefik load balancer** with automatic SSL via Let's Encrypt
 - PostgreSQL/Patroni cluster (3 nodes)
-- Redis cluster with Sentinel (2 nodes)
 - HAProxy routers for database traffic (2 nodes)
 - Monitoring stack (Prometheus, Grafana, Alertmanager)
 
@@ -21,7 +20,6 @@ Infrastructure-as-code repository for managing Quantyra VPS infrastructure with:
 | Dashboard | Flask | 3.x | Infrastructure management web UI |
 | Database | PostgreSQL | 18.x | Primary data store via Patroni cluster |
 | HA Layer | Patroni | 3.x | PostgreSQL high availability with etcd DCS |
-| Caching | Redis | 7.x | Session/cache with Sentinel failover |
 | Load Balancing | HAProxy | 2.8 | SSL termination, traffic routing |
 | DNS/CDN | Cloudflare | - | DNS management, WAF, DDoS protection |
 | Monitoring | Prometheus | 2.48.x | Metrics collection and alerting |
@@ -79,9 +77,7 @@ infrastructure/
 
 ### Critical Credentials
 - **PostgreSQL Leader**: re-node-03 (100.114.117.46)
-- **Redis Master**: re-node-01 (100.126.103.51:6379)
 - **HAProxy Stats**: Port 8404, auth: admin:jFNeZ2bhfrTjTK7aKApD
-- **Redis Password**: CcPUa3nvcxHtyNYjztbDyfCCuhgix78novmBDNGk
 - **Patroni Superuser**: patroni_superuser / 2e7vBpaaVK4vTJzrKebC
 - **Cloudflare API Token**: zf5ncwuOaaXz2IJ1BVBu8myf0HQt5IxkPje_Rm1V
 - **Cloudflare Zone ID** (xotec.io): 26470f68ef4dbbf7bf5a770630aa2a97
@@ -112,8 +108,8 @@ infrastructure/
 
 | Server | Tailscale IP | Public IP | Role | Specs |
 |--------|--------------|-----------|------|-------|
-| re-node-01 | 100.126.103.51 | 104.225.216.26 | PostgreSQL, Redis Master | 8 vCPU, 32GB RAM |
-| re-node-03 | 100.114.117.46 | 172.93.54.145 | PostgreSQL Leader, Redis Replica | 8 vCPU, 32GB RAM |
+| re-node-01 | 100.126.103.51 | 104.225.216.26 | PostgreSQL | 8 vCPU, 32GB RAM |
+| re-node-03 | 100.114.117.46 | 172.93.54.145 | PostgreSQL Leader | 8 vCPU, 32GB RAM |
 | re-node-04 | 100.115.75.119 | 172.93.54.122 | PostgreSQL Replica, etcd | 8 vCPU, 32GB RAM |
 | router-01 | 100.102.220.16 | 172.93.54.112 | HAProxy, Monitoring | 2 vCPU, 8GB RAM |
 | router-02 | 100.116.175.9 | 23.29.118.6 | HAProxy (Secondary) | 2 vCPU, 8GB RAM |
@@ -128,10 +124,10 @@ infrastructure/
 
 **Traffic Flow**:
 - **App Traffic**: Cloudflare → Traefik (on app servers) → Docker containers
-- **Database Traffic**: Applications → HAProxy (routers) → Patroni/Redis
+- **Database Traffic**: Applications → HAProxy (routers) → Patroni
 
 **Key Changes**:
-- HAProxy handles ONLY database traffic (PostgreSQL, Redis)
+- HAProxy handles ONLY database traffic (PostgreSQL)
 - Application traffic bypasses HAProxy entirely
 - Traefik handles all app routing and SSL termination
 - Dokploy manages deployments via Docker Swarm
@@ -152,7 +148,7 @@ Services:
 - dokploy: 1/1 replicas (manager only)
 - dokploy-traefik: 2/2 replicas (HA on both nodes)
 - dokploy-postgres: 1/1 replicas (Dokploy internal DB)
-- dokploy-redis: 1/1 replicas (Dokploy internal cache)
+- dokploy-redis: 1/1 replicas (Dokploy internal cache - separate from infrastructure Redis)
 ```
 
 **Deployment Workflow**:
@@ -170,7 +166,6 @@ Services:
 
 **Scope**:
 - PostgreSQL: Port 5000 (write), Port 5001 (read)
-- Redis: Port 6379
 - Stats: Port 8404
 
 **Application traffic NO LONGER routes through HAProxy**. Apps route directly via Cloudflare → Traefik.
@@ -188,18 +183,13 @@ Services:
 | Port Range | Purpose | Notes |
 |------------|---------|-------|
 | 5000-5001 | PostgreSQL (HAProxy) | 5000=RW, 5001=RO |
-| 6379 | Redis | Master/replica |
 | 8080 | Dashboard | Infrastructure management UI |
-| 8100-8199 | Production Apps | Laravel/nginx backends |
+| 8100-8199 | Production Apps | Dockerized app containers via Traefik |
 | 8404 | HAProxy Stats | Admin interface |
 | 9090 | Prometheus | Metrics collection |
 | 9093 | Alertmanager | Alert routing |
-| 9113 | Prometheus Exporters | nginx exporter listen port (Tailscale IP) |
-| 9114 | nginx stub_status | Scraped by prometheus exporter (localhost) |
-| 9200-9299 | Staging Apps | Laravel/nginx backends |
+| 9200-9299 | Staging Apps | Dockerized app containers via Traefik |
 | 3000 | Grafana | Dashboards |
-
-**Important:** The nginx stub_status must listen on port **9114** (not 9113) to avoid conflict with the prometheus-nginx-exporter which listens on port 9113 (Tailscale IP).
 
 ### Traffic Flow
 1. **Cloudflare** terminates SSL at edge, routes to APP SERVERS via DNS round-robin
@@ -215,16 +205,16 @@ Services:
 
 ### Client IP Forwarding
 ```
-Cloudflare → HAProxy → Nginx → App
-     ↓           ↓         ↓
-CF-Connecting-IP → X-Forwarded-For → X-Real-IP
+Cloudflare → Traefik → App Container
+     ↓           ↓
+CF-Connecting-IP → X-Forwarded-For
 ```
 
 ### Application Deployment
-- Laravel apps: nginx + PHP-FPM (NOT systemd service)
-- Each app gets unique port (8100+)
-- PHP-FPM pool per application
-- Deploy to BOTH app servers for redundancy
+- Applications run as Docker containers managed by Dokploy
+- Traefik handles app routing and TLS automation
+- Host-level PHP-FPM is not required for app workloads
+- Deploy to BOTH app servers for redundancy (2+ replicas)
 
 ### Security Rules
 - Rules 2, 3, 4 use "managed_challenge" (shows CAPTCHA)
@@ -258,8 +248,6 @@ export PG_HOST=100.102.220.16
 export PG_PORT=5000
 export PG_USER=patroni_superuser
 export PG_PASSWORD=2e7vBpaaVK4vTJzrKebC
-export REDIS_HOST=100.126.103.51
-export REDIS_PASSWORD=CcPUa3nvcxHtyNYjztbDyfCCuhgix78novmBDNGk
 export PROMETHEUS_URL=http://100.102.220.16:9090
 python3 app.py
 ```
@@ -282,8 +270,6 @@ python3 app.py
 | `PG_PORT` | Yes | PostgreSQL port | `5000` (RW) / `5001` (RO) |
 | `PG_USER` | Yes | PostgreSQL username | `patroni_superuser` |
 | `PG_PASSWORD` | Yes | PostgreSQL password | (from secrets) |
-| `REDIS_HOST` | Yes | Redis host IP | `100.126.103.51` |
-| `REDIS_PASSWORD` | Yes | Redis password | (from secrets) |
 | `PROMETHEUS_URL` | No | Prometheus endpoint | `http://100.102.220.16:9090` |
 | `DASHBOARD_USER` | No | Dashboard login | `admin` |
 | `DASHBOARD_PASS` | No | Dashboard password | `DbAdmin2026!` |
@@ -306,16 +292,6 @@ ssh root@100.102.220.16 'patronictl list'
 **Manual failover:**
 ```bash
 ssh root@100.102.220.16 'patronictl switchover'
-```
-
-### Redis Cluster
-
-**Master:** re-node-01 (100.126.103.51:6379)
-**Replica:** re-node-03 (100.114.117.46:6379)
-
-**Check status:**
-```bash
-redis-cli -h 100.126.103.51 -p 6379 -a CcPUa3nvcxHtyNYjztbDyfCCuhgix78novmBDNGk INFO replication
 ```
 
 ## Monitoring & Alerts
@@ -414,8 +390,8 @@ journalctl -u haproxy -f
 # Patroni/PostgreSQL
 journalctl -u patroni -f
 
-# PHP-FPM
-journalctl -u php8.5-fpm -f
+# App containers (Docker/Dokploy)
+docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
 ```
 
 ## Code Style
@@ -486,9 +462,9 @@ Follow Conventional Commits:
 # Dashboard
 ssh root@100.102.220.16 "systemctl status dashboard"
 
-# App servers
-ssh root@100.92.26.38 "systemctl status nginx php8.5-fpm"
-ssh root@100.89.130.19 "systemctl status nginx php8.5-fpm"
+# App servers (Dokploy + Docker)
+ssh root@100.92.26.38 "docker service ls && docker ps"
+ssh root@100.89.130.19 "docker ps"
 ```
 
 ## Important Notes
@@ -502,7 +478,7 @@ ssh root@100.89.130.19 "systemctl status nginx php8.5-fpm"
 7. **Tailscale for SSH** - All SSH access via Tailscale network (100.64.0.0/10)
 8. **Sync configs after changes** - Run `scripts/sync-configs.sh` after any server changes
 9. **HAProxy is database-only** - Application traffic bypasses HAProxy entirely
-10. **Monitoring is comprehensive** - Traefik, Docker, PostgreSQL, Redis, and more all monitored
+10. **Monitoring is comprehensive** - Traefik, Docker, PostgreSQL, and more all monitored
 
 ## Config Sync Workflow
 
@@ -512,10 +488,8 @@ ssh root@100.89.130.19 "systemctl status nginx php8.5-fpm"
 
 Sync configs to local repo after:
 - Any HAProxy configuration changes
-- Any nginx configuration changes
-- Any PHP-FPM pool changes
+- Any Dokploy/Traefik app routing changes
 - Any PostgreSQL/Patroni configuration changes
-- Any Redis configuration changes
 - Any Prometheus/Grafana/Alertmanager changes
 - Any systemd service changes
 - Any changes to `/etc/` on any server
@@ -579,7 +553,7 @@ This script pulls all configuration files from all servers into the `configs/` d
 
 | Framework | Runtime | Environment Variable |
 |-----------|---------|---------------------|
-| Laravel | nginx + PHP-FPM | `APP_ENV` (production/staging) |
+| Laravel | Docker image via Dokploy | `APP_ENV` (production/staging) |
 | Next.js | systemd + npm | `NODE_ENV` (production/development) |
 | Svelte | systemd + npm | `NODE_ENV` (production/development) |
 | Python | systemd + gunicorn | `APP_ENV` (production/staging) |
@@ -639,7 +613,7 @@ If SSH connectivity issues arise after disabling Tailscale SSH:
 
 ### fail2ban
 - SSH protection enabled on all servers
-- HAProxy, PostgreSQL, Redis protection enabled
+- HAProxy, PostgreSQL protection enabled
 
 ### Cloudflare WAF
 5 security rules applied:
@@ -670,7 +644,6 @@ When working on tasks involving these technologies, invoke the corresponding ski
 | docker | Managing Docker Compose configurations and container deployments |
 | postgresql | Handling PostgreSQL database operations and Patroni cluster management |
 | python | Managing Python code patterns, dependencies, and Flask application development |
-| redis | Managing Redis caching, replication, and Sentinel failover |
 | haproxy | Configuring HAProxy load balancing, SSL termination, and traffic routing |
 | prometheus | Managing Prometheus metrics collection, alerting rules, and monitoring |
 | grafana | Handling Grafana dashboard visualization and alert management |
@@ -678,7 +651,7 @@ When working on tasks involving these technologies, invoke the corresponding ski
 | flask | Handling Flask web application routes, templates, and API endpoints |
 | tailscale | Handling Tailscale VPN networking and secure server communication |
 | cloudflare | Configuring Cloudflare DNS, WAF rules, and DDoS protection |
-| nginx | Configuring nginx web server and PHP-FPM for application backends |
+| nginx | Configuring nginx for host-level workloads and exporter endpoints |
 
 ## Agent Usage Guide
 

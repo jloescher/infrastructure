@@ -1,70 +1,6 @@
 ---
 # Stage 2: Install missing exporters for monitoring
 
-- name: Install Redis exporter
-  hosts: redis_cluster
-  become: yes
-  vars:
-    redis_exporter_version: "1.55.0"
-  tasks:
-    - name: Check if redis_exporter exists
-      stat:
-        path: /usr/local/bin/redis_exporter
-      register: redis_exporter_binary
-
-    - name: Download Redis exporter
-      get_url:
-        url: "https://github.com/oliver006/redis_exporter/releases/download/v{{ redis_exporter_version }}/redis_exporter-v{{ redis_exporter_version }}.linux-amd64.tar.gz"
-        dest: /tmp/redis_exporter.tar.gz
-        mode: '0644'
-      when: not redis_exporter_binary.stat.exists
-
-    - name: Extract Redis exporter
-      unarchive:
-        src: /tmp/redis_exporter.tar.gz
-        dest: /tmp
-        remote_src: yes
-      when: not redis_exporter_binary.stat.exists
-
-    - name: Install Redis exporter binary
-      copy:
-        src: "/tmp/redis_exporter-v{{ redis_exporter_version }}.linux-amd64/redis_exporter"
-        dest: /usr/local/bin/redis_exporter
-        owner: root
-        group: root
-        mode: '0755'
-        remote_src: yes
-      when: not redis_exporter_binary.stat.exists
-
-    - name: Create redis-exporter systemd service
-      copy:
-        content: |
-          [Unit]
-          Description=Redis Exporter
-          After=network.target
-          Wants=network-online.target
-
-          [Service]
-          Type=simple
-          User=root
-          ExecStart=/usr/local/bin/redis_exporter -redis.addr redis://{{ tailscale_ip }}:6379
-          Restart=on-failure
-          RestartSec=5s
-
-          [Install]
-          WantedBy=multi-user.target
-        dest: /etc/systemd/system/redis_exporter.service
-        owner: root
-        group: root
-        mode: '0644'
-
-    - name: Enable and start redis-exporter
-      systemd:
-        name: redis_exporter
-        enabled: yes
-        state: started
-        daemon_reload: yes
-
 - name: Install HAProxy exporter
   hosts: haproxy
   become: yes
@@ -130,35 +66,6 @@
         daemon_reload: yes
 
 - name: Verify exporters
-  hosts: redis_cluster:haproxy
-  become: yes
-  tasks:
-    - name: Check redis_exporter
-      uri:
-        url: "http://localhost:9121/metrics"
-        method: GET
-        status_code: 200
-      register: redis_check
-      when: inventory_hostname in groups['redis_cluster']
-      retries: 3
-      delay: 5
-
-    - name: Check haproxy_exporter
-      uri:
-        url: "http://localhost:9101/metrics"
-        method: GET
-        status_code: 200
-      register: haproxy_check
-      when: inventory_hostname in groups['haproxy']
-      retries: 3
-      delay: 5
-
-    - name: Report status
-      debug:
-        msg: "{{ inventory_hostname }}: Redis exporter OK"
-      when: inventory_hostname in groups['redis_cluster'] and redis_check.status == 200
-
-    - name: Report status
-      debug:
-        msg: "{{ inventory_hostname }}: HAProxy exporter OK"
-      when: inventory_hostname in groups['haproxy'] and haproxy_check.status == 200
+   hosts: haproxy
+   become: yes
+   tasks:

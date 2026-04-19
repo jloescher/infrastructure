@@ -239,12 +239,7 @@ class BlueGreenDeploy:
                 }
                 results['success'] = False
         
-        # Update HAProxy backend on routers if needed
-        # (In this architecture, HAProxy routes by Host header, so no backend change needed)
-        # Just reload nginx on app servers
-        for server in app_servers:
-            server_ip = server['ip']
-            cls._run_ssh(server_ip, 'sudo systemctl reload nginx')
+        # App traffic is Dokploy/Traefik-managed; no host nginx reload step is required.
         
         # Update database state
         if results['success']:

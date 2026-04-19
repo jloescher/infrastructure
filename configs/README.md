@@ -17,13 +17,7 @@ configs/
 │
 ├── app-servers/
 │   ├── re-db/              # App server 1 (100.92.26.38)
-│   │   ├── nginx.conf
-│   │   ├── sites-enabled.conf
-│   │   └── php-fpm/        # PHP-FPM pool configs
 │   └── re-node-02/         # App server 2 (100.89.130.19)
-│       ├── nginx.conf
-│       ├── sites-enabled.conf
-│       └── php-fpm/
 │
 ├── postgres/
 │   ├── patroni-*.yml       # Patroni configs per node
@@ -65,7 +59,7 @@ To sync configs from servers to this directory:
 1. **Never commit actual secrets** - All .env files should be sanitized
 2. **Registry is source of truth** - Domain registry controls HAProxy routing
 3. **Both routers should match** - Domain configs should be identical
-4. **App servers should match** - Nginx/PHP-FPM configs should be identical
+4. **App servers should match** - Dokploy/Traefik and Docker-related configs should be consistent
 
 ## Server IPs
 

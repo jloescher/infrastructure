@@ -26,21 +26,3 @@ scrape_configs:
           job: auth
           host: re-db
           __path__: /var/log/auth.log
-
-  - job_name: nginx
-    static_configs:
-      - targets:
-          - localhost
-        labels:
-          job: nginx
-          host: re-db
-          __path__: /var/log/nginx/*.log
-
-  - job_name: php-fpm
-    static_configs:
-      - targets:
-          - localhost
-        labels:
-          job: php-fpm
-          host: re-db
-          __path__: /var/log/php8.5-fpm/*.log

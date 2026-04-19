@@ -48,7 +48,7 @@ class FrameworkConfig:
     env_prefix: str = ""
     env_template: Dict[str, str] = field(default_factory=dict)
     requires_database: bool = True
-    supports_redis: bool = True
+    supports_redis: bool = False
     default_branch: str = "main"
     package_manager: str = "auto"
 
@@ -56,7 +56,7 @@ class FrameworkConfig:
 FRAMEWORK_CONFIGS: Dict[str, Dict[str, Any]] = {
     "laravel": {
         "display_name": "Laravel",
-        "runtime": "nginx+php-fpm",
+        "runtime": "dokploy+docker",
         "detect_files": ["composer.json", "artisan"],
         "detect_packages": ["laravel/framework"],
         "install_cmd": "composer install --no-interaction --optimize-autoloader --no-dev",
@@ -79,7 +79,6 @@ FRAMEWORK_CONFIGS: Dict[str, Dict[str, Any]] = {
             "DB_PASSWORD": "{db_password}",
         },
         "requires_database": True,
-        "supports_redis": True,
         "default_branch": "main",
         "package_manager": "composer",
     },
@@ -99,10 +98,8 @@ FRAMEWORK_CONFIGS: Dict[str, Dict[str, Any]] = {
             "NODE_ENV": "{environment}",
             "NEXT_PUBLIC_URL": "{app_url}",
             "DATABASE_URL": "{database_url}",
-            "REDIS_URL": "{redis_url}",
         },
         "requires_database": False,
-        "supports_redis": True,
         "default_branch": "main",
         "package_manager": "npm",
     },
@@ -122,10 +119,8 @@ FRAMEWORK_CONFIGS: Dict[str, Dict[str, Any]] = {
             "NODE_ENV": "{environment}",
             "PUBLIC_URL": "{app_url}",
             "DATABASE_URL": "{database_url}",
-            "REDIS_URL": "{redis_url}",
         },
         "requires_database": False,
-        "supports_redis": True,
         "default_branch": "main",
         "package_manager": "npm",
     },
@@ -146,10 +141,8 @@ FRAMEWORK_CONFIGS: Dict[str, Dict[str, Any]] = {
             "FLASK_ENV": "{flask_env}",
             "DJANGO_SETTINGS_MODULE": "{django_settings}",
             "DATABASE_URL": "{database_url}",
-            "REDIS_URL": "{redis_url}",
         },
         "requires_database": True,
-        "supports_redis": True,
         "default_branch": "main",
         "package_manager": "pip",
     },
@@ -168,10 +161,8 @@ FRAMEWORK_CONFIGS: Dict[str, Dict[str, Any]] = {
         "env_template": {
             "APP_ENV": "{environment}",
             "DATABASE_URL": "{database_url}",
-            "REDIS_URL": "{redis_url}",
         },
         "requires_database": True,
-        "supports_redis": True,
         "default_branch": "main",
         "package_manager": "go",
     },
@@ -448,7 +439,7 @@ def get_runtime_type(framework: str) -> str:
         framework: Framework name
         
     Returns:
-        Runtime type string (e.g., "nginx+php-fpm", "systemd+node")
+        Runtime type string (e.g., "dokploy+docker", "systemd+node")
     """
     config = get_framework_config(framework)
     return config.get("runtime", "systemd+node")
@@ -606,7 +597,7 @@ def get_service_template_name(framework: str) -> str:
     config = get_framework_config(framework)
     runtime = config.get("runtime", "systemd+node")
     
-    if "php-fpm" in runtime:
+    if "docker" in runtime:
         return "laravel.service.j2"
     elif "node" in runtime:
         return "node.service.j2"
@@ -623,7 +614,6 @@ def build_env_vars_for_framework(
     environment: str = "production",
     app_url: str = "",
     db_config: Dict[str, str] = None,
-    redis_config: Dict[str, str] = None,
     additional_vars: Dict[str, str] = None,
 ) -> Dict[str, str]:
     """
@@ -634,7 +624,6 @@ def build_env_vars_for_framework(
         environment: Environment name
         app_url: Application URL
         db_config: Database configuration dict
-        redis_config: Redis configuration dict
         additional_vars: Additional environment variables
         
     Returns:
@@ -654,12 +643,6 @@ def build_env_vars_for_framework(
     if db_config:
         database_url = f"postgresql://{db_config.get('username', '')}:{db_config.get('password', '')}@{db_config.get('host', '')}:{db_config.get('port', '5432')}/{db_config.get('database', '')}"
     
-    # Build Redis URL if config provided
-    redis_url = ""
-    if redis_config:
-        redis_db = redis_config.get('db', 0)
-        redis_url = f"redis://:{redis_config.get('password', '')}@{redis_config.get('host', '')}:{redis_config.get('port', '6379')}/{redis_db}"
-    
     # Process template
     for key, value_template in env_template.items():
         value = value_template
@@ -669,7 +652,6 @@ def build_env_vars_for_framework(
         value = value.replace("{django_settings}", django_settings)
         value = value.replace("{app_url}", app_url)
         value = value.replace("{database_url}", database_url)
-        value = value.replace("{redis_url}", redis_url)
         
         if db_config:
             value = value.replace("{db_host}", db_config.get('host', ''))
@@ -677,11 +659,6 @@ def build_env_vars_for_framework(
             value = value.replace("{db_name}", db_config.get('database', ''))
             value = value.replace("{db_user}", db_config.get('username', ''))
             value = value.replace("{db_password}", db_config.get('password', ''))
-        
-        if redis_config:
-            value = value.replace("{redis_host}", redis_config.get('host', ''))
-            value = value.replace("{redis_port}", str(redis_config.get('port', 6379)))
-            value = value.replace("{redis_password}", redis_config.get('password', ''))
         
         # Only include non-empty values
         if value and not value.startswith("{") and not value.endswith("}"):

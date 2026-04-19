@@ -5,7 +5,7 @@ This module implements the core deployment logic as Celery tasks
 that emit progress updates via WebSocket for real-time UI feedback.
 
 Supported Frameworks:
-- Laravel (PHP with nginx + PHP-FPM)
+- Laravel (PHP in Dokploy-managed Docker containers)
 - Next.js (Node.js with systemd)
 - SvelteKit (Node.js with systemd)
 - Python (Flask/Django with Gunicorn)
@@ -317,8 +317,8 @@ def get_step_command(step: str, app_path: str, framework: str, branch: str,
             runtime = config.get('runtime', '')
             service_name = app_name or app_path.split('/')[-1]
             
-            if 'php-fpm' in runtime:
-                return f'sudo systemctl reload php8.5-fpm && sudo systemctl reload nginx'
+            if 'docker' in runtime:
+                return None
             elif 'systemd' in runtime:
                 return f'sudo systemctl restart {service_name}'
             return None
@@ -350,7 +350,7 @@ def get_step_command(step: str, app_path: str, framework: str, branch: str,
             'laravel': f'{cd_cmd} && php artisan cache:clear && php artisan config:clear && php artisan view:clear',
         }.get(framework),
         'restart_services': {
-            'laravel': f'sudo systemctl reload php8.5-fpm && sudo systemctl reload nginx',
+            'laravel': None,
             'nextjs': f'sudo systemctl restart {app_path.split("/")[-1]}',
             'svelte': f'sudo systemctl restart {app_path.split("/")[-1]}',
             'python': f'sudo systemctl restart {app_path.split("/")[-1]}',

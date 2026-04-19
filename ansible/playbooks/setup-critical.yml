@@ -51,24 +51,16 @@
         - /backup/configs
 
 - name: Deploy backup scripts
-  hosts: db_servers
-  become: yes
-  tasks:
-    - name: Copy PostgreSQL backup script
-      copy:
-        src: "{{ playbook_dir }}/../../backups/scripts/postgres_backup.sh"
-        dest: /usr/local/bin/postgres_backup.sh
-        owner: root
-        group: root
-        mode: '0755'
-
-    - name: Copy Redis backup script
-      copy:
-        src: "{{ playbook_dir }}/../../backups/scripts/redis_backup.sh"
-        dest: /usr/local/bin/redis_backup.sh
-        owner: root
-        group: root
-        mode: '0755'
+   hosts: db_servers
+   become: yes
+   tasks:
+     - name: Copy PostgreSQL backup script
+       copy:
+         src: "{{ playbook_dir }}/../../backups/scripts/postgres_backup.sh"
+         dest: /usr/local/bin/postgres_backup.sh
+         owner: root
+         group: root
+         mode: '0755'
 
     - name: Copy S3 sync script
       copy:
@@ -86,64 +78,10 @@
         group: postgres
         mode: '0640'
 
-- name: Install Redis exporters
-  hosts: redis_cluster
-  become: yes
-  tasks:
-    - name: Download Redis exporter
-      get_url:
-        url: "https://github.com/oliver006/redis_exporter/releases/download/v1.55.0/redis_exporter-v1.55.0.linux-amd64.tar.gz"
-        dest: /tmp/redis_exporter.tar.gz
-      register: download
-
-    - name: Extract Redis exporter
-      unarchive:
-        src: /tmp/redis_exporter.tar.gz
-        dest: /tmp
-        remote_src: yes
-      when: download.changed
-
-    - name: Install Redis exporter binary
-      copy:
-        src: /tmp/redis_exporter-v1.55.0.linux-amd64/redis_exporter
-        dest: /usr/local/bin/redis_exporter
-        owner: root
-        group: root
-        mode: '0755'
-        remote_src: yes
-      when: download.changed
-
-    - name: Create redis-exporter systemd service
-      copy:
-        content: |
-          [Unit]
-          Description=Redis Exporter
-          After=network.target
-
-          [Service]
-          Type=simple
-          User=root
-          ExecStart=/usr/local/bin/redis_exporter -redis.addr redis://{{ tailscale_ip }}:6379
-          Restart=on-failure
-
-          [Install]
-          WantedBy=multi-user.target
-        dest: /etc/systemd/system/redis_exporter.service
-        owner: root
-        group: root
-        mode: '0644'
-
-    - name: Enable and start redis-exporter
-      systemd:
-        name: redis_exporter
-        enabled: yes
-        state: started
-        daemon_reload: yes
-
 - name: Install HAProxy exporter on routers
-  hosts: haproxy
-  become: yes
-  tasks:
+   hosts: haproxy
+   become: yes
+   tasks:
     - name: Check if HAProxy exporter is installed
       stat:
         path: /usr/local/bin/haproxy_exporter
@@ -201,37 +139,25 @@
         daemon_reload: yes
 
 - name: Configure backup cron jobs
-  hosts: db_servers
-  become: yes
-  tasks:
-    - name: Add PostgreSQL backup cron (daily diff)
-      cron:
-        name: "PostgreSQL backup (daily diff)"
-        minute: "0"
-        hour: "2"
-        job: "/usr/local/bin/postgres_backup.sh diff >> /var/log/backup.log 2>&1"
-        user: root
+   hosts: db_servers
+   become: yes
+   tasks:
+     - name: Add PostgreSQL backup cron (daily diff)
+       cron:
+         name: "PostgreSQL backup (daily diff)"
+         minute: "0"
+         hour: "2"
+         job: "/usr/local/bin/postgres_backup.sh diff >> /var/log/backup.log 2>&1"
+         user: root
 
-    - name: Add PostgreSQL backup cron (weekly full)
-      cron:
-        name: "PostgreSQL backup (weekly full)"
-        minute: "0"
-        hour: "2"
-        weekday: "0"
-        job: "/usr/local/bin/postgres_backup.sh full >> /var/log/backup.log 2>&1"
-        user: root
-
-- name: Configure Redis backup cron jobs
-  hosts: redis_cluster
-  become: yes
-  tasks:
-    - name: Add Redis backup cron
-      cron:
-        name: "Redis backup (daily)"
-        minute: "0"
-        hour: "3"
-        job: "/usr/local/bin/redis_backup.sh >> /var/log/backup.log 2>&1"
-        user: root
+     - name: Add PostgreSQL backup cron (weekly full)
+       cron:
+         name: "PostgreSQL backup (weekly full)"
+         minute: "0"
+         hour: "2"
+         weekday: "0"
+         job: "/usr/local/bin/postgres_backup.sh full >> /var/log/backup.log 2>&1"
+         user: root
 
 - name: Verify all services
   hosts: all

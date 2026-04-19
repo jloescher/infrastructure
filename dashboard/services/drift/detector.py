@@ -47,7 +47,7 @@ class DriftDetector:
     Detect configuration drift on servers.
     
     Compares actual server configurations against expected baselines.
-    Supports: nginx, PHP-FPM, PostgreSQL, Redis, HAProxy, and system settings.
+    Supports: PostgreSQL, HAProxy, and system settings.
     """
     
     # SSH connection timeout in seconds
@@ -215,10 +215,7 @@ class DriftDetector:
             Dictionary of configuration values
         """
         config_getters = {
-            'nginx': self._get_nginx_config,
-            'php-fpm': self._get_phpfpm_config,
             'postgresql': self._get_postgresql_config,
-            'redis': self._get_redis_config,
             'haproxy': self._get_haproxy_config,
             'system': self._get_system_config,
         }
@@ -228,100 +225,6 @@ class DriftDetector:
             return {}
         
         return getter(server_ip)
-    
-    def _get_nginx_config(self, server_ip: str) -> Dict[str, Any]:
-        """Get nginx configuration from server."""
-        config = {}
-        
-        try:
-            # Get main config values
-            output = self._ssh_command(
-                server_ip,
-                'nginx -T 2>/dev/null | grep -E "^\\s*(worker_processes|worker_connections|multi_accept|keepalive_timeout|gzip|client_max_body_size)" | head -20'
-            )
-            
-            # Parse worker_processes
-            match = re.search(r'worker_processes\s+(\w+);', output)
-            if match:
-                config['worker_processes'] = match.group(1)
-            
-            # Parse worker_connections
-            match = re.search(r'worker_connections\s+(\d+);', output)
-            if match:
-                config['worker_connections'] = int(match.group(1))
-            
-            # Parse multi_accept
-            match = re.search(r'multi_accept\s+(\w+);', output)
-            if match:
-                config['multi_accept'] = match.group(1)
-            
-            # Parse keepalive_timeout
-            match = re.search(r'keepalive_timeout\s+(\d+)', output)
-            if match:
-                config['keepalive_timeout'] = int(match.group(1))
-            
-            # Parse gzip
-            match = re.search(r'gzip\s+(\w+);', output)
-            if match:
-                config['gzip'] = match.group(1)
-            
-            # Parse gzip_comp_level
-            match = re.search(r'gzip_comp_level\s+(\d+);', output)
-            if match:
-                config['gzip_comp_level'] = int(match.group(1))
-            
-            # Parse client_max_body_size
-            match = re.search(r'client_max_body_size\s+(\S+);', output)
-            if match:
-                config['client_max_body_size'] = match.group(1)
-                
-        except Exception as e:
-            raise Exception(f"Failed to get nginx config: {str(e)}")
-        
-        return config
-    
-    def _get_phpfpm_config(self, server_ip: str) -> Dict[str, Any]:
-        """Get PHP-FPM pool configuration from server."""
-        config = {}
-        
-        try:
-            # Get pool config
-            output = self._ssh_command(
-                server_ip,
-                'grep -hE "^pm\\." /etc/php/*/fpm/pool.d/*.conf 2>/dev/null | grep -v "^;"'
-            )
-            
-            for line in output.split('\n'):
-                # Parse pm.* settings
-                match = re.match(r'pm\.(max_children|start_servers|min_spare_servers|max_spare_servers|max_requests)\s*=\s*(\S+)', line)
-                if match:
-                    key = f'pm.{match.group(1)}'
-                    value = match.group(2)
-                    try:
-                        config[key] = int(value)
-                    except ValueError:
-                        config[key] = value
-            
-            # Get PHP ini settings
-            php_output = self._ssh_command(
-                server_ip,
-                'php -i 2>/dev/null | grep -E "^(memory_limit|max_execution_time)"'
-            )
-            
-            for line in php_output.split('\n'):
-                if 'memory_limit' in line:
-                    match = re.search(r'memory_limit\s*=>\s*(\S+)', line)
-                    if match:
-                        config['memory_limit'] = match.group(1)
-                elif 'max_execution_time' in line:
-                    match = re.search(r'max_execution_time\s*=>\s*(\d+)', line)
-                    if match:
-                        config['max_execution_time'] = int(match.group(1))
-                        
-        except Exception as e:
-            raise Exception(f"Failed to get PHP-FPM config: {str(e)}")
-        
-        return config
     
     def _get_postgresql_config(self, server_ip: str) -> Dict[str, Any]:
         """Get PostgreSQL configuration from server."""
@@ -358,45 +261,6 @@ class DriftDetector:
                         
         except Exception as e:
             raise Exception(f"Failed to get PostgreSQL config: {str(e)}")
-        
-        return config
-    
-    def _get_redis_config(self, server_ip: str) -> Dict[str, Any]:
-        """Get Redis configuration from server."""
-        config = {}
-        
-        try:
-            # Get Redis config
-            output = self._ssh_command(
-                server_ip,
-                'redis-cli CONFIG GET maxmemory && redis-cli CONFIG GET maxmemory-policy && redis-cli CONFIG GET timeout && redis-cli CONFIG GET tcp-keepalive 2>/dev/null'
-            )
-            
-            lines = output.split('\n')
-            for i in range(0, len(lines) - 1, 2):
-                key = lines[i].strip()
-                value = lines[i + 1].strip() if i + 1 < len(lines) else ''
-                
-                if key == 'maxmemory':
-                    try:
-                        config['maxmemory'] = value
-                    except ValueError:
-                        pass
-                elif key == 'maxmemory-policy':
-                    config['maxmemory-policy'] = value
-                elif key == 'timeout':
-                    try:
-                        config['timeout'] = int(value)
-                    except ValueError:
-                        pass
-                elif key == 'tcp-keepalive':
-                    try:
-                        config['tcp-keepalive'] = int(value)
-                    except ValueError:
-                        pass
-                        
-        except Exception as e:
-            raise Exception(f"Failed to get Redis config: {str(e)}")
         
         return config
     

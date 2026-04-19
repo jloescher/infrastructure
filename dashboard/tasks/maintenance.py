@@ -126,9 +126,6 @@ def cleanup_old_logs(days: int = LOG_RETENTION_DAYS) -> Dict:
     
     # Log directories to clean
     log_dirs = [
-        '/var/log/nginx',
-        '/var/log/php-fpm',
-        '/var/log/php8.5-fpm',
         '/var/log/haproxy',
         '/var/log/postgresql',
         '/var/log/redis',
@@ -467,7 +464,7 @@ def check_service_status() -> Dict:
     
     # Services to check by server role
     services_by_role = {
-        'app': ['nginx', 'php8.5-fpm', 'redis-server', 'supervisor'],
+        'app': ['docker'],
         'database': ['patroni', 'etcd', 'redis-server'],
         'router': ['haproxy', 'prometheus', 'grafana-server'],
         'monitoring': ['prometheus', 'grafana-server', 'alertmanager']

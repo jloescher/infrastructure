@@ -50,7 +50,7 @@ applications:
       \ --no-dev --optimize-autoloader 2>/dev/null || true\n            npm ci &&\
       \ npm run build 2>/dev/null || true\n            php artisan migrate --force\
       \ 2>/dev/null || true\n            sudo systemctl restart jonathanloescher-staging\
-      \ 2>/dev/null || sudo systemctl reload php8.5-fpm\n"
+      \ 2>/dev/null || true\n"
     description: Jonathan Loescher
     domains:
     - base_domain: jonathanloescher.com
@@ -170,7 +170,7 @@ applications:
       \ --no-dev --optimize-autoloader 2>/dev/null || true\n            npm ci &&\
       \ npm run build 2>/dev/null || true\n            php artisan migrate --force\
       \ 2>/dev/null || true\n            sudo systemctl restart rentalfixer-staging\
-      \ 2>/dev/null || sudo systemctl reload php8.5-fpm\n"
+      \ 2>/dev/null || true\n"
     description: Rental Fixer
     domains:
     - base_domain: rentalfixer.app

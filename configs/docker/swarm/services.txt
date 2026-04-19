@@ -1,5 +1,7 @@
-ID             NAME               MODE         REPLICAS   IMAGE                     PORTS
-n2mmka5tfp09   dokploy            replicated   1/1        dokploy/dokploy:v0.28.8   
-ogpp9ozqosr5   dokploy-postgres   replicated   1/1        postgres:16               
-mb1v4u7q9le7   dokploy-redis      replicated   1/1        redis:7                   
-w3e2lj1an4z5   dokploy-traefik    replicated   2/2        traefik:v3.6.7            *:80->80/tcp, *:443->443/tcp
+ID             NAME                                  MODE         REPLICAS   IMAGE                                                          PORTS
+n2mmka5tfp09   dokploy                               replicated   1/1        dokploy/dokploy:v0.28.8                                        
+ogpp9ozqosr5   dokploy-postgres                      replicated   1/1        postgres:16                                                    
+mb1v4u7q9le7   dokploy-redis                         replicated   1/1        redis:7                                                        
+w3e2lj1an4z5   dokploy-traefik                       replicated   2/2        traefik:v3.6.7                                                 *:80->80/tcp, *:443->443/tcp
+shvmlgpabtyb   jonathan-loescher-production-eguexh   replicated   2/2        ghcr.io/jloescher/jonathan-loescher-production-eguexh:latest   
+wnf9t3bujyur   jonathan-loescher-production-iekjoq   replicated   2/2        ghcr.io/jloescher/jonathan-loescher-production-iekjoq:latest   

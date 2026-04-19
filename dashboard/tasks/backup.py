@@ -194,7 +194,7 @@ def backup_database(db_name: str, db_info: Dict = None) -> Dict:
 @celery_app.task
 def backup_all_services() -> Dict:
     """
-    Backup all add-on services (Redis, etc.).
+    Backup all add-on services (Meilisearch, etc.).
     
     Returns:
         Dictionary with backup results
@@ -286,9 +286,7 @@ def backup_service(service: Dict) -> Dict:
     timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
     
     try:
-        if service_type == 'redis':
-            return backup_redis_service(service, backup_dir, timestamp)
-        elif service_type == 'meilisearch':
+        if service_type == 'meilisearch':
             return backup_meilisearch_service(service, backup_dir, timestamp)
         else:
             return {
@@ -301,69 +299,6 @@ def backup_service(service: Dict) -> Dict:
         return {
             'success': False,
             'service': service_type,
-            'error': str(e)
-        }
-
-
-def backup_redis_service(service: Dict, backup_dir: str, timestamp: str) -> Dict:
-    """
-    Backup a Redis service.
-    
-    Args:
-        service: Service dictionary
-        backup_dir: Backup directory
-        timestamp: Timestamp string
-        
-    Returns:
-        Dictionary with backup result
-    """
-    server_ip = service.get('server_ip')
-    port = service.get('port', 6379)
-    
-    if not server_ip:
-        return {
-            'success': False,
-            'service': 'redis',
-            'error': 'No server IP configured'
-        }
-    
-    backup_path = os.path.join(backup_dir, f'{timestamp}.rdb')
-    
-    try:
-        # Trigger BGSAVE on Redis
-        cmd = f"ssh root@{server_ip} 'redis-cli -p {port} BGSAVE'"
-        subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=60)
-        
-        # Wait for BGSAVE to complete
-        import time
-        time.sleep(2)
-        
-        # Copy RDB file
-        rdb_path = f'/var/lib/redis/dump.rdb'
-        copy_cmd = f"ssh root@{server_ip} 'cat {rdb_path}' > {backup_path}"
-        result = subprocess.run(copy_cmd, shell=True, capture_output=True, text=True, timeout=120)
-        
-        if result.returncode == 0:
-            backup_size = os.path.getsize(backup_path) if os.path.exists(backup_path) else 0
-            
-            return {
-                'success': True,
-                'service': 'redis',
-                'backup_path': backup_path,
-                'backup_size': backup_size,
-                'backup_size_human': format_size(backup_size)
-            }
-        else:
-            return {
-                'success': False,
-                'service': 'redis',
-                'error': result.stderr or 'Failed to copy RDB file'
-            }
-            
-    except Exception as e:
-        return {
-            'success': False,
-            'service': 'redis',
             'error': str(e)
         }
 

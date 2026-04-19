@@ -4,3 +4,8 @@ http:
       redirectScheme:
         scheme: https
         permanent: true
+    auth-jonathan-loescher-production-eguexh:
+      basicAuth:
+        removeHeader: true
+        users:
+          - staging_admin:$2b$10$7Rc6nc2RXaLXHxhXiXeR4emHxq9ILL10KedOrZhDjHh3GVVXm5LwW

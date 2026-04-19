@@ -78,13 +78,6 @@ scrape_configs:
       - targets: ['100.115.75.119:2379']
         labels: {node: 're-node-04'}
 
-  - job_name: 'nginx_exporter'
-    static_configs:
-      - targets: ['100.92.26.38:9113']
-        labels: {node: 're-db'}
-      - targets: ['100.89.130.19:9113']
-        labels: {node: 're-node-02'}
-
   - job_name: 'php_fpm_exporter'
     static_configs:
       - targets: ['100.92.26.38:9253']

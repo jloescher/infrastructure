@@ -3,7 +3,7 @@
 # Framework Setup Script for Quantyra PaaS
 #
 # This script sets up the runtime environment for various frameworks:
-# - Laravel (nginx + PHP-FPM)
+# - Laravel (Dokploy-managed Docker runtime)
 # - Next.js (systemd + Node.js)
 # - SvelteKit (systemd + Node.js)
 # - Python (systemd + Gunicorn)
@@ -58,7 +58,7 @@ declare -A FRAMEWORK_MEMORY=(
 )
 
 declare -A FRAMEWORK_RUNTIME=(
-    ["laravel"]="nginx+php-fpm"
+    ["laravel"]="dokploy+docker"
     ["nextjs"]="systemd+node"
     ["svelte"]="systemd+node"
     ["python"]="systemd+gunicorn"
@@ -213,89 +213,11 @@ ensure_app_directory() {
 }
 
 setup_laravel() {
-    log_info "Setting up Laravel runtime (nginx + PHP-FPM)..."
-    
-    # PHP-FPM pool configuration
-    local pool_conf="/etc/php/8.5/fpm/pool.d/${APP_NAME}.conf"
-    
-    local max_children=80
-    local start_servers=8
-    local min_spare=4
-    local max_spare=16
-    local max_requests=1000
-    
-    if [[ "$ENVIRONMENT" == "staging" ]]; then
-        max_children=40
-        start_servers=4
-        min_spare=2
-        max_spare=8
-        max_requests=500
-    fi
-    
+    log_warning "Laravel host runtime provisioning is deprecated."
+    log_info "All Laravel/PHP apps must be deployed through Dokploy with Dockerized PHP runtimes."
+    log_info "Use https://deploy.quantyralabs.cc to configure domains, env vars, and deployments."
     if [[ "$DRY_RUN" == true ]]; then
-        log_info "[DRY RUN] Would create PHP-FPM pool: $pool_conf"
-        log_info "[DRY RUN] Would create nginx site config"
-    else
-        # Create PHP-FPM pool
-        cat > "$pool_conf" << EOF
-[${APP_NAME}]
-user = www-data
-group = www-data
-listen = /run/php/php8.5-fpm-${APP_NAME}.sock
-listen.owner = www-data
-listen.group = www-data
-pm = dynamic
-pm.max_children = ${max_children}
-pm.start_servers = ${start_servers}
-pm.min_spare_servers = ${min_spare}
-pm.max_spare_servers = ${max_spare}
-pm.process_idle_timeout = 10s
-pm.max_requests = ${max_requests}
-request_slowlog_timeout = 5s
-slowlog = /var/log/php8.5-fpm/${APP_NAME}-slow.log
-php_admin_value[disable_functions] = exec,passthru,shell_exec,system
-php_admin_flag[log_errors] = on
-php_admin_value[error_log] = /var/log/php8.5-fpm/${APP_NAME}-error.log
-EOF
-        log_success "Created PHP-FPM pool configuration"
-        
-        # Create nginx site configuration
-        local nginx_conf="/etc/nginx/sites-available/${APP_NAME}"
-        local nginx_enabled="/etc/nginx/sites-enabled/${APP_NAME}"
-        
-        cat > "$nginx_conf" << EOF
-server {
-    listen ${PORT};
-    server_name _;
-    root ${APP_DIR}/public;
-    index index.php;
-
-    add_header X-Frame-Options "SAMEORIGIN";
-    add_header X-Content-Type-Options "nosniff";
-
-    location / {
-        try_files \$uri \$uri/ /index.php?\$query_string;
-    }
-
-    location ~ \\.php\$ {
-        fastcgi_pass unix:/run/php/php8.5-fpm-${APP_NAME}.sock;
-        fastcgi_param SCRIPT_FILENAME \$realpath_root\$fastcgi_script_name;
-        include fastcgi_params;
-        fastcgi_hide_header X-Powered-By;
-    }
-
-    location ~ /\\.(?!well-known).* {
-        deny all;
-    }
-}
-EOF
-        ln -sf "$nginx_conf" "$nginx_enabled"
-        log_success "Created nginx site configuration"
-        
-        # Test and reload
-        nginx -t && systemctl reload nginx
-        systemctl restart php8.5-fpm
-        log_success "Reloaded nginx and PHP-FPM"
+        log_info "[DRY RUN] No host web server/PHP runtime configuration will be created for Laravel apps"
     fi
 }
 
@@ -554,9 +476,6 @@ cleanup_existing() {
         
         # Remove old configs
         rm -f "/etc/systemd/system/${APP_NAME}.service"
-        rm -f "/etc/php/8.5/fpm/pool.d/${APP_NAME}.conf"
-        rm -f "/etc/nginx/sites-available/${APP_NAME}"
-        rm -f "/etc/nginx/sites-enabled/${APP_NAME}"
         
         systemctl daemon-reload
         log_success "Cleaned up existing configuration"

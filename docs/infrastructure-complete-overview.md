@@ -229,7 +229,7 @@ tailscale status
 | coolify-proxy (Traefik) | 80, 443, 8080 | Application routing | Active |
 | coolify-sentinel | - | HA for Coolify | Active |
 | nginx | Various | Legacy app serving (if needed) | Available |
-| PHP-FPM 8.5 | Socket | PHP runtime | Available |
+| Host PHP-FPM | Socket | Legacy only (not required for app workloads) | Deprecated |
 | Node.js 20 | Various | Node runtime | Available |
 
 #### re-node-01, re-node-03, re-node-04 (Database Servers)
@@ -258,8 +258,8 @@ tailscale status
 | 8404 | HAProxy Stats | Load balancer dashboard |
 | 9090 | Prometheus | Metrics UI |
 | 9093 | Alertmanager | Alert management UI |
-| 8100-8199 | Production apps | Legacy PHP-FPM ports |
-| 9200-9299 | Staging apps | Legacy PHP-FPM ports |
+| 8100-8199 | Production apps | Containerized app workloads |
+| 9200-9299 | Staging apps | Containerized app workloads |
 
 ---
 
@@ -1157,7 +1157,7 @@ Key alerts configured in Prometheus:
 - `PatroniReplicationLag` - Replication lag > 30 seconds
 - `RedisMasterDown` - No Redis master
 - `HAProxyBackendDown` - Backend server unhealthy
-- `PHPFPMPoolExhausted` - Less than 2 idle workers
+- `ContainerDown` - Critical application container unavailable
 
 ### Health Check Commands
 
@@ -1186,7 +1186,7 @@ ansible all -m shell -a "uptime"
 | Patroni | `journalctl -u patroni -f` |
 | PostgreSQL | `/var/log/postgresql/` |
 | Redis | `/var/log/redis/redis-server.log` |
-| PHP-FPM | `journalctl -u php8.5-fpm -f` |
+| App containers | `docker service logs <service_name> -f` |
 | Nginx | `/var/log/nginx/error.log` |
 | Dashboard | `journalctl -u dashboard -f` |
 | Coolify | `docker logs coolify -f` |
@@ -1486,7 +1486,7 @@ ssh -i ~/.ssh/id_vps root@100.102.220.16
 | HAProxy logs | `journalctl -u haproxy` |
 | PostgreSQL logs | `/var/log/postgresql/` |
 | Redis logs | `/var/log/redis/redis-server.log` |
-| PHP-FPM logs | `/var/log/php8.5-fpm/` |
+| Container logs | `docker service logs <service_name>` |
 | Nginx logs | `/var/log/nginx/` |
 
 ---

@@ -37,17 +37,11 @@ scrape_configs:
           - '100.114.117.46:9187'
           - '100.115.75.119:9187'
 
-  - job_name: 'redis_exporter'
-    static_configs:
-      - targets:
-          - '100.126.103.51:9121'
-          - '100.114.117.46:9121'
-
   - job_name: 'haproxy_exporter'
-    static_configs:
-      - targets:
-          - '100.102.220.16:9101'
-          - '100.116.175.9:9101'
+     static_configs:
+       - targets:
+           - '100.102.220.16:9101'
+           - '100.116.175.9:9101'
 
   - job_name: 'patroni'
     metrics_path: '/metrics'

@@ -210,12 +210,12 @@
       }
     },
     {
-      "title": "Nginx Access Logs",
+      "title": "Docker Service Logs",
       "type": "logs",
       "gridPos": {"h": 6, "w": 8, "x": 0, "y": 18},
       "targets": [
         {
-          "expr": "{job=\"nginx\"}",
+          "expr": "{job=\"syslog\"} |= \"docker\"",
           "refId": "A",
           "datasource": "Loki"
         }
@@ -227,12 +227,12 @@
       }
     },
     {
-      "title": "PHP-FPM Logs",
+      "title": "Application Logs",
       "type": "logs",
       "gridPos": {"h": 6, "w": 8, "x": 8, "y": 18},
       "targets": [
         {
-          "expr": "{job=\"php-fpm\"}",
+          "expr": "{job=\"syslog\"} |= \"dokploy\"",
           "refId": "A",
           "datasource": "Loki"
         }

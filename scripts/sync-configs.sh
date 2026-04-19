@@ -40,28 +40,7 @@ echo "Provision scripts synced"
 
 # ==================== App Servers ====================
 echo "=== App Servers ==="
-mkdir -p configs/app-servers/re-db/nginx-sites configs/app-servers/re-node-02/nginx-sites
-mkdir -p configs/app-servers/re-db/php-fpm configs/app-servers/re-node-02/php-fpm
-
-for server in "100.92.26.38:re-db" "100.89.130.19:re-node-02"; do
-    ip=$(echo $server | cut -d: -f1)
-    name=$(echo $server | cut -d: -f2)
-    
-    ssh root@$ip "cat /etc/nginx/nginx.conf" > configs/app-servers/$name/nginx.conf
-    ssh root@$ip "cat /etc/nginx/sites-enabled/* 2>/dev/null" > configs/app-servers/$name/sites-enabled.conf
-    
-    # Individual site configs (only stub_status and default exist now)
-    for site in stub_status default; do
-        ssh root@$ip "cat /etc/nginx/sites-available/$site 2>/dev/null" > "configs/app-servers/$name/nginx-sites/$site" 2>/dev/null || true
-    done
-    
-    # PHP-FPM
-    ssh root@$ip "cat /etc/php/8.5/fpm/php-fpm.conf" > configs/app-servers/$name/php-fpm/php-fpm.conf 2>/dev/null || true
-    for pool in $(ssh root@$ip "ls /etc/php/8.5/fpm/pool.d/*.conf 2>/dev/null"); do
-        poolname=$(basename $pool)
-        ssh root@$ip "cat /etc/php/8.5/fpm/pool.d/$poolname" > "configs/app-servers/$name/php-fpm/$poolname" 2>/dev/null || true
-    done
-done
+echo "  Skipped host nginx/php-fpm sync on app servers (Dokploy + Docker runtime)"
 
 echo "App server configs synced"
 
@@ -78,13 +57,6 @@ for node in "100.126.103.51:re-node-01" "100.114.117.46:re-node-03" "100.115.75.
 done
 
 echo "PostgreSQL configs synced"
-
-# ==================== Redis ====================
-echo "=== Redis ==="
-mkdir -p configs/redis
-ssh root@100.126.103.51 "cat /etc/redis/redis.conf" > configs/redis/redis-re-node-01.conf 2>/dev/null
-ssh root@100.114.117.46 "cat /etc/redis/redis.conf" > configs/redis/redis-re-node-03.conf 2>/dev/null
-echo "Redis configs synced"
 
 # ==================== pgBouncer ====================
 echo "=== pgBouncer ==="
@@ -136,7 +108,6 @@ echo "Systemd configs synced"
 echo "=== Logrotate ==="
 mkdir -p configs/logrotate
 ssh root@100.102.220.16 "cat /etc/logrotate.d/haproxy" > configs/logrotate/haproxy 2>/dev/null
-ssh root@100.102.220.16 "cat /etc/logrotate.d/nginx" > configs/logrotate/nginx 2>/dev/null
 echo "Logrotate configs synced"
 
 # ==================== App .env examples ====================

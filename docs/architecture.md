@@ -538,7 +538,7 @@ All servers send logs to Loki via Promtail:
 │  │ -syslog  │     │ -syslog  │     │ -syslog  │                │
 │  │ -auth    │     │ -auth    │     │ -auth    │                │
 │  │ -haproxy │     │ -nginx   │     │ -postgres│                │
-│  └────┬─────┘     │ -php-fpm │     │ -redis   │                │
+│  └────┬─────┘     │ -docker  │     │ -redis   │                │
 │       │           └────┬─────┘     │ -patroni │                │
 │       │                │           └────┬─────┘                │
 │       │                │                │                       │
@@ -576,8 +576,7 @@ All servers send logs to Loki via Promtail:
 - `haproxy_server_health_check_status` - Server health
 
 **Application Servers**:
-- `nginx_connections_active` - Active nginx connections
-- `phpfpm_processes_active` - Active PHP processes
+- `traefik_entrypoint_requests_total` - Traefik request volume
 - `node_cpu_seconds_total` - CPU usage
 - `node_memory_MemAvailable_bytes` - Available memory
 

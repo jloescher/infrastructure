@@ -44,7 +44,7 @@ class ServiceManager:
     Manage add-on services for applications.
     
     Services are Docker containers that provide add-on functionality
-    like Redis, Meilisearch, MinIO, RabbitMQ, etc.
+    like Meilisearch, MinIO, RabbitMQ, etc.
     """
     
     def __init__(self, server_ip: str = None):

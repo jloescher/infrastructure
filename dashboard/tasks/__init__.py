@@ -1,7 +1,7 @@
 """
 Celery configuration for async deployment tasks.
 
-This module configures Celery to use Redis as the message broker
+This module configures Celery to use PostgreSQL as the message broker
 and result backend, enabling async deployment processing with
 real-time progress updates via WebSocket.
 
@@ -16,12 +16,14 @@ import os
 from celery import Celery
 from celery.schedules import crontab
 
-REDIS_HOST = os.environ.get('REDIS_HOST', '100.126.103.51')
-REDIS_PORT = int(os.environ.get('REDIS_PORT', 6379))
-REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD', 'CcPUa3nvcxHtyNYjztbDyfCCuhgix78novmBDNGk')
+PG_HOST = os.environ.get('PG_HOST', '100.102.220.16')
+PG_PORT = int(os.environ.get('PG_PORT', 5000))
+PG_USER = os.environ.get('PG_USER', 'patroni_superuser')
+PG_PASSWORD = os.environ.get('PG_PASSWORD', '2e7vBpaaVK4vTJzrKebC')
+PG_DATABASE = os.environ.get('PG_DATABASE', 'celery')
 
-BROKER_URL = f'redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/4'
-RESULT_BACKEND = f'redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/5'
+BROKER_URL = f'db+postgresql://{PG_USER}:{PG_PASSWORD}@{PG_HOST}:{PG_PORT}/{PG_DATABASE}'
+RESULT_BACKEND = f'db+postgresql://{PG_USER}:{PG_PASSWORD}@{PG_HOST}:{PG_PORT}/{PG_DATABASE}'
 
 celery_app = Celery(
     'quantyra_paas',
