@@ -96,8 +96,6 @@ def init_database():
                 create_staging INTEGER DEFAULT 1,
                 target_servers TEXT,
                 port INTEGER,
-                redis_enabled INTEGER DEFAULT 0,
-                redis_db INTEGER,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             );
@@ -286,8 +284,8 @@ def create_application(app_data: Dict[str, Any]) -> str:
         conn.execute('''
             INSERT INTO applications (id, name, display_name, description, framework,
                 repository, production_branch, staging_branch, create_staging,
-                target_servers, port, redis_enabled, redis_db, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                target_servers, port, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             app_id,
             app_data.get('name'),
@@ -300,8 +298,6 @@ def create_application(app_data: Dict[str, Any]) -> str:
             1 if app_data.get('staging_env', app_data.get('create_staging', True)) else 0,
             json.dumps(app_data.get('target_servers', [])),
             app_data.get('port'),
-            1 if app_data.get('redis_enabled') else 0,
-            app_data.get('redis_db'),
             now,
             now
         ))
@@ -759,53 +755,49 @@ def import_configuration(config: Dict[str, Any], mode: str = 'merge') -> Dict[st
                 
                 if existing and mode == 'merge':
                     # Update existing
-                    conn.execute('''
-                        UPDATE applications SET 
-                            display_name = ?, description = ?, framework = ?,
-                            repository = ?, production_branch = ?, staging_branch = ?,
-                            create_staging = ?, target_servers = ?, port = ?,
-                            redis_enabled = ?, redis_db = ?, updated_at = ?
-                        WHERE name = ?
-                    ''', (
-                        app.get('display_name'),
-                        app.get('description', ''),
-                        app.get('framework', 'laravel'),
-                        app.get('repository'),
-                        app.get('production_branch', 'main'),
-                        app.get('staging_branch', 'staging'),
-                        app.get('create_staging', 1),
-                        json.dumps(app.get('target_servers', [])),
-                        app.get('port'),
-                        app.get('redis_enabled', 0),
-                        app.get('redis_db'),
-                        datetime.utcnow().isoformat(),
-                        app['name']
-                    ))
+                        conn.execute('''
+                            UPDATE applications SET 
+                                display_name = ?, description = ?, framework = ?,
+                                repository = ?, production_branch = ?, staging_branch = ?,
+                                create_staging = ?, target_servers = ?, port = ?,
+                                updated_at = ?
+                            WHERE name = ?
+                        ''', (
+                            app.get('display_name'),
+                            app.get('description', ''),
+                            app.get('framework', 'laravel'),
+                            app.get('repository'),
+                            app.get('production_branch', 'main'),
+                            app.get('staging_branch', 'staging'),
+                            app.get('create_staging', 1),
+                            json.dumps(app.get('target_servers', [])),
+                            app.get('port'),
+                            datetime.utcnow().isoformat(),
+                            app['name']
+                        ))
                     results['applications']['updated'] += 1
                 elif not existing:
                     # Create new
-                    conn.execute('''
-                        INSERT INTO applications (id, name, display_name, description, framework,
-                            repository, production_branch, staging_branch, create_staging,
-                            target_servers, port, redis_enabled, redis_db, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        app.get('id', generate_id()),
-                        app['name'],
-                        app.get('display_name'),
-                        app.get('description', ''),
-                        app.get('framework', 'laravel'),
-                        app.get('repository'),
-                        app.get('production_branch', 'main'),
-                        app.get('staging_branch', 'staging'),
-                        app.get('create_staging', 1),
-                        json.dumps(app.get('target_servers', [])),
-                        app.get('port'),
-                        app.get('redis_enabled', 0),
-                        app.get('redis_db'),
-                        datetime.utcnow().isoformat(),
-                        datetime.utcnow().isoformat()
-                    ))
+                        conn.execute('''
+                            INSERT INTO applications (id, name, display_name, description, framework,
+                                repository, production_branch, staging_branch, create_staging,
+                                target_servers, port, created_at, updated_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (
+                            app.get('id', generate_id()),
+                            app['name'],
+                            app.get('display_name'),
+                            app.get('description', ''),
+                            app.get('framework', 'laravel'),
+                            app.get('repository'),
+                            app.get('production_branch', 'main'),
+                            app.get('staging_branch', 'staging'),
+                            app.get('create_staging', 1),
+                            json.dumps(app.get('target_servers', [])),
+                            app.get('port'),
+                            datetime.utcnow().isoformat(),
+                            datetime.utcnow().isoformat()
+                        ))
                     results['applications']['created'] += 1
                 else:
                     results['applications']['skipped'] += 1

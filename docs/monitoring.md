@@ -13,7 +13,6 @@ The monitoring stack includes:
 - **Promtail**: Log collection agent
 - **Node Exporter**: System metrics
 - **Postgres Exporter**: PostgreSQL metrics
-- **Redis Exporter**: Redis metrics
 - **HAProxy Exporter**: Load balancer metrics
 - **Nginx Exporter**: Web server metrics
 
@@ -71,14 +70,6 @@ scrape_configs:
         labels: {node: 're-node-03'}
       - targets: ['100.115.75.119:9187']
         labels: {node: 're-node-04'}
-
-  # Redis Exporter (with node labels)
-  - job_name: 'redis_exporter'
-    static_configs:
-      - targets: ['100.126.103.51:9121']
-        labels: {node: 're-node-01'}
-      - targets: ['100.114.117.46:9121']
-        labels: {node: 're-node-03'}
 
   # HAProxy Exporter (with node labels)
   - job_name: 'haproxy_exporter'
@@ -140,16 +131,6 @@ Key metrics:
 - `pg_stat_database_tup_fetched` - Rows fetched
 - `pg_stat_database_tup_inserted` - Rows inserted
 - `pg_replication_lag_seconds` - Replication lag
-
-### Redis Exporter
-
-Installed on Redis servers.
-
-Key metrics:
-- `redis_connected_clients` - Connected clients
-- `redis_memory_used_bytes` - Memory usage
-- `redis_commands_processed_total` - Commands processed
-- `redis_connected_slaves` - Connected slaves
 
 ### Traefik Exporter
 
@@ -393,31 +374,7 @@ groups:
           severity: critical
         annotations:
           summary: "PostgreSQL instance down"
-          description: "PostgreSQL on {{ $labels.instance }} is not responding."
-```
-
-### Redis Alerts
-
-```yaml
-  - name: redis
-    rules:
-      - alert: RedisDown
-        expr: redis_up == 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Redis instance down"
-          description: "Redis on {{ $labels.instance }} is not responding."
-
-      - alert: RedisMemoryHigh
-        expr: (redis_memory_used_bytes / redis_memory_max_bytes) * 100 > 90
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "Redis memory usage high"
-          description: "Redis memory usage is above 90%."
+           description: "PostgreSQL on {{ $labels.instance }} is not responding."
 ```
 
 ### Traefik Alerts
@@ -698,7 +655,6 @@ Pre-configured dashboards for the infrastructure:
 |-----------|-----|-------------|
 | Node Exporter | node-exporter-quantyra | System metrics (CPU, Memory, Disk, Network) |
 | PostgreSQL & HAProxy | postgres-haproxy-quantyra | Database cluster status and connections |
-| Redis | redis-quantyra | Redis memory, connections, operations |
 | Loki Logs | loki-logs-quantyra | Centralized log viewing and analysis |
 
 ### Grafana Datasources

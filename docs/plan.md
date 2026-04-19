@@ -10,7 +10,7 @@ This document tracks current tasks, priorities, and future improvements for the 
 | SSL Certificates (DNS-01) | ✅ Complete | Auto-renewal configured |
 | Dashboard | ✅ Working | Deployed with infra-only reliability hardening |
 | PostgreSQL Cluster | ✅ Working | 3-node Patroni cluster |
-| Redis Cluster | ✅ Working | Master-replica with Sentinel |
+| Redis Cluster | ❌ Removed | Replaced with PostgreSQL job queues |
 | Monitoring | ✅ Working | Prometheus, Grafana, Alertmanager |
 | Docker Compose | 🚧 In Progress | Ready for testing |
 | Config Sync | ✅ Complete | 89 config files in repo |

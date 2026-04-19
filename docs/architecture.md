@@ -8,7 +8,7 @@
 
 The infrastructure uses a multi-tier architecture with high availability at every layer:
 
-**CHANGED (2026-04-03):** Application traffic now routes directly via Cloudflare → Traefik (bypassing HAProxy). HAProxy handles ONLY database traffic (PostgreSQL and Redis).
+**CHANGED (2026-04-03):** Application traffic now routes directly via Cloudflare → Traefik (bypassing HAProxy). HAProxy handles ONLY database traffic (PostgreSQL).
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -52,7 +52,7 @@ The infrastructure uses a multi-tier architecture with high availability at ever
 │   │  ┌───────────────────────┐  │    │  ┌───────────────────────┐  │           │
 │   │  │ Dokploy Manager       │  │    │  │ Dokploy Worker        │  │           │
 │   │  │ • Dashboard :3000     │  │    │  │ • Runs app containers │  │           │
-│   │  │ • PostgreSQL/Redis    │  │    │  │ • Traefik replica     │  │           │
+│   │  │ • PostgreSQL    │  │    │  │ • Traefik replica     │  │           │
 │   │  └───────────────────────┘  │    │  └───────────────────────┘  │           │
 │   │                             │    │                             │           │
 │   │  ┌───────────────────────┐  │    │  ┌───────────────────────┐  │           │
@@ -76,18 +76,17 @@ The infrastructure uses a multi-tier architecture with high availability at ever
                                   │
                                   ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                         DATABASE LAYER (HAProxy → Patroni/Redis)                │
+│                         DATABASE LAYER (HAProxy → Patroni)                │
 │                                                                                 │
 │   ┌─────────────────────────────────────────────────────────────────────────┐   │
 │   │                    HAProxy (Database Only)                              │   │
 │   │                    router-01, router-02                                 │   │
 │   │                                                                          │   │
 │   │  CHANGED: HAProxy NO LONGER routes app traffic                          │   │
-│   │  HAProxy handles ONLY: PostgreSQL + Redis                               │   │
+│   │  HAProxy handles ONLY: PostgreSQL                               │   │
 │   │                                                                          │   │
 │   │  • Port 5000: PostgreSQL Read/Write (leader)                            │   │
 │   │  • Port 5001: PostgreSQL Read-only (replicas)                           │   │
-│   │  • Port 6379: Redis Write (master)                                      │   │
 │   └─────────────────────────────────────────────────────────────────────────┘   │
 │                                   │                                             │
 │                                   ▼                                             │
@@ -101,14 +100,6 @@ The infrastructure uses a multi-tier architecture with high availability at ever
 │   │   UNCHANGED: Patroni cluster configuration remains the same             │   │
 │   └─────────────────────────────────────────────────────────────────────────┘   │
 │                                                                                 │
-│   ┌─────────────────────────────────────────────────────────────────────────┐   │
-│   │                    Redis Cluster with Sentinel                          │   │
-│   │                                                                          │   │
-│   │   re-node-01 (100.126.103.51) ─► Master                                │   │
-│   │   re-node-03 (100.114.117.46) ─► Replica                               │   │
-│   │                                                                          │   │
-│   │   UNCHANGED: Redis cluster configuration remains the same               │   │
-│   └─────────────────────────────────────────────────────────────────────────┘   │
 │                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -141,7 +132,6 @@ The infrastructure uses a multi-tier architecture with high availability at ever
 
 **HAProxy Scope:**
 - PostgreSQL: Ports 5000 (RW), 5001 (RO)
-- Redis: Port 6379
 - Stats: Port 8404
 - **NO LONGER routes application traffic**
 
@@ -149,8 +139,8 @@ The infrastructure uses a multi-tier architecture with high availability at ever
 
 | Name | Tailscale IP | Role | Services |
 |------|--------------|------|----------|
-| re-node-01 | 100.126.103.51 | PostgreSQL, Redis Master | Patroni, Redis, Sentinel |
-| re-node-03 | 100.114.117.46 | PostgreSQL Leader, Redis Replica | Patroni, Redis, Sentinel |
+| re-node-01 | 100.126.103.51 | PostgreSQL | Patroni |
+| re-node-03 | 100.114.117.46 | PostgreSQL Leader | Patroni |
 | re-node-04 | 100.115.75.119 | PostgreSQL Replica | Patroni |
 
 ## Load Balancing Strategy
@@ -164,7 +154,7 @@ The infrastructure uses a multi-tier architecture with high availability at ever
 - Docker Swarm routing mesh enables cross-node communication
 
 **Database Traffic (Unchanged):**
-- HAProxy on routers proxies to Patroni/Redis
+- HAProxy on routers proxies to Patroni
 - Applications connect via HAProxy endpoints
 
 ### Layer 1: Cloudflare → App Servers (CHANGED)
@@ -331,7 +321,6 @@ HAProxy no longer routes application traffic. Applications route directly via Cl
 - ❌ Removed: App SSL certificates from HAProxy
 - ❌ Removed: coolify_backend, rentalfixer_backend, etc.
 - ✅ Kept: PostgreSQL frontends (5000, 5001)
-- ✅ Kept: Redis frontends (6379)
 - ✅ Kept: Stats frontend (8404)
 
 ### Main Config (haproxy.cfg)
@@ -365,17 +354,6 @@ frontend pg_ro
     mode tcp
     default_backend pg_replicas
 
-# Redis write
-frontend redis_write
-    bind 100.102.220.16:6379
-    mode tcp
-    default_backend redis_master
-
-# Redis read
-frontend redis_read
-    bind 100.102.220.16:6380
-    mode tcp
-    default_backend redis_replicas
 ```
 
 ### HTTP/HTTPS Frontends (Minimal - Returns 404)
@@ -440,18 +418,6 @@ backend not_found_backend
 | 5 | Applications reconnect | Automatic with connection pooling |
 
 **Result**: ~15-20 seconds of write unavailability, reads continue
-
-**Redis Master Failure:**
-
-| Step | What Happens | User Impact |
-|------|--------------|-------------|
-| 1 | Redis master fails | - |
-| 2 | Sentinel detects failure | ~5 seconds |
-| 3 | Sentinel promotes replica | ~2 seconds |
-| 4 | HAProxy detects new master | ~3 seconds |
-| 5 | Applications reconnect | Automatic |
-
-**Result**: ~10 seconds of write unavailability, reads continue
 
 ### Scenario 3: Router Failure (Database Access Only)
 
@@ -613,8 +579,6 @@ All servers connected via Tailscale mesh VPN:
 | 8200-8299 | Application ports (staging) |
 | 5000 | PostgreSQL read/write |
 | 5001 | PostgreSQL read-only |
-| 6379 | Redis write |
-| 6380 | Redis read |
 | 8404 | HAProxy stats |
 | 8405 | HAProxy metrics |
 | 9090 | Prometheus |
@@ -702,9 +666,9 @@ Traefik (Docker Swarm service, 2 replicas)
       ↓ (Routes by Host header)
       ↓
 Docker Containers (distributed via Swarm)
-      ↓ (Connect to databases)
-      ↓
-HAProxy (router-01/02) → Patroni/Redis
+       ↓ (Connect to databases)
+       ↓
+HAProxy (router-01/02) → Patroni
 ```
 
 ### Dokploy Key Features
@@ -735,10 +699,6 @@ Applications deployed via Dokploy should connect to the existing Patroni cluster
 DB_HOST=100.102.220.16  # or 100.116.175.9
 DB_PORT=5000            # RW endpoint
 DB_PORT=5001            # RO endpoint
-
-# Redis connection
-REDIS_HOST=100.102.220.16  # or 100.116.175.9
-REDIS_PORT=6379
 ```
 
 **Note**: Database endpoints are UNCHANGED from previous architecture.
@@ -771,7 +731,6 @@ Purpose: Application and domain management
 | Component | Backup Method | Frequency | Retention |
 |-----------|---------------|-----------|-----------|
 | PostgreSQL | pg_dump + S3 | Hourly | 30 days |
-| Redis | RDB snapshots | Hourly | 7 days |
 | App configs | Git repository | On change | Forever |
 | SSL certs | certbot renew | Auto | 90 days |
 
