@@ -3,7 +3,7 @@
 # Framework Setup Script for Quantyra PaaS
 #
 # This script sets up the runtime environment for various frameworks:
-# - Laravel (Dokploy-managed Docker runtime)
+# - Laravel (Coolify-managed Docker runtime)
 # - Next.js (systemd + Node.js)
 # - SvelteKit (systemd + Node.js)
 # - Python (systemd + Gunicorn)
@@ -58,7 +58,7 @@ declare -A FRAMEWORK_MEMORY=(
 )
 
 declare -A FRAMEWORK_RUNTIME=(
-    ["laravel"]="dokploy+docker"
+    ["laravel"]="coolify+docker"
     ["nextjs"]="systemd+node"
     ["svelte"]="systemd+node"
     ["python"]="systemd+gunicorn"
@@ -214,7 +214,7 @@ ensure_app_directory() {
 
 setup_laravel() {
     log_warning "Laravel host runtime provisioning is deprecated."
-    log_info "All Laravel/PHP apps must be deployed through Dokploy with Dockerized PHP runtimes."
+    log_info "All Laravel/PHP apps must be deployed through Coolify with Dockerized PHP runtimes."
     log_info "Use https://deploy.quantyralabs.cc to configure domains, env vars, and deployments."
     if [[ "$DRY_RUN" == true ]]; then
         log_info "[DRY RUN] No host web server/PHP runtime configuration will be created for Laravel apps"

@@ -1,0 +1,333 @@
+- generic [ref=e625]:
+  - generic [ref=e627]:
+    - img [ref=e629]
+    - generic [ref=e630]:
+      - generic [ref=e631]: Love Coolify? Support our work.
+      - generic [ref=e632]: We are already profitable thanks to YOU but... We would like to make more cool features.
+      - generic [ref=e633]: For this we need your help to support our work financially.
+    - generic [ref=e634]:
+      - button [ref=e2109] [cursor=pointer]:
+        - link [ref=e2110]:
+          - /url: https://github.com/sponsors/coollabsio
+          - text: GitHub Sponsors
+      - button [ref=e2111] [cursor=pointer]:
+        - link [ref=e2112]:
+          - /url: https://opencollective.com/coollabsio/donate?interval=month&amount=10&name=&legalName=&email=
+          - text: Open Collective
+      - button [ref=e2113] [cursor=pointer]:
+        - link [ref=e2114]:
+          - /url: https://donate.stripe.com/8x2bJ104ifmB9kB45u38402
+          - text: Stripe
+      - generic [ref=e641] [cursor=pointer]: Maybe next time
+  - generic [ref=e642]:
+    - navigation [ref=e645]:
+      - generic [ref=e646]:
+        - generic [ref=e647]:
+          - link [ref=e2115] [cursor=pointer]:
+            - /url: /
+            - text: Coolify
+          - link [ref=e2116] [cursor=pointer]:
+            - /url: https://github.com/coollabsio/coolify/releases/tag/v4.0.0
+            - text: v4.0.0
+        - button [ref=e2117]:
+          - img [ref=e652]
+          - generic [ref=e654]: /
+        - button [ref=e2118] [cursor=pointer]:
+          - img [ref=e2119]
+          - generic [ref=e660]: 9+
+      - combobox [ref=e663]
+      - list [ref=e664]:
+        - listitem [ref=e665]:
+          - list [ref=e666]:
+            - listitem [ref=e667]:
+              - link [ref=e2120] [cursor=pointer]:
+                - /url: /
+                - img [ref=e669]
+                - generic [ref=e671]: Dashboard
+            - listitem [ref=e672]:
+              - link [ref=e2121] [cursor=pointer]:
+                - /url: /projects
+                - img [ref=e674]
+                - generic [ref=e679]: Projects
+            - listitem [ref=e680]:
+              - link [ref=e2122] [cursor=pointer]:
+                - /url: /servers
+                - img [ref=e682]
+                - generic [ref=e687]: Servers
+            - listitem [ref=e688]:
+              - link [ref=e2123] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/sources
+                - img [ref=e690]
+                - generic [ref=e692]: Sources
+            - listitem [ref=e693]:
+              - link [ref=e2124] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/destinations
+                - img [ref=e695]
+                - generic [ref=e697]: Destinations
+            - listitem [ref=e698]:
+              - link [ref=e2125] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/storages
+                - img [ref=e700]
+                - generic [ref=e705]: S3 Storages
+            - listitem [ref=e706]:
+              - link [ref=e2126] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/shared-variables
+                - img [ref=e708]
+                - generic [ref=e712]: Shared Variables
+            - listitem [ref=e713]:
+              - link [ref=e2127] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/notifications/email
+                - img [ref=e715]
+                - generic [ref=e717]: Notifications
+            - listitem [ref=e718]:
+              - link [ref=e2128] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/security/private-key
+                - img [ref=e720]
+                - generic [ref=e722]: Keys & Tokens
+            - listitem [ref=e723]:
+              - link [ref=e2129] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/tags
+                - img [ref=e725]
+                - generic [ref=e729]: Tags
+            - listitem [ref=e730]:
+              - link [ref=e2130] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/terminal
+                - img [ref=e732]
+                - generic [ref=e735]: Terminal
+            - listitem [ref=e736]:
+              - link [ref=e2131] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/profile
+                - img [ref=e738]
+                - generic [ref=e743]: Profile
+            - listitem [ref=e744]:
+              - link [ref=e2132] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/team
+                - img [ref=e746]
+                - generic [ref=e754]: Teams
+            - listitem [ref=e755]:
+              - link [ref=e2133] [cursor=pointer]:
+                - /url: /settings
+                - img [ref=e757]
+                - generic [ref=e761]: Settings
+            - listitem [ref=e763]:
+              - link [ref=e2134] [cursor=pointer]:
+                - /url: https://coolify.io/sponsorships
+                - img [ref=e765]
+                - generic [ref=e769]: Sponsor us
+            - listitem [ref=e770]:
+              - generic [ref=e2135] [cursor=pointer]:
+                - img [ref=e774]
+                - generic [ref=e776]: Feedback
+            - listitem [ref=e777]:
+              - button [ref=e2136]:
+                - img [ref=e780]
+                - generic [ref=e782]: Logout
+    - main [ref=e783]:
+      - generic [ref=e785]:
+        - generic [ref=e786]:
+          - generic [ref=e787]:
+            - heading [level=1] [ref=e2137]: Server
+            - generic [ref=e790]:
+              - generic [ref=e794]: Proxy Running
+              - button [ref=e2138]:
+                - img [ref=e796]
+          - generic [ref=e798]: re-node-02
+          - generic [ref=e799]:
+            - navigation [ref=e800]:
+              - link [ref=e2139] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/server/y12fs6lr1n2saofbfu9ycbr9
+                - text: Configuration
+              - link [ref=e2140] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/server/y12fs6lr1n2saofbfu9ycbr9/proxy
+                - text: Proxy
+              - link [ref=e2141] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/server/y12fs6lr1n2saofbfu9ycbr9/resources
+                - text: Resources
+              - link [ref=e2142] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/server/y12fs6lr1n2saofbfu9ycbr9/terminal
+                - text: Terminal
+              - link [ref=e2143] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/server/y12fs6lr1n2saofbfu9ycbr9/security/patches
+                - text: Security
+            - generic [ref=e808]:
+              - button [ref=e2144] [cursor=pointer]:
+                - img [ref=e811]
+                - text: Restart Proxy
+              - button [ref=e2145] [cursor=pointer]:
+                - img [ref=e817]
+                - text: Stop Proxy
+        - generic [ref=e819]:
+          - generic [ref=e820]:
+            - link [ref=e2146] [cursor=pointer]:
+              - /url: http://100.92.26.38:8000/server/y12fs6lr1n2saofbfu9ycbr9/proxy
+              - generic [ref=e822]: Configuration
+            - link [ref=e2147] [cursor=pointer]:
+              - /url: http://100.92.26.38:8000/server/y12fs6lr1n2saofbfu9ycbr9/proxy/dynamic
+              - generic [ref=e824]: Dynamic Configurations
+            - link [ref=e2148] [cursor=pointer]:
+              - /url: http://100.92.26.38:8000/server/y12fs6lr1n2saofbfu9ycbr9/proxy/logs
+              - generic [ref=e826]: Logs
+          - generic [ref=e830]:
+            - generic [ref=e831]:
+              - heading [level=2] [ref=e2149]: Configuration
+              - button [ref=e2150] [cursor=pointer]: Switch Proxy
+              - button [ref=e2151] [cursor=pointer]: Save
+            - generic [ref=e835]: Configure your proxy settings and advanced options.
+            - generic [ref=e1645]:
+              - img [ref=e1647]
+              - generic [ref=e1649]:
+                - generic [ref=e1650]: Configuration Out of Sync
+                - generic [ref=e1651]: The saved proxy configuration differs from the currently running configuration. Restart the proxy to apply your changes.
+            - heading [level=3] [ref=e2152]: Advanced
+            - generic [ref=e837]:
+              - generic [ref=e839]:
+                - generic [ref=e840]:
+                  - text: Generate labels only for Traefik
+                  - img [ref=e843] [cursor=pointer]
+                - checkbox [ref=e2153] [cursor=pointer]
+              - generic [ref=e847]:
+                - generic [ref=e848]:
+                  - text: Override default request handler
+                  - img [ref=e851] [cursor=pointer]
+                - checkbox [checked] [ref=e2154] [cursor=pointer]
+              - generic [ref=e854]:
+                - generic [ref=e855]: Redirect to (optional)
+                - textbox [ref=e2155]:
+                  - /placeholder: https://app.coolify.io
+            - generic [ref=e858]:
+              - heading [level=3] [ref=e2156]: Traefik (Coolify Proxy)
+              - button [ref=e2157] [cursor=pointer]: Reset Configuration
+            - generic [ref=e863]:
+              - generic [ref=e864]: Configuration file ( /data/coolify/proxy/docker-compose.yml )
+              - code [ref=e1659]:
+                - generic [ref=e1660]:
+                  - generic [ref=e1662]:
+                    - generic [ref=e1665]: "1"
+                    - generic [ref=e1666]:
+                      - generic [ref=e1667] [cursor=pointer]: 
+                      - generic [ref=e1668]: "2"
+                    - generic [ref=e1669]:
+                      - generic [ref=e1670] [cursor=pointer]: 
+                      - generic [ref=e1671]: "3"
+                    - generic [ref=e1673]: "4"
+                    - generic [ref=e1674]:
+                      - generic [ref=e1675] [cursor=pointer]: 
+                      - generic [ref=e1676]: "5"
+                    - generic [ref=e1677]:
+                      - generic [ref=e1678] [cursor=pointer]: 
+                      - generic [ref=e1679]: "6"
+                    - generic [ref=e1680]:
+                      - generic [ref=e1681] [cursor=pointer]: 
+                      - generic [ref=e1682]: "7"
+                    - generic [ref=e1683]:
+                      - generic [ref=e1684] [cursor=pointer]: 
+                      - generic [ref=e1685]: "8"
+                    - generic [ref=e1686]:
+                      - generic [ref=e1687] [cursor=pointer]: 
+                      - generic [ref=e1688]: "9"
+                    - generic [ref=e1689]:
+                      - generic [ref=e1690] [cursor=pointer]: 
+                      - generic [ref=e1691]: "10"
+                    - generic [ref=e1692]:
+                      - generic [ref=e1693] [cursor=pointer]: 
+                      - generic [ref=e1694]: "11"
+                    - generic [ref=e1697]:
+                      - generic [ref=e1698] [cursor=pointer]: 
+                      - generic [ref=e1699]: "12"
+                    - generic [ref=e1700]:
+                      - generic [ref=e1701] [cursor=pointer]: 
+                      - generic [ref=e1702]: "13"
+                    - generic [ref=e1704]:
+                      - generic [ref=e1705] [cursor=pointer]: 
+                      - generic [ref=e1706]: "14"
+                    - generic [ref=e1707]:
+                      - generic [ref=e1708] [cursor=pointer]: 
+                      - generic [ref=e1709]: "15"
+                    - generic [ref=e1710]:
+                      - generic [ref=e1711] [cursor=pointer]: 
+                      - generic [ref=e1712]: "16"
+                    - generic [ref=e1713]:
+                      - generic [ref=e1714] [cursor=pointer]: 
+                      - generic [ref=e1715]: "17"
+                    - generic [ref=e1718]:
+                      - generic [ref=e1719] [cursor=pointer]: 
+                      - generic [ref=e1720]: "18"
+                    - generic [ref=e1722]:
+                      - generic [ref=e1723] [cursor=pointer]: 
+                      - generic [ref=e1724]: "19"
+                    - generic [ref=e1726]:
+                      - generic [ref=e1727] [cursor=pointer]: 
+                      - generic [ref=e1728]: "20"
+                    - generic [ref=e1730]:
+                      - generic [ref=e1731] [cursor=pointer]: 
+                      - generic [ref=e1732]: "21"
+                    - generic [ref=e1734]:
+                      - generic [ref=e1735] [cursor=pointer]: 
+                      - generic [ref=e1736]: "22"
+                    - generic [ref=e1739]:
+                      - generic [ref=e1740] [cursor=pointer]: 
+                      - generic [ref=e1741]: "23"
+                    - generic [ref=e1743]:
+                      - generic [ref=e1744] [cursor=pointer]: 
+                      - generic [ref=e1745]: "24"
+                    - generic [ref=e1747]:
+                      - generic [ref=e1748] [cursor=pointer]: 
+                      - generic [ref=e1749]: "25"
+                    - generic [ref=e1752]: "26"
+                  - generic [ref=e2011]:
+                    - generic [ref=e2013]: "name: coolify-proxy"
+                    - generic [ref=e2015]: "networks:"
+                    - generic [ref=e2017]: "coolify:"
+                    - generic [ref=e2019]: "external: true"
+                    - generic [ref=e2021]: "services:"
+                    - generic [ref=e2023]: "traefik:"
+                    - generic [ref=e2025]: "container_name: coolify-proxy"
+                    - generic [ref=e2027]: "image: 'traefik:v3.6'"
+                    - generic [ref=e2029]: "restart: unless-stopped"
+                    - generic [ref=e2031]: "environment:"
+                    - generic [ref=e2033]: "-"
+                    - generic [ref=e2035]: CF_DNS_API_TOKEN=zf5ncwuOaaXz2IJ1BVB
+                    - generic [ref=e2037]: u8myf0HQt5IxkPje_Rm1V
+                    - generic [ref=e2039]: "extra_hosts:"
+                    - generic [ref=e2041]: "- 'host.docker."
+                    - generic [ref=e2043]: internal:host-gateway'
+                    - generic [ref=e2045]: "networks:"
+                    - generic [ref=e2047]: "- coolify"
+                    - generic [ref=e2049]: "ports:"
+                    - generic [ref=e2051]: "-"
+                    - generic [ref=e2053]: "'80:80"
+                    - generic [ref=e2055]: "'"
+                    - generic [ref=e2059]: "- '443:443'"
+                    - generic [ref=e2063]: "- '443:443/udp'"
+                    - generic [ref=e2067]: "- '8080:8080'"
+                    - generic [ref=e2071]: "healthcheck:"
+                    - generic [ref=e2075]: "test: 'wget -qO- http://localhost:80/"
+                    - generic [ref=e2077]: ping || exit 1'
+                    - generic [ref=e2081]: "interval: 4s"
+                    - generic [ref=e2085]: "timeout: 2s"
+                    - generic [ref=e2089]: "retries: 5"
+                  - textbox [ref=e2158]
+  - list [ref=e2094]
+  - generic [ref=e2161]:
+    - generic [ref=e2162]:
+      - heading "Confirm Proxy Restart?" [level=3] [ref=e2163]
+      - button [active] [ref=e2164]:
+        - img [ref=e2165]
+    - generic [ref=e2168]:
+      - generic [ref=e2170]:
+        - img [ref=e2172]
+        - generic [ref=e2174]:
+          - generic [ref=e2175]: Warning
+          - generic [ref=e2176]: This operation is permanent and cannot be undone. Please think again before proceeding!
+      - generic [ref=e2177]: "The following actions will be performed:"
+      - list [ref=e2178]:
+        - listitem [ref=e2179]:
+          - img [ref=e2180]
+          - generic [ref=e2182]: This proxy will be stopped and started again.
+        - listitem [ref=e2183]:
+          - img [ref=e2184]
+          - generic [ref=e2186]: All resources hosted on coolify will be unavailable during the restart.
+      - generic [ref=e2187]:
+        - button "Cancel" [ref=e2188] [cursor=pointer]
+        - button "Restart Proxy" [ref=e2189] [cursor=pointer]:
+          - generic [ref=e2190]: Restart Proxy

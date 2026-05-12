@@ -1,0 +1,29 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - heading "Welcome to Coolify" [level=1] [ref=e7]
+        - paragraph [ref=e8]: Connect your first server and start deploying in minutes
+      - generic [ref=e9]:
+        - heading "What You'll Set Up" [level=2] [ref=e10]
+        - generic [ref=e11]:
+          - generic [ref=e12]:
+            - img [ref=e14]
+            - generic [ref=e16]:
+              - generic [ref=e17]: Server Connection
+              - generic [ref=e18]: Connect via SSH to deploy your resources
+          - generic [ref=e19]:
+            - img [ref=e21]
+            - generic [ref=e23]:
+              - generic [ref=e24]: Docker Environment
+              - generic [ref=e25]: Automated installation and configuration
+          - generic [ref=e26]:
+            - img [ref=e28]
+            - generic [ref=e30]:
+              - generic [ref=e31]: Project Structure
+              - generic [ref=e32]: Organize your applications and resources
+      - generic [ref=e33]:
+        - button "Let's go!" [ref=e34] [cursor=pointer]
+        - button "Skip Setup" [ref=e35]
+  - img
+  - list

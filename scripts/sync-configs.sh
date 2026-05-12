@@ -26,10 +26,10 @@ ssh root@100.116.175.9 "cat /etc/haproxy/domains/web_backends.cfg" > configs/hap
 echo "HAProxy configs synced"
 
 # ==================== Dashboard ====================
-# NOTE: Old Flask dashboard removed - now using Dokploy
+# NOTE: Old Flask dashboard removed - now using Coolify
 # Dashboard configs no longer exist on router-01
 echo "=== Dashboard (Obsolete) ==="
-echo "  Skipped - old Flask dashboard removed, using Dokploy instead"
+echo "  Skipped - old Flask dashboard removed, using Coolify instead"
 
 # ==================== Provision Scripts ====================
 echo "=== Provision Scripts ==="
@@ -40,7 +40,7 @@ echo "Provision scripts synced"
 
 # ==================== App Servers ====================
 echo "=== App Servers ==="
-echo "  Skipped host nginx/php-fpm sync on app servers (Dokploy + Docker runtime)"
+echo "  Skipped host nginx/php-fpm sync on app servers (Coolify + Docker runtime)"
 
 echo "App server configs synced"
 
@@ -111,46 +111,33 @@ ssh root@100.102.220.16 "cat /etc/logrotate.d/haproxy" > configs/logrotate/hapro
 echo "Logrotate configs synced"
 
 # ==================== App .env examples ====================
-# NOTE: Apps now deployed via Dokploy - no manual /opt/apps/ directory
+# NOTE: Apps now deployed via Coolify - no manual /opt/apps/ directory
 echo "=== App .env examples (Obsolete) ==="
-echo "  Skipped - apps now managed by Dokploy"
+echo "  Skipped - apps now managed by Coolify"
 
-# ==================== Dokploy ====================
-echo "=== Dokploy ==="
-mkdir -p configs/dokploy/re-db/traefik configs/dokploy/re-node-02/traefik
-mkdir -p configs/dokploy/re-db/monitoring configs/dokploy/re-node-02/monitoring
+# ==================== Coolify ====================
+echo "=== Coolify ==="
+mkdir -p configs/coolify/re-db/traefik configs/coolify/re-node-02/traefik
 
-# Manager node (re-db) - Traefik configs
-ssh root@100.92.26.38 "cat /etc/dokploy/traefik/traefik.yml" > configs/dokploy/re-db/traefik/traefik.yml 2>/dev/null || true
-
-# Sync all dynamic config files from manager
-for file in $(ssh root@100.92.26.38 "ls /etc/dokploy/traefik/dynamic/*.yml 2>/dev/null"); do
+# Manager node (re-db) - Traefik dynamic configs from Coolify proxy
+for file in $(ssh root@100.92.26.38 "ls /data/coolify/proxy/*.yml 2>/dev/null"); do
     filename=$(basename "$file")
-    ssh root@100.92.26.38 "cat /etc/dokploy/traefik/dynamic/$filename" > "configs/dokploy/re-db/traefik/$filename" 2>/dev/null || true
+    ssh root@100.92.26.38 "cat /data/coolify/proxy/$filename" > "configs/coolify/re-db/traefik/$filename" 2>/dev/null || true
 done
 
-# ACME certificate metadata (DO NOT SYNC CONTENT - contains private keys)
-ssh root@100.92.26.38 "stat -c '%a %U %G %s %y' /etc/dokploy/traefik/dynamic/acme.json 2>/dev/null" > configs/dokploy/re-db/traefik/acme.json.metadata 2>/dev/null || true
+# ACME certificate metadata from manager (DO NOT SYNC CONTENT - contains private keys)
+ssh root@100.92.26.38 "stat -c '%a %U %G %s %y' /data/coolify/proxy/acme.json 2>/dev/null" > configs/coolify/re-db/traefik/acme.json.metadata 2>/dev/null || true
 
-# Worker node (re-node-02) - Traefik configs
-ssh root@100.89.130.19 "cat /etc/dokploy/traefik/traefik.yml" > configs/dokploy/re-node-02/traefik/traefik.yml 2>/dev/null || true
-
-# Sync all dynamic config files from worker
-for file in $(ssh root@100.89.130.19 "ls /etc/dokploy/traefik/dynamic/*.yml 2>/dev/null"); do
+# Worker node (re-node-02) - Traefik dynamic configs from Coolify proxy
+for file in $(ssh root@100.89.130.19 "ls /data/coolify/proxy/*.yml 2>/dev/null"); do
     filename=$(basename "$file")
-    ssh root@100.89.130.19 "cat /etc/dokploy/traefik/dynamic/$filename" > "configs/dokploy/re-node-02/traefik/$filename" 2>/dev/null || true
+    ssh root@100.89.130.19 "cat /data/coolify/proxy/$filename" > "configs/coolify/re-node-02/traefik/$filename" 2>/dev/null || true
 done
 
 # ACME certificate metadata from worker (DO NOT SYNC CONTENT - contains private keys)
-ssh root@100.89.130.19 "stat -c '%a %U %G %s %y' /etc/dokploy/traefik/dynamic/acme.json 2>/dev/null" > configs/dokploy/re-node-02/traefik/acme.json.metadata 2>/dev/null || true
+ssh root@100.89.130.19 "stat -c '%a %U %G %s %y' /data/coolify/proxy/acme.json 2>/dev/null" > configs/coolify/re-node-02/traefik/acme.json.metadata 2>/dev/null || true
 
-# Dokploy monitoring configs (manager node only)
-for file in $(ssh root@100.92.26.38 "ls /etc/dokploy/monitoring/dokploy/*.json 2>/dev/null"); do
-    filename=$(basename "$file")
-    ssh root@100.92.26.38 "cat /etc/dokploy/monitoring/dokploy/$filename" > "configs/dokploy/re-db/monitoring/$filename" 2>/dev/null || true
-done
-
-echo "Dokploy configs synced"
+echo "Coolify configs synced"
 
 # ==================== Docker ====================
 echo "=== Docker ==="

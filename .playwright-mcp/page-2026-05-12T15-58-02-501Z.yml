@@ -1,0 +1,206 @@
+- generic [active] [ref=e374]:
+  - generic [ref=e376]:
+    - img [ref=e378]
+    - generic [ref=e379]:
+      - generic [ref=e380]: Love Coolify? Support our work.
+      - generic [ref=e381]:
+        - text: We are already profitable thanks to YOU but...
+        - text: We would like to make more cool features.
+      - generic [ref=e382]: For this we need your help to support our work financially.
+    - generic [ref=e383]:
+      - button "GitHub Sponsors" [ref=e384] [cursor=pointer]:
+        - link "GitHub Sponsors" [ref=e385]:
+          - /url: https://github.com/sponsors/coollabsio
+      - button "Open Collective" [ref=e386] [cursor=pointer]:
+        - link "Open Collective" [ref=e387]:
+          - /url: https://opencollective.com/coollabsio/donate?interval=month&amount=10&name=&legalName=&email=
+      - button "Stripe" [ref=e388] [cursor=pointer]:
+        - link "Stripe" [ref=e389]:
+          - /url: https://donate.stripe.com/8x2bJ104ifmB9kB45u38402
+      - generic [ref=e390] [cursor=pointer]: Maybe next time
+  - generic [ref=e391]:
+    - navigation [ref=e394]:
+      - generic [ref=e395]:
+        - generic [ref=e396]:
+          - link "Coolify" [ref=e397] [cursor=pointer]:
+            - /url: /
+          - link "v4.0.0" [ref=e398] [cursor=pointer]:
+            - /url: https://github.com/coollabsio/coolify/releases/tag/v4.0.0
+        - button / [ref=e400]:
+          - img [ref=e401]
+          - generic [ref=e403]: /
+        - button "Preferences 9+" [ref=e406] [cursor=pointer]:
+          - img "Preferences" [ref=e407]
+          - generic [ref=e409]: 9+
+      - combobox [ref=e412]:
+        - option "Switch team" [disabled]
+        - option "Root Team" [selected]
+      - list [ref=e413]:
+        - listitem [ref=e414]:
+          - list [ref=e415]:
+            - listitem [ref=e416]:
+              - link "Dashboard" [ref=e417] [cursor=pointer]:
+                - /url: /
+                - img [ref=e418]
+                - generic [ref=e420]: Dashboard
+            - listitem [ref=e421]:
+              - link "Projects" [ref=e422] [cursor=pointer]:
+                - /url: /projects
+                - img [ref=e423]
+                - generic [ref=e428]: Projects
+            - listitem [ref=e429]:
+              - link "Servers" [ref=e430] [cursor=pointer]:
+                - /url: /servers
+                - img [ref=e431]
+                - generic [ref=e436]: Servers
+            - listitem [ref=e437]:
+              - link "Sources" [ref=e438] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/sources
+                - img [ref=e439]
+                - generic [ref=e441]: Sources
+            - listitem [ref=e442]:
+              - link "Destinations" [ref=e443] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/destinations
+                - img [ref=e444]
+                - generic [ref=e446]: Destinations
+            - listitem [ref=e447]:
+              - link "S3 Storages" [ref=e448] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/storages
+                - img [ref=e449]
+                - generic [ref=e454]: S3 Storages
+            - listitem [ref=e455]:
+              - link "Shared Variables" [ref=e456] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/shared-variables
+                - img [ref=e457]
+                - generic [ref=e461]: Shared Variables
+            - listitem [ref=e462]:
+              - link "Notifications" [ref=e463] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/notifications/email
+                - img [ref=e464]
+                - generic [ref=e466]: Notifications
+            - listitem [ref=e467]:
+              - link "Keys & Tokens" [ref=e468] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/security/private-key
+                - img [ref=e469]
+                - generic [ref=e471]: Keys & Tokens
+            - listitem [ref=e472]:
+              - link "Tags" [ref=e473] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/tags
+                - img [ref=e474]
+                - generic [ref=e478]: Tags
+            - listitem [ref=e479]:
+              - link "Terminal" [ref=e480] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/terminal
+                - img [ref=e481]
+                - generic [ref=e484]: Terminal
+            - listitem [ref=e485]:
+              - link "Profile" [ref=e486] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/profile
+                - img [ref=e487]
+                - generic [ref=e492]: Profile
+            - listitem [ref=e493]:
+              - link "Teams" [ref=e494] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/team
+                - img [ref=e495]
+                - generic [ref=e503]: Teams
+            - listitem [ref=e504]:
+              - link "Settings" [ref=e505] [cursor=pointer]:
+                - /url: /settings
+                - img [ref=e506]
+                - generic [ref=e510]: Settings
+            - generic:
+              - listitem:
+                - generic "No upgrade available"
+            - listitem [ref=e512]:
+              - link "Sponsor us" [ref=e513] [cursor=pointer]:
+                - /url: https://coolify.io/sponsorships
+                - img [ref=e514]
+                - generic [ref=e518]: Sponsor us
+            - listitem [ref=e519]:
+              - generic "Send us feedback or get help!" [ref=e522] [cursor=pointer]:
+                - img [ref=e523]
+                - generic [ref=e525]: Feedback
+            - listitem [ref=e526]:
+              - button "Logout" [ref=e528]:
+                - img [ref=e529]
+                - generic [ref=e531]: Logout
+    - main [ref=e532]:
+      - generic [ref=e534]:
+        - generic [ref=e535]:
+          - heading "Server" [level=1] [ref=e537]
+          - generic [ref=e538]: localhost
+          - navigation [ref=e540]:
+            - link "Configuration" [ref=e541] [cursor=pointer]:
+              - /url: http://100.92.26.38:8000/server/ac4m1atxgvcgwzp86mz0fdtc
+            - link "Proxy" [ref=e542] [cursor=pointer]:
+              - /url: http://100.92.26.38:8000/server/ac4m1atxgvcgwzp86mz0fdtc/proxy
+            - link "Resources" [ref=e543] [cursor=pointer]:
+              - /url: http://100.92.26.38:8000/server/ac4m1atxgvcgwzp86mz0fdtc/resources
+            - link "Terminal" [ref=e544] [cursor=pointer]:
+              - /url: http://100.92.26.38:8000/server/ac4m1atxgvcgwzp86mz0fdtc/terminal
+            - link "Security" [ref=e545] [cursor=pointer]:
+              - /url: http://100.92.26.38:8000/server/ac4m1atxgvcgwzp86mz0fdtc/security/patches
+        - generic [ref=e546]:
+          - generic [ref=e547]:
+            - link "General" [ref=e548] [cursor=pointer]:
+              - /url: http://100.92.26.38:8000/server/ac4m1atxgvcgwzp86mz0fdtc
+              - generic [ref=e549]: General
+            - link "Private Key" [ref=e550] [cursor=pointer]:
+              - /url: http://100.92.26.38:8000/server/ac4m1atxgvcgwzp86mz0fdtc/private-key
+              - generic [ref=e551]: Private Key
+            - link "CA Certificate" [ref=e552] [cursor=pointer]:
+              - /url: http://100.92.26.38:8000/server/ac4m1atxgvcgwzp86mz0fdtc/ca-certificate
+              - generic [ref=e553]: CA Certificate
+            - link "Swarm" [ref=e554] [cursor=pointer]:
+              - /url: http://100.92.26.38:8000/server/ac4m1atxgvcgwzp86mz0fdtc/swarm
+              - generic [ref=e555]: Swarm
+          - generic [ref=e557]:
+            - generic [ref=e558]:
+              - heading "General" [level=2] [ref=e559]
+              - button "Save" [ref=e561] [cursor=pointer]
+            - text: You can't use this server until it is validated.
+            - button "Validate Server" [ref=e562] [cursor=pointer]
+            - generic [ref=e563]:
+              - generic [ref=e564]:
+                - generic [ref=e565]:
+                  - generic [ref=e566]:
+                    - text: Name
+                    - generic [ref=e567]: "*"
+                  - textbox [ref=e568]: localhost
+                - generic [ref=e569]:
+                  - generic [ref=e570]: Description
+                  - textbox [ref=e571]: This is the server where Coolify is running on. Don't delete this!
+                - generic [ref=e572]:
+                  - generic [ref=e573]:
+                    - text: Wildcard Domain
+                    - img [ref=e576] [cursor=pointer]
+                  - textbox "https://example.com" [ref=e578]
+              - generic [ref=e579]:
+                - generic [ref=e580]:
+                  - generic [ref=e581]:
+                    - text: IP Address/Domain
+                    - generic [ref=e582]: "*"
+                    - img [ref=e585] [cursor=pointer]
+                  - generic [ref=e587]:
+                    - button "Toggle password visibility" [ref=e588] [cursor=pointer]:
+                      - img [ref=e589]
+                    - textbox [ref=e593]: host.docker.internal
+                - generic [ref=e594]:
+                  - generic [ref=e595]:
+                    - generic [ref=e596]:
+                      - text: User
+                      - generic [ref=e597]: "*"
+                    - textbox [ref=e598]: root
+                  - generic [ref=e599]:
+                    - generic [ref=e600]:
+                      - text: Port
+                      - generic [ref=e601]: "*"
+                    - spinbutton [ref=e602]: "22"
+              - generic [ref=e603]:
+                - generic [ref=e604]:
+                  - generic [ref=e605]: Server Timezone
+                  - img [ref=e608] [cursor=pointer]
+                - generic [ref=e612]:
+                  - textbox "Search timezone..." [ref=e613]: UTC
+                  - img [ref=e614]
+  - list

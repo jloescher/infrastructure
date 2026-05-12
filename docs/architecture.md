@@ -2,7 +2,7 @@
 
 > Complete reference for the Quantyra infrastructure architecture, traffic flow, and load balancing.
 >
-> **UPDATED 2026-04-03:** Architecture changed to Option B (Dokploy) - Apps route directly via Traefik, HAProxy handles databases only.
+> **UPDATED 2026-05-12:** Architecture uses Coolify v4 (Docker Compose) - Apps route directly via Traefik, HAProxy handles databases only. Redis has been fully removed.
 
 ## Overview
 
@@ -13,7 +13,7 @@ The infrastructure uses a multi-tier architecture with high availability at ever
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                              TRAFFIC FLOW DIAGRAM                                │
-│                        (Option B - Dokploy Architecture)                         │
+│                        (Coolify v4 Architecture)                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 
                                      USER
@@ -41,7 +41,7 @@ The infrastructure uses a multi-tier architecture with high availability at ever
                         │ (Cloudflare → Traefik)       │ (Cloudflare → Traefik)
                         ▼                              ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                         APP SERVER LAYER (Dokploy)                              │
+│                         APP SERVER LAYER (Coolify)                               │
 │                                                                                 │
 │   ┌─────────────────────────────┐    ┌─────────────────────────────┐           │
 │   │       APP SERVER 1          │    │       APP SERVER 2          │           │
@@ -50,13 +50,13 @@ The infrastructure uses a multi-tier architecture with high availability at ever
 │   │    Public: 208.87.128.115   │    │    Public: 23.227.173.245   │           │
 │   │                             │    │                             │           │
 │   │  ┌───────────────────────┐  │    │  ┌───────────────────────┐  │           │
-│   │  │ Dokploy Manager       │  │    │  │ Dokploy Worker        │  │           │
-│   │  │ • Dashboard :3000     │  │    │  │ • Runs app containers │  │           │
+│   │  │ Coolify Manager       │  │    │  │ Coolify Remote Server │  │           │
+│   │  │ • Dashboard :8000     │  │    │  │ • Runs app containers │  │           │
 │   │  │ • PostgreSQL    │  │    │  │ • Traefik replica     │  │           │
 │   │  └───────────────────────┘  │    │  └───────────────────────┘  │           │
 │   │                             │    │                             │           │
 │   │  ┌───────────────────────┐  │    │  ┌───────────────────────┐  │           │
-│   │  │ Traefik (Swarm)       │  │    │  │ Traefik (Swarm)       │  │           │
+│   │  │ Traefik (Coolify)     │  │    │  │ Traefik (Coolify)     │  │           │
 │   │  │ • Port 80, 443        │  │    │  │ • Port 80, 443        │  │           │
 │   │  │ • SSL (Let's Encrypt) │  │    │  │ • SSL (Let's Encrypt) │  │           │
 │   │  │ • Routes by Host hdr  │  │    │  │ • Routes by Host hdr  │  │           │
@@ -106,24 +106,24 @@ The infrastructure uses a multi-tier architecture with high availability at ever
 
 ## Server Inventory
 
-### App Servers (Dokploy Cluster)
+### App Servers (Coolify Cluster)
 
-**CHANGED (2026-04-03):** Now running Dokploy with Docker Swarm
+**UPDATED (2026-05-12):** Now running Coolify v4 with Docker Compose
 
-| Name | Tailscale IP | Public IP | Location | Dokploy Role | Services |
+| Name | Tailscale IP | Public IP | Location | Coolify Role | Services |
 |------|--------------|-----------|----------|--------------|----------|
-| re-db | 100.92.26.38 | 208.87.128.115 | NYC | **Manager** | Dokploy Dashboard, Traefik, Docker containers |
-| re-node-02 | 100.89.130.19 | 23.227.173.245 | ATL | **Worker** | Traefik, Docker containers |
+| re-db | 100.92.26.38 | 208.87.128.115 | NYC | **Manager** | Coolify Dashboard, Traefik, Docker containers |
+| re-node-02 | 100.89.130.19 | 23.227.173.245 | ATL | **Remote Server** | Traefik, Docker containers |
 
-**Swarm Architecture:**
-- 1 Manager + 1 Worker (stable quorum)
-- Docker routing mesh for cross-node communication
-- Traefik: 2 replicas (one per node)
+**Architecture:**
+- 1 Manager + 1 Remote Server
+- Coolify's Traefik on both nodes for app routing
 - Apps: Can deploy 2+ replicas for HA
+- Docker Compose for container orchestration (NOT Docker Swarm)
 
 ### Routers (HAProxy - Database Only)
 
-**CHANGED (2026-04-03):** HAProxy now handles ONLY database traffic
+**UPDATED (2026-05-12):** HAProxy now handles ONLY database traffic (PostgreSQL). Redis has been fully removed.
 
 | Name | Tailscale IP | Public IP | Location | Role |
 |------|--------------|-----------|----------|------|
@@ -145,19 +145,19 @@ The infrastructure uses a multi-tier architecture with high availability at ever
 
 ## Load Balancing Strategy
 
-### CHANGED (2026-04-03): Option B Architecture
+### CHANGED (2026-05-12): Coolify Architecture
 
 **Application Traffic:**
 - Cloudflare DNS points to app server IPs (NOT router IPs)
 - Cloudflare load balances between re-db and re-node-02
-- Traefik on each app server handles SSL and routing
-- Docker Swarm routing mesh enables cross-node communication
+- Coolify's Traefik on each app server handles SSL and routing
+- Docker Compose for container orchestration
 
-**Database Traffic (Unchanged):**
+**Database Traffic:**
 - HAProxy on routers proxies to Patroni
 - Applications connect via HAProxy endpoints
 
-### Layer 1: Cloudflare → App Servers (CHANGED)
+### Layer 1: Cloudflare → App Servers
 
 **Method**: DNS Round-Robin with HTTP Retry
 
@@ -187,30 +187,30 @@ Client Request → Cloudflare DNS
 - **Before**: Cloudflare → Routers → App Servers
 - **Now**: Cloudflare → App Servers (bypasses routers)
 
-### Layer 2: Traefik → App Containers (NEW)
+### Layer 2: Traefik → App Containers
 
-**Method**: Docker Swarm Routing Mesh
+**Method**: Coolify's Traefik with Docker Compose
 
 ```
-Traefik (Swarm Service)
+Traefik (Coolify-managed)
          ↓
-    Docker Routing Mesh
+    Docker Compose
          ↓
     ┌────────────┐
-    │ Container  │ ← Replica 1 (any node)
+    │ Container  │ ← Replica 1 (Coolify node)
     │   #1       │
     └────────────┘
     ┌────────────┐
-    │ Container  │ ← Replica 2 (any node)
+    │ Container  │ ← Replica 2 (Coolify node)
     │   #2       │
     └────────────┘
 ```
 
 **Behavior**:
-- Traefik runs as Swarm service with 2 replicas
-- Each replica listens on ports 80/443
-- Docker routing mesh distributes traffic across replicas
-- If one node fails, other replica continues serving
+- Coolify's Traefik runs on both app servers
+- Each Traefik instance listens on ports 80/443
+- Traffic distributed across both nodes
+- If one node fails, other continues serving
 - Zero downtime during node failure
 
 ### Layer 3: HAProxy → Database Servers (Unchanged)
@@ -243,7 +243,7 @@ HAProxy Backend Configuration:
 
 ## SSL/TLS Architecture
 
-**CHANGED (2026-04-03):** SSL termination moved from HAProxy to Traefik
+**CHANGED (2026-05-12):** SSL termination by Coolify's Traefik via Let's Encrypt DNS-01
 
 ### Certificate Chain (NEW Architecture)
 
@@ -251,13 +251,13 @@ HAProxy Backend Configuration:
 Let's Encrypt (CA)
      │
      ├── *.quantyralabs.cc (Traefik on re-db/re-node-02)
-     │   └── Wildcard certificate managed by Dokploy
+     │   └── Wildcard certificate managed by Coolify's Traefik
      │   └── DNS-01 challenge via Cloudflare API
      │   └── Auto-renewal by Traefik
      │
      └── app-specific domains (Traefik on re-db/re-node-02)
          └── Per-domain certificates
-         └── Auto-provisioned by Dokploy
+         └── Auto-provisioned by Coolify's Traefik
 ```
 
 ### SSL Termination Points (CHANGED)
@@ -279,9 +279,9 @@ User ──HTTPS──► Cloudflare ──HTTPS──► Traefik ──HTTP─�
 
 ### Why No SSL Issues with Multiple App Servers
 
-Each app server has Traefik with shared certificate storage:
-- Certificates stored in Docker volume `dokploy-letsencrypt`
-- Both Traefik replicas access same certificate store
+Each app server has Coolify's Traefik with shared certificate storage:
+- Certificates stored in Docker volume `coolify-letsencrypt`
+- Both Traefik instances access same certificate store
 - Let's Encrypt validates via DNS-01 (works behind Cloudflare proxy)
 - No shared state required between app servers
 
@@ -292,8 +292,8 @@ Each app server has Traefik with shared certificate storage:
 - Certbot managed certificates via DNS-01 challenge
 - Manual certificate provisioning per domain
 
-**After (Dokploy/Traefik)**:
-- Traefik terminates SSL with Let's Encrypt
+**After (Coolify/Traefik):**
+- Coolify's Traefik terminates SSL with Let's Encrypt
 - Automatic certificate provisioning via DNS-01
 - Wildcard certificates supported
 - Cloudflare API integration for DNS-01 challenge
@@ -301,7 +301,7 @@ Each app server has Traefik with shared certificate storage:
 
 ## HAProxy Configuration
 
-**CHANGED (2026-04-03):** HAProxy now handles DATABASE TRAFFIC ONLY
+**CHANGED (2026-05-12):** HAProxy now handles DATABASE TRAFFIC ONLY (PostgreSQL). Redis has been fully removed.
 
 ### Database-Only Architecture
 
@@ -309,7 +309,7 @@ HAProxy no longer routes application traffic. Applications route directly via Cl
 
 ```
 /etc/haproxy/
-├── haproxy.cfg              # Main config (PostgreSQL, Redis, Stats)
+├── haproxy.cfg              # Main config (PostgreSQL, Stats)
 └── domains/
     ├── web_http.cfg         # Minimal (returns 404 for all HTTP)
     ├── web_https.cfg        # Minimal (returns 404 for all HTTPS)
@@ -389,7 +389,7 @@ backend not_found_backend
 
 ## Failover Scenarios
 
-**CHANGED (2026-04-03):** Updated for Option B architecture
+**CHANGED (2026-05-12):** Updated for Coolify architecture
 
 ### Scenario 1: App Server Failure
 
@@ -503,9 +503,8 @@ All servers send logs to Loki via Promtail:
 │  │ router   │     │   apps   │     │   dbs    │                │
 │  │ -syslog  │     │ -syslog  │     │ -syslog  │                │
 │  │ -auth    │     │ -auth    │     │ -auth    │                │
-│  │ -haproxy │     │ -nginx   │     │ -postgres│                │
-│  └────┬─────┘     │ -docker  │     │ -redis   │                │
-│       │           └────┬─────┘     │ -patroni │                │
+│  │ -haproxy │     │ -docker  │     │ -postgres│                │
+│  └────┬─────┘     └────┬─────┘     │ -patroni │                │
 │       │                │           └────┬─────┘                │
 │       │                │                │                       │
 │       └────────────────┼────────────────┘                       │
@@ -617,43 +616,40 @@ Each server has:
 - OCSP stapling enabled
 - Automatic HTTP→HTTPS redirect
 
-## Dokploy Architecture (NEW 2026-04-03)
+## Coolify Architecture (UPDATED 2026-05-12)
 
 ### Overview
 
-Dokploy is the primary deployment platform, replacing CapRover and the legacy Flask dashboard. It runs on a Docker Swarm cluster with Traefik for load balancing and SSL termination.
+Coolify v4 is the primary deployment platform, replacing CapRover, Dokploy, and the legacy Flask dashboard. It uses Docker Compose with Traefik for load balancing and SSL termination.
 
-### Docker Swarm Configuration
+### Coolify Cluster Configuration
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                        DOKPLOY SWARM CLUSTER                             │
+│                        COOLIFY CLUSTER (Docker Compose)                 │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
-│   re-db (Manager)                    re-node-02 (Worker)                │
+│   re-db (Manager)                    re-node-02 (Remote Server)         │
 │   100.92.26.38                       100.89.130.19                      │
 │                                                                          │
-│   • Dokploy Dashboard (:3000)        • App containers                   │
-│   • dokploy-postgres                 • Traefik replica                  │
-│   • dokploy-redis                                                       │
-│   • Traefik replica                 (1 Manager + 1 Worker)              │
+│   • Coolify Dashboard (:8000)        • App containers                   │
+│   • coolify-postgres                 • Traefik replica                  │
+│   • Traefik replica                                                      │
 │                                                                          │
-│   Swarm Services:                                                        │
-│   - dokploy: 1/1 replicas (manager only)                                │
-│   - dokploy-traefik: 2/2 replicas (HA)                                  │
-│   - dokploy-postgres: 1/1 replicas                                      │
-│   - dokploy-redis: 1/1 replicas                                         │
+│   Services:                                                               │
+│   - coolify: (manager only)                                              │
+│   - coolify-traefik: (both nodes, HA)                                   │
+│   - coolify-postgres: (manager only)                                     │
 │                                                                          │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Key Design Decisions:**
-- **1 Manager + 1 Worker**: Avoids split-brain scenarios with 2 managers
-- **Docker Routing Mesh**: Enables cross-node communication
-- **Traefik HA**: 2 replicas (one per node) with shared certificate storage
+- **Docker Compose**: Container orchestration (NOT Docker Swarm)
+- **Coolify's Traefik**: Handles app routing and SSL on both nodes
 - **Management UI NOT HA**: Dashboard runs on manager only (acceptable for admin tool)
 
-### Traffic Flow Through Dokploy
+### Traffic Flow Through Coolify
 
 ```
 Cloudflare DNS
@@ -661,38 +657,38 @@ Cloudflare DNS
       ├─ 208.87.128.115 (re-db)
       └─ 23.227.173.245 (re-node-02)
       ↓
-Traefik (Docker Swarm service, 2 replicas)
-      ↓ (SSL termination, Let's Encrypt)
+Traefik (Coolify-managed, on both nodes)
+      ↓ (SSL termination, Let's Encrypt DNS-01)
       ↓ (Routes by Host header)
       ↓
-Docker Containers (distributed via Swarm)
+Docker Containers (managed by Coolify)
        ↓ (Connect to databases)
        ↓
 HAProxy (router-01/02) → Patroni
 ```
 
-### Dokploy Key Features
+### Coolify Key Features
 
 1. **Automatic SSL**: Let's Encrypt with DNS-01 challenge via Cloudflare API
 2. **Git Integration**: Deploy from GitHub/GitLab with auto-deploy on push
 3. **Environment Variables**: Secrets management per application
 4. **Domain Management**: Automatic DNS and SSL provisioning
-5. **Database Connections**: Connect to external Patroni cluster or managed containers
+5. **Database Connections**: Connect to external Patroni cluster
 6. **Monitoring**: Built-in metrics and logs
-7. **Multi-Replica Apps**: Deploy with 2+ replicas for HA
+7. **Multi-Server Deploy**: Deploy to both app servers for HA
 
 ### Application Deployment Model
 
 | Setting | Value | Reason |
 |---------|-------|--------|
-| Port | 0 (auto) | Detect from Dockerfile EXPOSE |
+| Port | 0 (auto) | Coolify Traefik handles routing |
 | Replicas | 2+ | High availability across nodes |
 | Domain | *.domain.tld | Wildcard or per-domain SSL |
 | Database | External | Use Patroni cluster via HAProxy |
 
 ### Connecting to External Databases
 
-Applications deployed via Dokploy should connect to the existing Patroni cluster:
+Applications deployed via Coolify should connect to the existing Patroni cluster:
 
 ```bash
 # PostgreSQL connection
@@ -703,23 +699,23 @@ DB_PORT=5001            # RO endpoint
 
 **Note**: Database endpoints are UNCHANGED from previous architecture.
 
-### Dokploy Dashboard Access
+### Coolify Dashboard Access
 
 ```
-URL: https://deploy.quantyralabs.cc
+URL: http://100.92.26.38:8000 (Tailscale only)
 Location: re-db only (not HA)
 Purpose: Application and domain management
 ```
 
 ### Comparison: Old vs New Deployment
 
-| Aspect | Before (CapRover/Flask) | After (Dokploy) |
+| Aspect | Before (CapRover/Flask) | After (Coolify) |
 |--------|-------------------------|-----------------|
 | App Routing | Cloudflare → HAProxy → Traefik | Cloudflare → Traefik |
-| SSL Management | Certbot on HAProxy | Traefik Let's Encrypt |
-| Deployment | Flask dashboard or CapRover UI | Dokploy UI |
+| SSL Management | Certbot on HAProxy | Traefik Let's Encrypt DNS-01 |
+| Deployment | Flask dashboard or CapRover UI | Coolify UI |
 | Database | External Patroni | External Patroni (unchanged) |
-| HA Model | HAProxy round-robin | Docker Swarm + Traefik |
+| HA Model | HAProxy round-robin | Coolify + Traefik (multi-server) |
 | SSL Certificates | Manual provisioning | Automatic DNS-01 |
 
 ---
@@ -732,7 +728,7 @@ Purpose: Application and domain management
 |-----------|---------------|-----------|-----------|
 | PostgreSQL | pg_dump + S3 | Hourly | 30 days |
 | App configs | Git repository | On change | Forever |
-| SSL certs | certbot renew | Auto | 90 days |
+| SSL certs | Traefik auto-renew | Auto | 90 days |
 
 ### Recovery Procedures
 

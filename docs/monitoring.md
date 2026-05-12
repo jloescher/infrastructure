@@ -134,9 +134,9 @@ Key metrics:
 
 ### Traefik Exporter
 
-**NEW (2026-04-03)**: Traefik metrics are now collected for monitoring the Dokploy deployment platform.
+**NEW (2026-04-03)**: Traefik metrics are now collected for monitoring the Coolify deployment platform.
 
-Traefik exposes metrics via its internal metrics endpoint. Configuration is handled automatically by Dokploy.
+Traefik exposes metrics via its internal metrics endpoint. Configuration is handled automatically by Coolify.
 
 **Location**: App servers (re-db, re-node-02)
 **Port**: 8080 (internal API endpoint)
@@ -293,8 +293,7 @@ Dashboard JSON files are provisioned automatically from:
 ├── traefik_dashboard.json
 ├── docker_swarm_dashboard.json
 ├── node_exporter_dashboard.json
-├── postgres_haproxy_dashboard.json
-└── redis_dashboard.json
+└── postgres_haproxy_dashboard.json
 ```
 
 **Reload Dashboards**:
@@ -379,7 +378,7 @@ groups:
 
 ### Traefik Alerts
 
-**NEW (2026-04-03)**: Alerts for Dokploy/Traefik load balancer.
+**NEW (2026-04-03)**: Alerts for Coolify/Traefik load balancer.
 
 ```yaml
   - name: traefik
@@ -571,7 +570,7 @@ Each server has a customized Promtail config collecting relevant logs:
 |--------|----------------|
 | router-01/02 | syslog, auth, haproxy, prometheus, alertmanager, dashboard |
 | re-db, re-node-02 | syslog, auth, docker-related syslog |
-| re-node-01/03/04 | syslog, auth, postgresql, patroni, redis |
+| re-node-01/03/04 | syslog, auth, postgresql, patroni |
 
 ### HAProxy Log Collection
 

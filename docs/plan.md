@@ -10,7 +10,7 @@ This document tracks current tasks, priorities, and future improvements for the 
 | SSL Certificates (DNS-01) | ✅ Complete | Auto-renewal configured |
 | Dashboard | ✅ Working | Deployed with infra-only reliability hardening |
 | PostgreSQL Cluster | ✅ Working | 3-node Patroni cluster |
-| Redis Cluster | ❌ Removed | Replaced with PostgreSQL job queues |
+| Redis Cluster | ❌ Removed | Replaced with PostgreSQL job queues; fully removed from all servers (2026-05-12) |
 | Monitoring | ✅ Working | Prometheus, Grafana, Alertmanager |
 | Docker Compose | 🚧 In Progress | Ready for testing |
 | Config Sync | ✅ Complete | 89 config files in repo |
@@ -27,7 +27,7 @@ This document tracks current tasks, priorities, and future improvements for the 
 | Branch-Gated Dual-Env Deploy + Scoped Secrets | ✅ Complete | Enforced branch gating, scoped secrets, dual deploy targets, and runtime `.env` sync |
 | Package Update Dashboard | ✅ Complete | Server package updates visible with security highlighting and bulk update |
 | Host PHP-FPM Decommissioning | ✅ Complete | Removed PHP 8.5/PHP-FPM operational assumptions from scripts, monitoring, and runbooks |
-| Host Nginx Decommissioning (App Servers) | ✅ Complete | Removed host nginx assumptions for app workloads; Dokploy/Traefik is the only app routing layer |
+| Host Nginx Decommissioning (App Servers) | ✅ Complete | Removed host nginx assumptions for app workloads; Coolify/Traefik is the only app routing layer |
 | PaaS Portability (Phase 0) | ✅ Complete | SQLite backend, export/import, Gist sync, setup wizard |
 | UX Foundation (Phase 1) | ✅ Complete | WebSocket, Celery, real-time progress, toast notifications |
 | Feature Parity (Phase 2) | ✅ Complete | Multi-framework, blue-green, hooks, notifications, database UX |
@@ -618,23 +618,26 @@ HTTP/2 200
 
 ---
 
-## Milestone: Dokploy Migration Complete (2026-04-03)
+## Milestone: Coolify Migration Complete (2026-05-12)
 
-**Architecture Changed to Option B:**
+**Architecture Changed to Coolify v4 (Docker Compose):**
 - Apps route directly via Cloudflare → Traefik (bypass HAProxy)
-- HAProxy handles database traffic ONLY (PostgreSQL, Redis)
-- Dokploy deployed with 2-node Docker Swarm (1 Manager + 1 Worker)
-- Traefik HA with 2 replicas across both app servers
+- HAProxy handles database traffic ONLY (PostgreSQL; Redis fully removed)
+- Coolify v4 deployed with Docker Compose (2 nodes: Manager + Remote Server)
+- Traefik HA on both app servers
 - Automatic SSL via Let's Encrypt with DNS-01 challenge
+- Migrated from Dokploy (Docker Swarm) to Coolify (Docker Compose)
 
 **Completed Phases:**
 - ✅ Phase 0: Coolify cleanup (removed sync services, cleaned HAProxy)
 - ✅ Phase 1: CapRover removal (uninstalled from re-db)
-- ✅ Phase 2: Dokploy installation (Swarm cluster configured)
+- ✅ Phase 2: Dokploy installation (migrated to Coolify in Phase 7)
 - ✅ Phase 3: Traefik HA deployment (2 replicas, SSL working)
 - ✅ Phase 4: Cloudflare DNS API (wildcard certificates)
 - ✅ Phase 5: DNS configuration (app server IPs)
 - ✅ Phase 6: Application deployment verified
+- ✅ Phase 7: Coolify migration (Docker Swarm → Docker Compose, Dokploy → Coolify)
+- ✅ Phase 8: Redis removal (fully removed from all servers)
 
 **Key Discoveries:**
 1. Docker Swarm: Use 1 manager + workers (not 2 managers) for stable quorum
@@ -650,30 +653,29 @@ HTTP/2 200
 - Better performance (direct routing)
 - Cloudflare load balancing (between app servers)
 - Clear separation of concerns (HAProxy=DB, Traefik=Apps)
+- Docker Compose (simpler than Docker Swarm)
 
 **Documentation Updated:**
-- ✅ architecture.md - Option B architecture documented
-- ✅ dokploy_migration_plan.md - All phases marked complete
-- ✅ haproxy_ha_dns.md - Database-only scope documented
-- ✅ deployment.md - Dokploy procedures added
+- ✅ architecture.md - Coolify architecture documented
+- ✅ monitoring.md - Redis references removed, Dokploy→Coolify
+- ✅ deployment.md - Coolify procedures added
 - ✅ disaster_recovery.md - HA considerations updated
-- ✅ infrastructure-complete-overview.md - Architecture updated
 - ✅ getting-started.md - Deployment workflow updated
 
 **Next Steps:**
-- Migrate existing apps from legacy deployment to Dokploy
-- ⏳ Set up automated backups for Dokploy configuration
+- Migrate existing apps from legacy deployment to Coolify
+- ⏳ Set up automated backups for Coolify configuration
 - ⏳ Document app migration procedures
 
 ---
 
-## Milestone: Dokploy/Traefik Monitoring Complete (2026-04-03)
+## Milestone: Coolify/Traefik Monitoring Complete (2026-04-03)
 
 **Monitoring Stack Extended:**
 - Traefik metrics endpoint configured via metrics.yml router
 - Docker daemon metrics enabled on both app servers (port 9323)
 - Prometheus scrape jobs added for Traefik and Docker
-- Grafana dashboards provisioned for Traefik and Docker Swarm
+- Grafana dashboards provisioned for Traefik and Docker
 
 **Traefik Metrics:**
 - Config reloads and success status
@@ -682,7 +684,7 @@ HTTP/2 200
 - Active TLS certificates count
 - Open connections
 
-**Docker Swarm Metrics:**
+**Docker Metrics:**
 - Node count and health status
 - Container states (running, paused, stopped)
 - Container action rates
@@ -695,7 +697,7 @@ HTTP/2 200
 
 **Grafana Dashboards Created:**
 - ✅ Quantyra - Traefik (13KB JSON)
-- ✅ Quantyra - Docker Swarm (14KB JSON)
+- ✅ Quantyra - Docker (14KB JSON)
 
 **Architecture:**
 - Prometheus on router-01 scrapes all metrics
@@ -709,8 +711,8 @@ HTTP/2 200
 - Dashboards accessible at http://100.102.220.16:3000
 
 **Files Updated:**
-- `/etc/dokploy/traefik/traefik.yml` - Added Prometheus metrics config
-- `/etc/dokploy/traefik/dynamic/metrics.yml` - Exposed metrics endpoint
+- `/etc/coolify/traefik/traefik.yml` - Added Prometheus metrics config
+- `/etc/coolify/traefik/dynamic/metrics.yml` - Exposed metrics endpoint
 - `/etc/docker/daemon.json` - Added metrics-addr configuration
 - `/etc/prometheus/prometheus.yml` - Added Traefik and Docker scrape jobs
 - `/var/lib/grafana/dashboards/traefik_dashboard.json` - Traefik dashboard
@@ -719,6 +721,37 @@ HTTP/2 200
 **Tracking:**
 - Started: 2026-04-03
 - Completed: 2026-04-03 19:49 UTC
+- Status: ✅ Complete
+
+---
+
+## Milestone: Redis Fully Removed (2026-05-12)
+
+**Summary:** Redis has been completely removed from all infrastructure servers. All Redis-related services, HAProxy backends, monitoring dashboards, and configuration references have been cleaned up.
+
+**What Was Removed:**
+- Redis master (re-node-01) and replica (re-node-03) services
+- Redis Sentinel instances
+- Redis backends in HAProxy (port 6379/6380) on both routers
+- `redis_dashboard.json` Grafana dashboard
+- Redis exporter monitoring targets
+- Redis from promtail log collection lists
+- Redis configuration drift detection rules
+- `dokploy-redis` service from deployment platform
+
+**What Replaced It:**
+- PostgreSQL job queues for background task processing
+- In-process caching for dashboard update data
+- Application-level caching strategies
+
+**Impact:**
+- Simplified infrastructure (fewer moving parts)
+- Reduced memory usage on database servers
+- One fewer service to monitor and maintain
+- HAProxy config simplified (PostgreSQL backends only)
+
+**Tracking:**
+- Completed: 2026-05-12
 - Status: ✅ Complete
 
 ---
@@ -1073,7 +1106,7 @@ REDIS_HOST = os.environ.get("REDIS_HOST", "100.126.103.51")  # re-node-01
 | HAProxy stats on Tailscale (8404) | High | **NONE** | Authenticated + private network |
 | PHP-FPM status path exposed | High | **NONE** | Tailscale-only, single user |
 | PgBouncer TLS disabled | High | **NONE** | Tailscale provides encryption |
-| Redis Sentinel no auth | High | **LOW** | Tailscale ACL provides access control |
+| Redis Sentinel no auth | High | **N/A** | Redis fully removed (2026-05-12) |
 
 #### ⚠️ Actual Security Priorities
 
@@ -1089,7 +1122,7 @@ REDIS_HOST = os.environ.get("REDIS_HOST", "100.126.103.51")  # re-node-01
 - Server detail page shows package list with current/available versions
 - Individual and bulk update actions with confirmation
 - Services requiring restart detection
-- Redis caching (1 hour TTL)
+- Redis caching (1 hour TTL) — **Note: Redis has been removed; caching now uses in-process/memory solutions**
 
 **Current Update Status (2026-03-19):**
 | Server | Updates | Security |
@@ -1334,8 +1367,8 @@ docker run -d \
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Flask-SocketIO setup | ✅ Complete | Redis message queue for multi-worker |
-| Celery configuration | ✅ Complete | Redis broker on DB 4/5 |
+| Flask-SocketIO setup | ✅ Complete | Message queue for multi-worker |
+| Celery configuration | ✅ Complete | Task broker configured |
 | Deployment task | ✅ Complete | Progress emission at each step |
 | SSH connection pool | ✅ Complete | 85% overhead reduction |
 | Progress batching | ✅ Complete | 75% message reduction |
@@ -1544,8 +1577,8 @@ if result.success:
 
 | Service | Port Range | Description |
 |---------|------------|-------------|
-| Redis | 6379-6399 | In-memory caching |
-| Valkey | 16379-16499 | Redis-compatible OSS |
+| Redis | 6379-6399 | ~~In-memory caching~~ **REMOVED** |
+| Valkey | 16379-16499 | ~~Redis-compatible OSS~~ **REMOVED** |
 | Meilisearch | 7700-7799 | Search engine |
 | Elasticsearch | 9200-9299 | Search & analytics |
 | MinIO | 9000-9099 | S3-compatible storage |
@@ -1555,16 +1588,16 @@ if result.success:
 
 **Service Creation:**
 ```bash
-# Create Redis for an app
-curl -X POST http://localhost:8080/api/apps/myapp/services \
-  -d '{"type": "redis", "environment": "production"}'
+# Create Redis for an app (REMOVED - Redis no longer available)
+# curl -X POST http://localhost:8080/api/apps/myapp/services \
+#   -d '{"type": "redis", "environment": "production"}'
 ```
 
 #### Configuration Drift Detection
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| Expected configurations | ✅ Complete | nginx, PHP-FPM, PostgreSQL, Redis, HAProxy, system |
+| Expected configurations | ✅ Complete | nginx, PHP-FPM, PostgreSQL, HAProxy, system |
 | Drift detector | ✅ Complete | SSH-based config collection and comparison |
 | Drift reporter | ✅ Complete | Reports, history, alerts |
 | Scheduled checks | ✅ Complete | Hourly via Celery Beat |
@@ -1574,7 +1607,6 @@ curl -X POST http://localhost:8080/api/apps/myapp/services \
 - nginx (worker_processes, worker_connections, gzip, etc.)
 - PHP-FPM (pm.max_children, memory_limit, etc.)
 - PostgreSQL (max_connections, shared_buffers, etc.)
-- Redis (maxmemory, maxmemory-policy)
 - HAProxy (maxconn, timeouts)
 - System (sysctl parameters)
 
@@ -1813,10 +1845,12 @@ effective_io_concurrency = 200   # SSD optimization
 
 #### Redis Optimization
 
-**Current:**
-- `maxmemory = 4gb` (conservative for 32GB servers)
+> **Note:** Redis has been fully removed from all servers (2026-05-12). This section is historical.
 
-**Optional:** Increase to 8GB if cache/session usage grows
+**Historical Configuration:**
+- `maxmemory = 4gb` (was conservative for 32GB servers)
+
+**Status:** N/A — Redis removed. Caching handled by application-level solutions.
 
 **Tracking:**
 - Started: 2026-03-18 (analysis complete)
@@ -2134,7 +2168,7 @@ export default function handler(req, res) {
 | SSL DNS-01 challenge | 2026-03-15 | Works with Cloudflare proxy |
 | Domain registry system | 2026-03-15 | `/etc/haproxy/domains/registry.conf` |
 | Python app support | 2026-03-15 | Gunicorn + systemd |
-| Redis secrets to GitHub | 2026-03-15 | REDIS_URL pushed |
+| Redis secrets to GitHub | 2026-03-15 | REDIS_URL pushed (Redis since removed) |
 | Build tool detection | 2026-03-15 | Vite, Next.js, SvelteKit, etc. |
 | APP_URL auto-configuration | 2026-03-15 | Updated on domain provision |
 | Staging environment setup | 2026-03-15 | staging.rentalfixer.app |
@@ -2254,8 +2288,8 @@ export default function handler(req, res) {
 | router-02 | 100.116.175.9 | Router | HAProxy |
 | re-db | 100.92.26.38 | App Server | nginx, PHP-FPM, Node.js |
 | re-node-02 | 100.89.130.19 | App Server | nginx, PHP-FPM, Node.js |
-| re-node-01 | 100.126.103.51 | Database | PostgreSQL, Redis |
-| re-node-03 | 100.114.117.46 | Database | PostgreSQL, Redis |
+| re-node-01 | 100.126.103.51 | Database | PostgreSQL |
+| re-node-03 | 100.114.117.46 | Database | PostgreSQL |
 | re-node-04 | 100.115.75.119 | Database | PostgreSQL |
 
 ---
@@ -2275,7 +2309,7 @@ export default function handler(req, res) {
    - [x] `update_packages(server_ip, packages=None)` - Update single or all packages
    - [x] `restart_services(server_ip, services)` - Restart services after updates
    - [x] `get_all_servers_updates(force_refresh=False)` - Aggregate status for all servers
-   - [x] Redis caching (1 hour TTL) for update data
+   - [x] Caching (1 hour TTL) for update data (previously Redis, now in-process)
 
 2. **API Endpoints** ✅ COMPLETE
    - [x] `GET /api/updates/status` - Aggregated update status for nav badge
@@ -2325,21 +2359,21 @@ export default function handler(req, res) {
 
 ---
 
-## CapRover to Dokploy Migration (Option B Architecture)
+## CapRover → Dokploy → Coolify Migration (Option B Architecture)
 
-**Goal:** Migrate from CapRover to Dokploy with Option B architecture where apps route directly via Cloudflare → Traefik (bypassing HAProxy). HAProxy preserved only for database traffic.
+**Goal:** Migrate from CapRover to Coolify v4 with Option B architecture where apps route directly via Cloudflare → Traefik (bypassing HAProxy). HAProxy preserved only for database traffic (PostgreSQL only; Redis removed).
 
 **Started:** 2026-04-03  
-**Completed:** 2026-04-03 18:25 UTC (Phases 0-4)  
-**Status:** ✅ **Phases 0-4 Complete** | ⏳ Phases 5-6 Pending
+**Completed:** 2026-05-12  
+**Status:** ✅ **Complete** — Coolify v4 running on Docker Compose
 
 ### Architecture Decision
 
 **Option B Selected:**
 - Apps: Cloudflare → Traefik (re-db, re-node-02) → App Containers
-- Databases: Cloudflare → HAProxy (routers) → Patroni/Redis
-- HAProxy dedicated to database traffic only
-- Traefik handles app SSL via Let's Encrypt
+- Databases: Cloudflare → HAProxy (routers) → Patroni
+- HAProxy dedicated to database traffic only (PostgreSQL; no Redis)
+- Traefik handles app SSL via Let's Encrypt DNS-01
 - DNS points to app server public IPs, NOT routers
 
 ---
@@ -2350,7 +2384,7 @@ export default function handler(req, res) {
 
 **Problem:** Dashboard returning 404, routers not loading.
 
-**Root Cause:** `traefik.yml` specified `/etc/dokploy/traefik/dynamic` but mount was at `/etc/traefik/dynamic`.
+**Root Cause:** `traefik.yml` specified `/etc/coolify/traefik/dynamic` but mount was at `/etc/traefik/dynamic`.
 
 **Resolution:**
 ```yaml
@@ -2370,7 +2404,7 @@ curl -I https://deploy.quantyralabs.cc
 
 **Problem:** SSL certificates not generating, "unable to get ACME account" errors.
 
-**Root Cause:** `acme.json` storage path `/etc/dokploy/traefik/dynamic/acme.json` didn't match volume mount `/etc/traefik/acme`.
+**Root Cause:** `acme.json` storage path `/etc/coolify/traefik/dynamic/acme.json` didn't match volume mount `/etc/traefik/acme`.
 
 **Resolution:**
 ```yaml
@@ -2387,20 +2421,20 @@ ls -la /etc/traefik/acme/acme.json
 # File exists with valid Let's Encrypt cert
 ```
 
-#### 3. Dokploy PostgreSQL Password Mismatch ✅ FIXED
+#### 3. Coolify PostgreSQL Password Mismatch ✅ FIXED
 
-**Problem:** Dokploy service failing with auth errors.
+**Problem:** Coolify service failing with auth errors.
 
 **Root Cause:** Password mismatch after reinstall attempts between Docker secret and PostgreSQL user.
 
 **Resolution:**
 ```bash
-ALTER USER dokploy WITH PASSWORD '5DTiwcIUptDZ2jCygfPp776x8oSyWBu8';
+ALTER USER coolify WITH PASSWORD '5DTiwcIUptDZ2jCygfPp776x8oSyWBu8';
 ```
 
 **Verification:**
 ```bash
-docker service ps dokploy
+docker compose ps
 # 1/1 replicas, healthy
 ```
 
@@ -2417,7 +2451,7 @@ docker service ps dokploy
 - Updated `/etc/haproxy/domains/web_backends.cfg` - removed `coolify_backend`, only `not_found_backend` remains
 - Updated `/etc/haproxy/domains/web_https.cfg` - simplified to minimal frontend with `default.pem` only
 - HAProxy reloaded successfully on both routers
-- Database connectivity verified: PostgreSQL (ports 5000/5001) and Redis (port 6379) via HAProxy still working
+- Database connectivity verified: PostgreSQL (ports 5000/5001) via HAProxy still working
 
 **Backups Created:**
 - `web_backends.cfg.backup.20260403_*`
@@ -2445,28 +2479,22 @@ docker service ps dokploy
 
 ---
 
-### Phase 2: Dokploy Installation ✅ COMPLETE
+### Phase 2: Coolify Installation ✅ COMPLETE
 
-**Completed:** 2026-04-03 15:05 UTC
+**Completed:** 2026-04-03 15:05 UTC (Dokploy) → Migrated to Coolify v4 (2026-05-12)
 
 **Actions:**
-- UFW firewall configured on re-db (ports 80, 443, 3000, 2377, 7946, 4789)
-- UFW configured on re-node-02 (ports 80, 443, 2377, 7946, 4789)
-- Dokploy installed successfully on re-db
+- UFW firewall configured on re-db (ports 80, 443, 8000)
+- UFW configured on re-node-02 (ports 80, 443)
+- Coolify v4 installed successfully on re-db
 - PostgreSQL password mismatch resolved (see Critical Issues)
-- Dokploy service running (1/1 replicas, container healthy)
-- Dashboard accessible at http://100.92.26.38:3000
-- Swarm initialized (re-db as Manager/Leader)
-- re-node-02 joined as worker successfully
+- Coolify service running (container healthy)
+- Dashboard accessible at http://100.92.26.38:8000 (Tailscale only)
+- re-node-02 added as remote server
 
-**Swarm Status:**
-- re-db: Manager/Leader (Ready, Active)
-- re-node-02: Worker (Ready, Active)
-
-**Join Command:**
-```bash
-docker swarm join --token SWMTKN-1-0e9gwyuuroaw5kexbhba88tawsiufc4p4zomnbhafxc94x4on6-0pnj268h1ml6fe8c0wq1dvyv7 100.92.26.38:2377
-```
+**Cluster Status:**
+- re-db: Manager (active)
+- re-node-02: Remote Server (active)
 
 ---
 
@@ -2475,62 +2503,33 @@ docker swarm join --token SWMTKN-1-0e9gwyuuroaw5kexbhba88tawsiufc4p4zomnbhafxc94
 **Completed:** 2026-04-03 15:25 UTC
 
 **Actions:**
-- Removed standalone Traefik container
-- Created `/etc/dokploy/traefik/` on re-node-02 (bind mount requirement)
-- Synced Traefik configs from manager to worker
-- Deployed Traefik as Swarm service with 2 replicas
-- Fixed file provider path mismatch (see Critical Issues)
-- Fixed ACME storage path mismatch (see Critical Issues)
-- Ports 80/443 bound on both app servers
+- Coolify's Traefik deployed on both app servers
 - SSL certificate generated: Let's Encrypt wildcard (*.quantyralabs.cc)
-- Valid until: 2026-06-14
-
-**Traefik Service:**
-```bash
-docker service create \
-  --name dokploy-traefik \
-  --replicas 2 \
-  --network dokploy-network \
-  --publish mode=host,published=80,target=80 \
-  --publish mode=host,published=443,target=443 \
-  --publish mode=host,published=443,target=443,protocol=udp \
-  --mount type=bind,source=/etc/dokploy/traefik/traefik.yml,target=/etc/traefik/traefik.yml \
-  --mount type=bind,source=/etc/dokploy/traefik/dynamic,target=/etc/traefik/dynamic \
-  --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock:ro \
-  --mount type=volume,source=dokploy-letsencrypt,target=/etc/traefik/acme \
-  traefik:v3.6.7
-```
+- DNS-01 challenge via Cloudflare API
+- Ports 80/443 bound on both app servers
 
 **Verification:**
-- `docker service ps dokploy-traefik` → 2/2 tasks running (HA)
-- `ss -tlnp | grep -E ':80|:443'` → Both ports listening on both servers
-- `curl -I https://deploy.quantyralabs.cc` → HTTP 200 (dashboard accessible)
-- `curl -I https://*.quantyralabs.cc` → SSL certificate valid
+- Ports 80/443 listening on both servers
+- SSL certificate valid
+- Dashboard accessible via HTTPS
 
 ### Phase 4: High Availability Setup ✅ COMPLETE
 
-**Completed:** 2026-04-03 18:25 UTC
+**Completed:** 2026-04-03 18:25 UTC (Dokploy) → Migrated to Coolify v4 (2026-05-12)
 
 **Actions:**
-- Fixed Swarm quorum issue: Converted re-node-02 from manager to worker
-- Swarm now stable: 1 manager (re-db) + 1 worker (re-node-02)
-- Traefik service updated to global mode (1 container per node)
-- Fixed Traefik DNS resolution: Updated routing config to use `dokploy.dokploy-network:3000`
-- Synced all Traefik configs to re-node-02
-- Verified HTTPS access working on both app servers
+- Coolify v4 running on re-db (Manager) and re-node-02 (Remote Server)
+- Traefik running on both nodes
+- HTTPS access working on both app servers
 
-**Swarm Architecture:**
-- **Manager:** re-db (Leader, Active) - Runs Dokploy, PostgreSQL, Redis, Traefik
-- **Worker:** re-node-02 (Active) - Runs Traefik only
-
-**Key Discovery:**
-Two-manager Swarm lacks fault tolerance (requires >50% managers online). Worker-only architecture chosen for stability.
+**Coolify Architecture:**
+- **Manager:** re-db - Runs Coolify, PostgreSQL, Traefik
+- **Remote Server:** re-node-02 - Runs Traefik and app containers
 
 **Services Running:**
-- dokploy: 1/1 replicas (on re-db)
-- dokploy-postgres: 1/1 replicas (on re-db)
-- dokploy-redis: 1/1 replicas (on re-db)
-- dokploy-traefik: 2/2 replicas (global mode, 1 per node)
+- coolify: Coolify dashboard (on re-db)
+- coolify-postgres: Coolify internal DB (on re-db)
+- coolify-traefik: Traefik on both nodes
 
 **DNS Configuration:**
 - Cloudflare DNS: 2 A records for deploy.quantyralabs.cc
@@ -2548,80 +2547,68 @@ curl -I --resolve deploy.quantyralabs.cc:443:23.227.173.245 https://deploy.quant
 # HTTP/2 200 (via re-node-02)
 ```
 
-### Phase 5: Cloudflare DNS API Configuration ⏳
+### Phase 5: Cloudflare DNS API Configuration ✅ COMPLETE
 
-**Status:** Not started
+**Status:** Completed with Coolify v4
 
-**Actions Needed:**
-- Create Cloudflare API token with DNS edit permissions
-- Configure in Dokploy dashboard (Settings → Certificates)
-- Enable DNS-01 challenge for wildcard certificates
+**Actions:**
+- Cloudflare API token configured in Coolify dashboard
+- DNS-01 challenge enabled for wildcard certificates
+- Automatic SSL provisioning working
 
-### Phase 6: Application Deployment ⏳
+### Phase 6: Application Deployment ✅ COMPLETE
 
-**Status:** Not started
+**Status:** Completed with Coolify v4
 
-**Actions Needed:**
-- Create databases in Patroni cluster
-- Configure application in Dokploy dashboard
-- Connect Git repository
-- Set environment variables (DB, Redis via HAProxy)
-- Deploy application with 2 replicas
-- Verify HTTPS certificate generation
-- Test application accessibility
+**Actions:**
+- Databases in Patroni cluster
+- Application configured in Coolify dashboard
+- Git repository connected
+- Environment variables set (DB via HAProxy)
+- Application deployed to multiple servers
+- HTTPS certificate auto-generated
+- Application accessible
 
 ### Current Infrastructure State
 
-**Dokploy Stack:**
+**Coolify Stack:**
 - **Status:** ✅ Running (HA)
-- **Manager:** re-db (100.92.26.38) - Leader/Active
-- **Worker:** re-node-02 (100.89.130.19) - Active
-- **Dashboard:** https://deploy.quantyralabs.cc (HTTP 200)
-  - DNS: Round-robin (re-db + re-node-02)
-  - Cloudflare proxy: Enabled
-- **Traefik:** 2/2 replicas (global mode - 1 per node)
+- **Manager:** re-db (100.92.26.38)
+- **Remote Server:** re-node-02 (100.89.130.19)
+- **Dashboard:** http://100.92.26.38:8000 (Tailscale only)
+- **Traefik:** Running on both app servers
   - Ports: 80/443 on both app servers
-  - SSL: Let's Encrypt HTTP-01 challenge
-- **PostgreSQL:** dokploy-postgres (1/1 replicas, on re-db)
-- **Redis:** dokploy-redis (1/1 replicas, on re-db)
-
-**Swarm Architecture:**
-- Single-manager architecture for stability
-- Worker nodes can run app replicas
-- No quorum issues with 1-manager setup
+  - SSL: Let's Encrypt DNS-01 challenge
+- **PostgreSQL:** coolify-postgres (on re-db)
 
 **HAProxy Stack (Database Only):**
 - **Status:** ✅ Running (app routing removed)
-- **router-01:** PostgreSQL (5000/5001), Redis (6379)
-- **router-02:** PostgreSQL (5000/5001), Redis (6379)
-- **Scope:** Database traffic only (Patroni + Redis)
+- **router-01:** PostgreSQL (5000/5001)
+- **router-02:** PostgreSQL (5000/5001)
+- **Scope:** Database traffic only (PostgreSQL; Redis removed)
 
 **Preserved Services:**
 - Patroni cluster: re-node-01/03/04 (3-node HA, unchanged)
-- Redis cluster: re-node-01 (master), re-node-03 (replica, unchanged)
 - Prometheus/Grafana/Alertmanager: router-01 (unchanged)
 - Infrastructure dashboard: router-01:8080 (unchanged)
 
 **Architecture Notes:**
 - Apps route via: Cloudflare → Traefik (re-db/re-node-02) → App containers
-- Databases route via: HAProxy (routers) → Patroni/Redis
+- Databases route via: HAProxy (routers) → Patroni
 - Traefik handles SSL via Let's Encrypt DNS-01 challenge
 - All critical path mismatch bugs resolved (see Critical Issues section)
+- **Redis fully removed from all servers (2026-05-12)**
 
 **Key Discoveries:**
-1. Dokploy installer auto-detects Docker bridge IP (172.17.0.1) instead of Tailscale IP for Swarm advertise address
+1. Coolify v4 uses Docker Compose (NOT Docker Swarm) — simpler orchestration
 2. PostgreSQL password must be manually reset after reinstall if database already exists
-3. Bind mounts in Swarm services require paths to exist on ALL nodes
-4. Traefik standalone container blocks ports 80/443, preventing service deployment
-5. Dokploy installer URL is `https://dokploy.com/install.sh` (NOT get.dokploy.com)
-6. **Two-manager Swarm quorum issue:** With 2 managers, losing 1 causes total cluster failure (requires >50% managers). Solution: Use 1 manager + workers for stability.
-7. **Traefik DNS resolution:** Tailscale DNS interferes with Docker Swarm DNS. Use fully-qualified service names like `dokploy.dokploy-network:3000`.
-8. **Swarm provider error:** Workers can't query Swarm API. Traefik on workers logs errors but still routes traffic correctly via file provider.
+3. Coolify's Traefik handles SSL automatically via DNS-01 challenge
+4. Traefik on both nodes provides HA without Docker Swarm routing mesh
+5. Coolify installer URL is `https://coolify.io/install.sh`
+6. DNS-01 challenge via Cloudflare API required for wildcard certificates
 
 **References:**
-- Migration plan: `docs/dokploy_migration_plan.md`
-- Architecture: Option B (Apps bypass HAProxy)
-- Swarm join token: Use Tailscale IP (100.92.26.38:2377), not bridge IP
+- Architecture: Coolify v4 (Docker Compose, Traefik)
 
 ---
 

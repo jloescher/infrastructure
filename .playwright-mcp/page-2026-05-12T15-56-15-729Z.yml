@@ -1,0 +1,42 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - heading "Coolify" [level=1] [ref=e7]
+        - paragraph [ref=e8]: Create your account
+      - generic [ref=e9]:
+        - generic [ref=e11]:
+          - img [ref=e12]
+          - generic [ref=e14]:
+            - paragraph [ref=e15]: Root User Setup
+            - paragraph [ref=e16]: This user will be the root user with full admin access.
+        - generic [ref=e17]:
+          - generic [ref=e18]:
+            - generic [ref=e19]:
+              - text: Name
+              - generic [ref=e20]: "*"
+            - textbox [ref=e21]
+          - generic [ref=e22]:
+            - generic [ref=e23]:
+              - text: Email
+              - generic [ref=e24]: "*"
+            - textbox [ref=e25]
+          - generic [ref=e26]:
+            - generic [ref=e27]:
+              - text: Password
+              - generic [ref=e28]: "*"
+            - generic [ref=e29]:
+              - button "Toggle password visibility" [ref=e30] [cursor=pointer]:
+                - img [ref=e31]
+              - textbox [ref=e35]
+          - generic [ref=e36]:
+            - generic [ref=e37]:
+              - text: Password again
+              - generic [ref=e38]: "*"
+            - generic [ref=e39]:
+              - button "Toggle password visibility" [ref=e40] [cursor=pointer]:
+                - img [ref=e41]
+              - textbox [ref=e45]
+          - paragraph [ref=e47]: Your password should be min 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one symbol.
+          - button "Create Account" [ref=e48] [cursor=pointer]
+  - list

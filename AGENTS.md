@@ -5,10 +5,10 @@ This file contains instructions for AI agents working on this infrastructure rep
 ## Project Overview
 
 Infrastructure-as-code repository for managing Quantyra VPS infrastructure with:
-- **Dokploy deployment platform** with Docker Swarm (2 nodes)
-- **Traefik load balancer** with automatic SSL via Let's Encrypt
+- **Coolify v4** deployment platform with Docker Compose (2 nodes)
+- **Traefik load balancer** (Coolify-managed) with automatic SSL via Let's Encrypt DNS-01
 - PostgreSQL/Patroni cluster (3 nodes)
-- HAProxy routers for database traffic (2 nodes)
+- HAProxy routers for database traffic and TCP passthrough (2 nodes)
 - Monitoring stack (Prometheus, Grafana, Alertmanager)
 
 ## Tech Stack
@@ -20,7 +20,7 @@ Infrastructure-as-code repository for managing Quantyra VPS infrastructure with:
 | Dashboard | Flask | 3.x | Infrastructure management web UI |
 | Database | PostgreSQL | 18.x | Primary data store via Patroni cluster |
 | HA Layer | Patroni | 3.x | PostgreSQL high availability with etcd DCS |
-| Load Balancing | HAProxy | 2.8 | SSL termination, traffic routing |
+| Load Balancing | HAProxy | 2.8 | Database traffic, TCP passthrough |
 | DNS/CDN | Cloudflare | - | DNS management, WAF, DDoS protection |
 | Monitoring | Prometheus | 2.48.x | Metrics collection and alerting |
 | Visualization | Grafana | 10.2.x | Dashboards and alert management |
@@ -70,12 +70,13 @@ infrastructure/
 ## Key Information
 
 ### Server Access
-- **Dokploy Dashboard**: https://deploy.quantyralabs.cc (primary deployment interface)
-- **App Servers**: re-db (100.92.26.38), re-node-02 (100.89.130.19, public: 23.227.173.245)
+- **Coolify Dashboard**: http://100.92.26.38:8000 (Tailscale only, primary deployment interface)
+- **App Servers**: re-db (100.92.26.38, Coolify manager), re-node-02 (100.89.130.19, Coolify remote server)
 - **Routers**: router-01 (100.102.220.16), router-02 (100.116.175.9)
 - **Monitoring**: Prometheus (100.102.220.16:9090), Grafana (100.102.220.16:3000)
 
 ### Critical Credentials
+- **Coolify Dashboard**: http://100.92.26.38:8000 (Tailscale only)
 - **PostgreSQL Leader**: re-node-03 (100.114.117.46)
 - **HAProxy Stats**: Port 8404, auth: admin:jFNeZ2bhfrTjTK7aKApD
 - **Patroni Superuser**: patroni_superuser / 2e7vBpaaVK4vTJzrKebC
@@ -113,69 +114,72 @@ infrastructure/
 | re-node-04 | 100.115.75.119 | 172.93.54.122 | PostgreSQL Replica, etcd | 8 vCPU, 32GB RAM |
 | router-01 | 100.102.220.16 | 172.93.54.112 | HAProxy, Monitoring | 2 vCPU, 8GB RAM |
 | router-02 | 100.116.175.9 | 23.29.118.6 | HAProxy (Secondary) | 2 vCPU, 8GB RAM |
-| re-db | 100.92.26.38 | 208.87.128.115 | App Server (Primary) | 12 vCPU, 48GB RAM |
-| re-node-02 | 100.89.130.19 | 23.227.173.245 | App Server (ATL) | 12 vCPU, 48GB RAM |
+| re-db | 100.92.26.38 | 208.87.128.115 | App Server (Coolify Manager) | 12 vCPU, 48GB RAM |
+| re-node-02 | 100.89.130.19 | 23.227.173.245 | App Server (Coolify Remote) | 12 vCPU, 48GB RAM |
 
 ## Architecture Notes
 
-### Current Architecture (Dokploy-Based)
+### Current Architecture (Coolify-Based)
 
-**UPDATED (2026-04-03)**: The infrastructure now uses Option B architecture with Dokploy.
+**UPDATED (2026-05-12)**: The infrastructure now uses Coolify v4 as the deployment platform with Docker Compose.
 
 **Traffic Flow**:
-- **App Traffic**: Cloudflare → Traefik (on app servers) → Docker containers
+- **App Traffic**: Cloudflare → HAProxy (TCP 80/443) → Coolify Traefik (re-db/re-node-02) → App containers
 - **Database Traffic**: Applications → HAProxy (routers) → Patroni
 
 **Key Changes**:
-- HAProxy handles ONLY database traffic (PostgreSQL)
-- Application traffic bypasses HAProxy entirely
-- Traefik handles all app routing and SSL termination
-- Dokploy manages deployments via Docker Swarm
+- HAProxy handles database traffic (PostgreSQL) and TCP passthrough (80/443) to Coolify
+- HAProxy does NOT terminate SSL for apps — Coolify's Traefik does
+- Coolify's Traefik handles all app routing and SSL termination via Let's Encrypt DNS-01
+- Coolify manages deployments via Docker Compose (NOT Docker Swarm)
 
-### Dokploy Configuration (CRITICAL)
+### Coolify Configuration (CRITICAL)
 
-**Dokploy is the primary deployment platform**, replacing the legacy Flask dashboard and CapRover.
+**Coolify is the primary deployment platform**, replacing the legacy Flask dashboard and Dokploy.
 
-**Dashboard**: https://deploy.quantyralabs.cc
+**Dashboard**: http://100.92.26.38:8000 (Tailscale only)
 
 **Architecture**:
 ```
-Docker Swarm Cluster:
-- re-db (Manager): Dokploy dashboard, PostgreSQL, Redis, Traefik replica
-- re-node-02 (Worker): Traefik replica, app containers
+Coolify v4 Cluster (Docker Compose):
+- re-db (Manager): Coolify dashboard, Coolify Traefik, app containers
+- re-node-02 (Remote Server): Coolify Traefik, app containers
 
 Services:
-- dokploy: 1/1 replicas (manager only)
-- dokploy-traefik: 2/2 replicas (HA on both nodes)
-- dokploy-postgres: 1/1 replicas (Dokploy internal DB)
-- dokploy-redis: 1/1 replicas (Dokploy internal cache - separate from infrastructure Redis)
+- coolify: Coolify dashboard (manager only)
+- coolify-traefik: Reverse proxy on both nodes (handles app routing + SSL)
+- coolify-postgres: Coolify internal DB (manager only)
 ```
 
 **Deployment Workflow**:
-1. Create application in Dokploy dashboard
+1. Create application in Coolify dashboard
 2. Connect GitHub repository
 3. Configure environment variables
-4. Add domains
-5. Deploy with 2+ replicas for HA
+4. Set Port = 0 (Coolify Traefik handles routing)
+5. Add domains (Coolify auto-configures SSL via DNS-01)
+6. Set multiple servers for HA (re-db + re-node-02)
+7. Deploy
 
-**Never manually create Docker Swarm services**. Always use Dokploy dashboard or API.
+**Never manually create Docker Compose services on app servers**. Always use Coolify dashboard or API.
 
-### HAProxy Configuration (Database Only)
+### HAProxy Configuration (Database + TCP Passthrough)
 
-**UPDATED (2026-04-03)**: HAProxy now handles DATABASE TRAFFIC ONLY.
+**UPDATED (2026-05-12)**: HAProxy handles database traffic and TCP passthrough to Coolify.
 
 **Scope**:
 - PostgreSQL: Port 5000 (write), Port 5001 (read)
+- TCP Passthrough: Port 80, Port 443 (→ Coolify Traefik on app servers)
 - Stats: Port 8404
+- Metrics: Port 8405
 
-**Application traffic NO LONGER routes through HAProxy**. Apps route directly via Cloudflare → Traefik.
+**HAProxy does NOT terminate SSL for applications**. SSL termination is handled by Coolify's Traefik via Let's Encrypt DNS-01 challenges (Cloudflare).
 
 ### Key Architectural Decisions
 
-- **Dokploy for Deployment**: All application deployments via Dokploy dashboard, not Ansible or manual scripts
-- **Traefik for App Routing**: Traefik handles app traffic, SSL, and load balancing
-- **HAProxy for Databases**: HAProxy provides database connection pooling and failover
-- **DNS Round-Robin**: Cloudflare returns both app server IPs; clients retry on failure
+- **Coolify for Deployment**: All application deployments via Coolify dashboard, not Ansible or manual scripts
+- **Traefik for App Routing**: Coolify's Traefik handles app traffic, SSL, and load balancing
+- **HAProxy for Databases and Passthrough**: HAProxy provides database connection pooling, failover, and TCP passthrough to Coolify
+- **DNS Round-Robin**: Cloudflare returns both router IPs; HAProxy passes through to Coolify
 - **Tailscale VPN**: All server-to-server communication uses encrypted Tailscale network (100.64.0.0/10)
 
 ### Port Allocation Scheme
@@ -183,9 +187,11 @@ Services:
 | Port Range | Purpose | Notes |
 |------------|---------|-------|
 | 5000-5001 | PostgreSQL (HAProxy) | 5000=RW, 5001=RO |
+| 8000 | Coolify Dashboard | Deployment management (Tailscale only) |
 | 8080 | Dashboard | Infrastructure management UI |
 | 8100-8199 | Production Apps | Dockerized app containers via Traefik |
 | 8404 | HAProxy Stats | Admin interface |
+| 8405 | HAProxy Metrics | Prometheus metrics |
 | 9090 | Prometheus | Metrics collection |
 | 9093 | Alertmanager | Alert routing |
 | 9200-9299 | Staging Apps | Dockerized app containers via Traefik |
@@ -193,15 +199,16 @@ Services:
 
 ### Traffic Flow
 1. **Cloudflare** terminates SSL at edge, routes to APP SERVERS via DNS round-robin
-2. **Traefik** (on app servers) routes by Host header to Docker containers
-3. **Docker containers** run applications (Laravel, Node.js, etc.)
-4. **Database layer** accessed via HAProxy ports 5000 (write) / 5001 (read)
+2. **HAProxy** (routers) passes through TCP traffic on ports 80/443 to Coolify Traefik
+3. **Traefik** (on app servers) routes by Host header to Docker containers
+4. **Docker containers** run applications (Laravel, Node.js, etc.)
+5. **Database layer** accessed via HAProxy ports 5000 (write) / 5001 (read)
 
 **Application Deployment**:
-- Via Dokploy dashboard: https://deploy.quantyralabs.cc
+- Via Coolify dashboard: http://100.92.26.38:8000 (Tailscale only)
 - Git push to main/staging branches triggers auto-deploy
-- Deploy with 2+ replicas for high availability
-- Traefik automatically configures routing and SSL
+- Deploy to multiple servers for high availability
+- Coolify Traefik automatically configures routing and SSL via DNS-01
 
 ### Client IP Forwarding
 ```
@@ -211,8 +218,8 @@ CF-Connecting-IP → X-Forwarded-For
 ```
 
 ### Application Deployment
-- Applications run as Docker containers managed by Dokploy
-- Traefik handles app routing and TLS automation
+- Applications run as Docker containers managed by Coolify
+- Coolify's Traefik handles app routing and TLS automation
 - Host-level PHP-FPM is not required for app workloads
 - Deploy to BOTH app servers for redundancy (2+ replicas)
 
@@ -256,9 +263,9 @@ python3 app.py
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/sync-configs.sh` | Sync configs from servers to repo (includes Dokploy, Docker, Swarm) |
+| `scripts/sync-configs.sh` | Sync configs from servers to repo (includes Coolify, Docker) |
 
-**Note**: Domain provisioning and app deployment are now handled via Dokploy dashboard, not scripts.
+**Note**: Domain provisioning and app deployment are now handled via Coolify dashboard, not scripts.
 
 ## Environment Variables
 
@@ -308,18 +315,18 @@ ssh root@100.102.220.16 'patronictl switchover'
 
 ## Development Workflow
 
-### Dokploy Dashboard Changes
+### Coolify Dashboard Changes
 
-The Dokploy dashboard is the primary interface for deployment and application management.
+The Coolify dashboard is the primary interface for deployment and application management.
 
-**Access**: https://deploy.quantyralabs.cc
+**Access**: http://100.92.26.38:8000 (Tailscale only)
 
 **Common Operations**:
-1. **Deploy Application**: Applications → [App Name] → Deploy
-2. **Add Environment Variables**: Applications → [App Name] → Environment
-3. **Add Domain**: Applications → [App Name] → Domains → Add Domain
-4. **View Logs**: Applications → [App Name] → Logs
-5. **Scale Replicas**: Applications → [App Name] → Settings → Replicas
+1. **Deploy Application**: Project → [App Name] → Deploy
+2. **Add Environment Variables**: Project → [App Name] → Environment
+3. **Add Domain**: Project → [App Name] → Domains → Add Domain
+4. **View Logs**: Project → [App Name] → Logs
+5. **Set Multiple Servers**: Project → [App Name] → Configuration → Destination
 
 **No code deployment needed**. All changes are made via the web UI.
 
@@ -390,7 +397,7 @@ journalctl -u haproxy -f
 # Patroni/PostgreSQL
 journalctl -u patroni -f
 
-# App containers (Docker/Dokploy)
+# App containers (Docker/Coolify)
 docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
 ```
 
@@ -412,7 +419,7 @@ docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
 
 ### Import Order (Python)
 1. Standard library (`os`, `subprocess`, `datetime`)
-2. External packages (`flask`, `psycopg2`, `redis`, `requests`)
+2. External packages (`flask`, `psycopg2`, `requests`)
 3. Internal imports (none in dashboard - single file)
 
 ### Commit Conventions
@@ -428,30 +435,30 @@ Follow Conventional Commits:
 
 ### Deploy New Application
 
-1. Access Dokploy dashboard: https://deploy.quantyralabs.cc
-2. Click **Applications** → **Create Application**
+1. Access Coolify dashboard: http://100.92.26.38:8000 (Tailscale only)
+2. Click **Project** → **Create Application**
 3. Connect GitHub repository
 4. Configure build settings (Dockerfile or Nixpacks)
-5. Set replicas: 2 (recommended for HA)
+5. Set Port = 0 (Coolify Traefik handles routing)
 6. Add environment variables (database credentials, app secrets)
-7. Add domains (production and/or staging)
-8. Click **Deploy**
-9. Monitor build and deployment logs
-10. Verify application is accessible
+7. Add domains (production and/or staging) — Coolify auto-configures SSL via DNS-01
+8. Set multiple servers for HA (re-db + re-node-02)
+9. Click **Deploy**
+10. Monitor build and deployment logs
+11. Verify application is accessible
 
 ### Add New Domain to Existing Application
 
-1. Dokploy → Applications → [App Name] → Domains
+1. Coolify → Project → [App Name] → Domains
 2. Click **Add Domain**
 3. Enter domain name (e.g., myapp.example.com)
-4. Enable HTTPS
-5. Click **Save**
-6. SSL certificate auto-provisioned by Let's Encrypt
-7. DNS auto-configured via Cloudflare API
+4. Click **Save**
+5. SSL certificate auto-provisioned by Let's Encrypt via DNS-01 challenge
+6. DNS auto-configured via Cloudflare API
 
 ### Delete Application
 
-1. Dokploy → Applications → [App Name] → Settings
+1. Coolify → Project → [App Name] → Settings
 2. Scroll to bottom
 3. Click **Delete Application**
 4. Confirm deletion
@@ -462,14 +469,14 @@ Follow Conventional Commits:
 # Dashboard
 ssh root@100.102.220.16 "systemctl status dashboard"
 
-# App servers (Dokploy + Docker)
-ssh root@100.92.26.38 "docker service ls && docker ps"
+# App servers (Coolify + Docker)
+ssh root@100.92.26.38 "docker ps"
 ssh root@100.89.130.19 "docker ps"
 ```
 
 ## Important Notes
 
-1. **Deploy via Dokploy** - Always use Dokploy dashboard for application deployments
+1. **Deploy via Coolify** - Always use Coolify dashboard for application deployments
 2. **Use 2+ replicas** - For high availability across both app servers
 3. **Database via HAProxy** - Always use HAProxy endpoints (router IPs) for database connections
 4. **Traefik handles SSL** - Let's Encrypt certificates are automatic via DNS-01 challenge
@@ -488,7 +495,7 @@ ssh root@100.89.130.19 "docker ps"
 
 Sync configs to local repo after:
 - Any HAProxy configuration changes
-- Any Dokploy/Traefik app routing changes
+- Any Coolify/Traefik app routing changes
 - Any PostgreSQL/Patroni configuration changes
 - Any Prometheus/Grafana/Alertmanager changes
 - Any systemd service changes
@@ -553,7 +560,7 @@ This script pulls all configuration files from all servers into the `configs/` d
 
 | Framework | Runtime | Environment Variable |
 |-----------|---------|---------------------|
-| Laravel | Docker image via Dokploy | `APP_ENV` (production/staging) |
+| Laravel | Docker image via Coolify | `APP_ENV` (production/staging) |
 | Next.js | systemd + npm | `NODE_ENV` (production/development) |
 | Svelte | systemd + npm | `NODE_ENV` (production/development) |
 | Python | systemd + gunicorn | `APP_ENV` (production/staging) |
@@ -577,25 +584,6 @@ All servers have the following SSH keys authorized:
 ### Tailscale SSH
 
 Tailscale SSH (`RunSSH`) is **disabled** on all servers. SSH access uses standard SSH keys.
-
-### SSH Rollback Procedure
-
-If SSH connectivity issues arise after disabling Tailscale SSH:
-
-1. **Re-enable Tailscale SSH via SSDNodes console**:
-   ```bash
-   tailscale set --ssh=true
-   ```
-
-2. **Or via Tailscale admin console ACL**:
-   - Go to https://login.tailscale.com/admin/acls
-   - Add SSH rule to allow access
-   - Connect via Tailscale SSH and re-add keys
-
-3. **Verify access and re-disable Tailscale SSH**:
-   ```bash
-   tailscale set --ssh=false --accept-risk=lose-ssh
-   ```
 
 ## Security
 
@@ -627,12 +615,10 @@ If SSH connectivity issues arise after disabling Tailscale SSH:
 
 - `/docs/plan.md` - Current tasks, priorities, and future improvements
 - `/docs/architecture.md` - Complete infrastructure architecture and traffic flow
-- `/docs/dokploy-operations.md` - Operational guide for Dokploy platform
 - `/docs/deployment.md` - Application deployment procedures
 - `/docs/getting-started.md` - Quick start guide for new users
-- `/docs/monitoring.md` - Monitoring setup (includes Traefik and Docker Swarm)
-- `/docs/disaster_recovery.md` - DR procedures including Dokploy recovery
-- `/docs/dokploy_migration_plan.md` - Migration plan from CapRover to Dokploy (complete)
+- `/docs/monitoring.md` - Monitoring setup (includes Traefik and Docker)
+- `/docs/disaster_recovery.md` - DR procedures including Coolify recovery
 
 ## Skill Usage Guide
 
@@ -644,7 +630,7 @@ When working on tasks involving these technologies, invoke the corresponding ski
 | docker | Managing Docker Compose configurations and container deployments |
 | postgresql | Handling PostgreSQL database operations and Patroni cluster management |
 | python | Managing Python code patterns, dependencies, and Flask application development |
-| haproxy | Configuring HAProxy load balancing, SSL termination, and traffic routing |
+| haproxy | Configuring HAProxy load balancing, database traffic, and TCP passthrough |
 | prometheus | Managing Prometheus metrics collection, alerting rules, and monitoring |
 | grafana | Handling Grafana dashboard visualization and alert management |
 | patroni | Managing Patroni PostgreSQL high availability and etcd DCS |

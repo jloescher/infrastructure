@@ -1,0 +1,191 @@
+- generic [ref=e1]:
+  - generic [ref=e158]:
+    - img [ref=e160]
+    - generic [ref=e161]:
+      - generic [ref=e162]: Love Coolify? Support our work.
+      - generic [ref=e163]: We are already profitable thanks to YOU but... We would like to make more cool features.
+      - generic [ref=e164]: For this we need your help to support our work financially.
+    - generic [ref=e165]:
+      - button [ref=e173] [cursor=pointer]:
+        - link [ref=e174]:
+          - /url: https://github.com/sponsors/coollabsio
+          - text: GitHub Sponsors
+      - button [ref=e175] [cursor=pointer]:
+        - link [ref=e176]:
+          - /url: https://opencollective.com/coollabsio/donate?interval=month&amount=10&name=&legalName=&email=
+          - text: Open Collective
+      - button [ref=e177] [cursor=pointer]:
+        - link [ref=e178]:
+          - /url: https://donate.stripe.com/8x2bJ104ifmB9kB45u38402
+          - text: Stripe
+      - generic [ref=e172] [cursor=pointer]: Maybe next time
+  - generic [ref=e2]:
+    - navigation [ref=e5]:
+      - generic [ref=e6]:
+        - generic [ref=e7]:
+          - link [ref=e179] [cursor=pointer]:
+            - /url: /
+            - text: Coolify
+          - link [ref=e180] [cursor=pointer]:
+            - /url: https://github.com/coollabsio/coolify/releases/tag/v4.0.0
+            - text: v4.0.0
+        - button [ref=e181]:
+          - img [ref=e12]
+          - generic [ref=e14]: /
+        - button [ref=e182] [cursor=pointer]:
+          - img [ref=e183]
+          - generic [ref=e20]: 9+
+      - combobox [ref=e23]
+      - list [ref=e24]:
+        - listitem [ref=e25]:
+          - list [ref=e26]:
+            - listitem [ref=e27]:
+              - link [ref=e184] [cursor=pointer]:
+                - /url: /
+                - img [ref=e29]
+                - generic [ref=e31]: Dashboard
+            - listitem [ref=e32]:
+              - link [ref=e185] [cursor=pointer]:
+                - /url: /projects
+                - img [ref=e34]
+                - generic [ref=e39]: Projects
+            - listitem [ref=e40]:
+              - link [ref=e186] [cursor=pointer]:
+                - /url: /servers
+                - img [ref=e42]
+                - generic [ref=e47]: Servers
+            - listitem [ref=e48]:
+              - link [ref=e187] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/sources
+                - img [ref=e50]
+                - generic [ref=e52]: Sources
+            - listitem [ref=e53]:
+              - link [ref=e188] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/destinations
+                - img [ref=e55]
+                - generic [ref=e57]: Destinations
+            - listitem [ref=e58]:
+              - link [ref=e189] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/storages
+                - img [ref=e60]
+                - generic [ref=e65]: S3 Storages
+            - listitem [ref=e66]:
+              - link [ref=e190] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/shared-variables
+                - img [ref=e68]
+                - generic [ref=e72]: Shared Variables
+            - listitem [ref=e73]:
+              - link [ref=e191] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/notifications/email
+                - img [ref=e75]
+                - generic [ref=e77]: Notifications
+            - listitem [ref=e78]:
+              - link [ref=e192] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/security/private-key
+                - img [ref=e80]
+                - generic [ref=e82]: Keys & Tokens
+            - listitem [ref=e83]:
+              - link [ref=e193] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/tags
+                - img [ref=e85]
+                - generic [ref=e89]: Tags
+            - listitem [ref=e90]:
+              - link [ref=e194] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/terminal
+                - img [ref=e92]
+                - generic [ref=e95]: Terminal
+            - listitem [ref=e96]:
+              - link [ref=e195] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/profile
+                - img [ref=e98]
+                - generic [ref=e103]: Profile
+            - listitem [ref=e104]:
+              - link [ref=e196] [cursor=pointer]:
+                - /url: http://100.92.26.38:8000/team
+                - img [ref=e106]
+                - generic [ref=e114]: Teams
+            - listitem [ref=e115]:
+              - link [ref=e197] [cursor=pointer]:
+                - /url: /settings
+                - img [ref=e117]
+                - generic [ref=e121]: Settings
+            - listitem [ref=e123]:
+              - link [ref=e198] [cursor=pointer]:
+                - /url: https://coolify.io/sponsorships
+                - img [ref=e125]
+                - generic [ref=e129]: Sponsor us
+            - listitem [ref=e130]:
+              - generic [ref=e199] [cursor=pointer]:
+                - img [ref=e134]
+                - generic [ref=e136]: Feedback
+            - listitem [ref=e137]:
+              - button [ref=e200]:
+                - img [ref=e140]
+                - generic [ref=e142]: Logout
+    - main [ref=e143]:
+      - generic [ref=e145]:
+        - generic [ref=e146]:
+          - heading [level=1] [ref=e201]: Servers
+          - button [ref=e202] [cursor=pointer]: + Add
+        - generic [ref=e150]: All your servers are here.
+        - link [ref=e203] [cursor=pointer]:
+          - /url: http://100.92.26.38:8000/server/ac4m1atxgvcgwzp86mz0fdtc
+          - generic [ref=e153]:
+            - generic [ref=e154]: localhost
+            - generic [ref=e155]: This is the server where Coolify is running on. Don't delete this!
+  - generic [ref=e206]:
+    - generic [ref=e207]:
+      - heading "New Server" [level=3] [ref=e208]
+      - button [ref=e209]:
+        - img [ref=e210]
+    - generic [ref=e214]:
+      - generic [ref=e219] [cursor=pointer]:
+        - img [ref=e220]
+        - generic [ref=e223]:
+          - generic [ref=e224]: Connect a Hetzner Server
+          - generic [ref=e225]: Deploy servers directly from your Hetzner Cloud account
+      - generic [ref=e227]:
+        - heading "Add Server by IP Address" [level=3] [ref=e228]
+        - generic [ref=e230]:
+          - generic [ref=e231]:
+            - generic [ref=e232]:
+              - generic [ref=e233]:
+                - text: Name
+                - generic [ref=e234]: "*"
+              - textbox [active] [ref=e235]: super-swan-e247zm8b6koskbh5ksezaohy
+            - generic [ref=e236]:
+              - generic [ref=e237]: Description
+              - textbox [ref=e238]
+          - generic [ref=e239]:
+            - generic [ref=e240]:
+              - generic [ref=e241]:
+                - text: IP Address/Domain
+                - generic [ref=e242]: "*"
+                - img [ref=e245] [cursor=pointer]
+              - textbox [ref=e247]
+            - generic [ref=e248]:
+              - generic [ref=e249]:
+                - text: Port
+                - generic [ref=e250]: "*"
+              - spinbutton [ref=e251]: "22"
+          - generic [ref=e252]:
+            - generic [ref=e253]:
+              - text: User
+              - generic [ref=e254]: "*"
+            - textbox [ref=e255]: root
+          - generic [ref=e256]:
+            - text: "Non-root user is experimental:"
+            - link "docs" [ref=e257] [cursor=pointer]:
+              - /url: https://coolify.io/docs/knowledge-base/server/non-root-user
+            - text: .
+          - generic [ref=e258]:
+            - generic [ref=e259]: Private Key
+            - combobox [ref=e260]:
+              - option "Select a private key" [disabled]
+              - option "localhost's key" [selected]
+          - generic [ref=e263]:
+            - generic [ref=e264]:
+              - text: Use it as a build server?
+              - img [ref=e267] [cursor=pointer]
+            - checkbox "Use it as a build server?" [ref=e269] [cursor=pointer]
+          - button "Continue" [ref=e270] [cursor=pointer]

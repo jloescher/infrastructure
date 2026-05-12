@@ -137,7 +137,7 @@ rollback_deployment() {
         run_as_app_user "cd '$APP_DIR' && php artisan config:cache" 2>/dev/null || true
         run_as_app_user "cd '$APP_DIR' && php artisan route:cache" 2>/dev/null || true
         run_as_app_user "cd '$APP_DIR' && php artisan view:cache" 2>/dev/null || true
-        echo "Skipping host PHP-FPM reload (runtime is containerized under Dokploy)."
+        echo "Skipping host PHP-FPM reload (runtime is containerized under Coolify)."
     fi
 
     ensure_app_permissions
@@ -173,7 +173,7 @@ check_pending_migrations() {
 if [ -f "composer.json" ]; then
     echo "Detected: Laravel/PHP"
     echo "Error: Host-level Laravel deployments are deprecated."
-    echo "Use Dokploy to deploy this application (PHP runtime is bundled in Docker image)."
+    echo "Use Coolify to deploy this application (PHP runtime is bundled in Docker image)."
     exit 1
 elif [ -f "package.json" ]; then
     echo "Detected: Node.js"

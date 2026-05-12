@@ -68,29 +68,6 @@ check_patroni() {
     fi
 }
 
-check_redis() {
-    log "Checking Redis..."
-    
-    local nodes=(
-        "100.126.103.51:6379"
-        "100.114.117.46:6379"
-    )
-    
-    for node in "${nodes[@]}"; do
-        local ip=$(echo $node | cut -d: -f1)
-        local port=$(echo $node | cut -d: -f2)
-        
-        if redis-cli -h "$ip" -p "$port" ping 2>/dev/null | grep -q "PONG"; then
-            local role=$(redis-cli -h "$ip" -p "$port" INFO replication 2>/dev/null | grep "role:" | cut -d: -f2 | tr -d '\r')
-            log "✓ Redis at $ip:$port is healthy ($role)"
-        else
-            log "✗ Redis at $ip:$port is NOT responding"
-        fi
-    done
-    
-    return 0
-}
-
 check_haproxy() {
     log "Checking HAProxy..."
     
@@ -272,9 +249,6 @@ main() {
     log ""
     
     check_patroni || exit_code=1
-    log ""
-    
-    check_redis || exit_code=1
     log ""
     
     check_haproxy || exit_code=1
