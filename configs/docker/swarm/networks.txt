@@ -1,7 +1,5 @@
-NETWORK ID     NAME              DRIVER    SCOPE
-cb2abf6438f1   bridge            bridge    local
-baba2b65880f   docker_gwbridge   bridge    local
-3g9pmawfpuyn   dokploy-network   overlay   swarm
-3ce13840cc29   host              host      local
-n1b3edo21ikh   ingress           overlay   swarm
-53fc48cbe5c1   none              null      local
+NETWORK ID     NAME      DRIVER    SCOPE
+dda5b127311e   bridge    bridge    local
+195015eb72ed   coolify   bridge    local
+3ce13840cc29   host      host      local
+53fc48cbe5c1   none      null      local

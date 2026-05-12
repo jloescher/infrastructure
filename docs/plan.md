@@ -12,8 +12,9 @@ This document tracks current tasks, priorities, and future improvements for the 
 | PostgreSQL Cluster | ✅ Working | 3-node Patroni cluster |
 | Redis Cluster | ❌ Removed | Replaced with PostgreSQL job queues; fully removed from all servers (2026-05-12) |
 | Monitoring | ✅ Working | Prometheus, Grafana, Alertmanager |
-| Docker Compose | 🚧 In Progress | Ready for testing |
+| Docker Compose | ✅ Complete | Coolify v4 with Docker Compose, Traefik HA |
 | Config Sync | ✅ Complete | 89 config files in repo |
+| Coolify Deployment Tuning | ✅ Complete | Docker daemon, build target, ports, secrets, multi-server |
 | App Cleanup Audit | ✅ Complete | Orphaned resources removed |
 | GitHub Validation | ✅ Complete | Repo validation before creation |
 | DNS Read-Only View | ✅ Complete | Existing records displayed with conflicts |
@@ -663,9 +664,51 @@ HTTP/2 200
 - ✅ getting-started.md - Deployment workflow updated
 
 **Next Steps:**
-- Migrate existing apps from legacy deployment to Coolify
 - ⏳ Set up automated backups for Coolify configuration
 - ⏳ Document app migration procedures
+
+---
+
+## Milestone: Coolify Deployment Tuning — jonathanloescher.com (2026-05-12)
+
+**Application**: Coolify app "JonathanLoescher Production", domain `https://jonathanloescher.com`, repo `jloescher/jonathanloescher`, Dockerfile build pack, `/Dockerfile.optimized`.
+
+**Problems Fixed:**
+
+1. **Missing build target**: `dockerfile_target_build` was `null`. The Dockerfile's `production` stage includes `HEALTHCHECK`; the default stage does not. Without healthcheck, Coolify's rolling update failed with "map has no entry for key Health".
+
+2. **Layer extraction context canceled**: BuildKit had no I/O throttling. Large (265MB+) layer extraction caused `context canceled` during the final unpack phase.
+
+3. **Wrong Traefik port**: `ports_exposes` was `3000` but the app listens on port `80`. Traefik routed to port 3000 → 502.
+
+4. **Secrets in build args**: All 63 env vars were `is_buildtime: true`, baked into image via `--build-arg`. Only 5 are needed at build time.
+
+5. **Single-server deployment**: App only on re-db. HAProxy load balanced to both servers but re-node-02 had no container → 503.
+
+**Changes Applied:**
+
+| Change | Location | Detail |
+|--------|----------|--------|
+| Docker daemon tuning | `/etc/docker/daemon.json` (both app servers) | `max-concurrent-uploads: 1`, `max-concurrent-downloads: 1`, `builder.gc.defaultKeepStorage: 10GB` |
+| Build target | Coolify DB `applications.dockerfile_target_build` | Set to `production` |
+| Exposed port | Coolify DB `applications.ports_exposes` | Changed `3000` → `80` |
+| Traefik labels | Coolify DB `applications.custom_labels` | Regenerated with port 80 |
+| Env var scope | Coolify DB `environment_variables.is_buildtime` | 58 of 63 vars changed to `false` |
+| Multi-server | Coolify DB `additional_destinations` | Added re-node-02 |
+| Docker restart | Both app servers | Applied daemon.json changes |
+
+**Verification (2026-05-12):**
+- ✅ Build completes all stages, layers export and unpack successfully
+- ✅ Container healthcheck passes (healthy)
+- ✅ App responds HTTP 200 on `https://jonathanloescher.com`
+- ✅ Deployed on both re-db and re-node-02
+
+**Documentation:**
+- ✅ `docs/coolify_deployment_tuning.md` — Full details of all changes and troubleshooting
+
+**Tracking:**
+- Completed: 2026-05-12 18:30 UTC
+- Status: ✅ Complete
 
 ---
 

@@ -681,10 +681,13 @@ HAProxy (router-01/02) → Patroni
 
 | Setting | Value | Reason |
 |---------|-------|--------|
-| Port | 0 (auto) | Coolify Traefik handles routing |
-| Replicas | 2+ | High availability across nodes |
-| Domain | *.domain.tld | Wildcard or per-domain SSL |
+| Build Pack | `dockerfile` | Custom Dockerfile for Laravel |
+| Dockerfile Location | `/Dockerfile.optimized` | Multi-stage Dockerfile |
+| Docker Build Stage Target | `production` | Stage with HEALTHCHECK directive |
+| Ports Exposes | `80` | App listens on port 80 inside container |
+| Domain | `https://domain.tld` | Per-domain SSL via DNS-01 |
 | Database | External | Use Patroni cluster via HAProxy |
+| Deploy Target | Both app servers | HA with rolling updates |
 
 ### Connecting to External Databases
 

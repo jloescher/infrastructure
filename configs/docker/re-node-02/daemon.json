@@ -4,5 +4,13 @@
   "log-opts": {
     "max-size": "10m",
     "max-file": "3"
+  },
+  "max-concurrent-uploads": 1,
+  "max-concurrent-downloads": 1,
+  "builder": {
+    "gc": {
+      "enabled": true,
+      "defaultKeepStorage": "10GB"
+    }
   }
 }
