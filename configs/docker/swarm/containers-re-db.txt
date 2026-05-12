@@ -1,0 +1,8 @@
+NAMES                                   STATUS                       IMAGE
+a128ztjhsepr68uvluz06lpm-180430485179   Up About an hour (healthy)   a128ztjhsepr68uvluz06lpm:092bea2ad2a7b3b47c69662059d72a4d833e505a
+coolify-sentinel                        Up 2 hours (healthy)         ghcr.io/coollabsio/sentinel:0.0.21
+coolify-proxy                           Up 2 hours (healthy)         traefik:v3.6
+coolify                                 Up 2 hours (healthy)         ghcr.io/coollabsio/coolify:4.0.0
+coolify-db                              Up 2 hours (healthy)         postgres:15-alpine
+coolify-redis                           Up 2 hours (healthy)         redis:7-alpine
+coolify-realtime                        Up 2 hours (healthy)         ghcr.io/coollabsio/coolify-realtime:1.0.13

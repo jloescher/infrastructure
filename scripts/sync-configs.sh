@@ -117,25 +117,57 @@ echo "  Skipped - apps now managed by Coolify"
 
 # ==================== Coolify ====================
 echo "=== Coolify ==="
-mkdir -p configs/coolify/re-db/traefik configs/coolify/re-node-02/traefik
+mkdir -p configs/coolify/re-db/{traefik,source,proxy-dynamic,applications,ssh}
+mkdir -p configs/coolify/re-node-02/{traefik,proxy-dynamic}
 
-# Manager node (re-db) - Traefik dynamic configs from Coolify proxy
-for file in $(ssh root@100.92.26.38 "ls /data/coolify/proxy/*.yml 2>/dev/null"); do
-    filename=$(basename "$file")
-    ssh root@100.92.26.38 "cat /data/coolify/proxy/$filename" > "configs/coolify/re-db/traefik/$filename" 2>/dev/null || true
-done
+# Manager node (re-db) - Traefik docker-compose from Coolify proxy
+ssh root@100.92.26.38 "cat /data/coolify/proxy/docker-compose.yml" > configs/coolify/re-db/traefik/docker-compose.yml 2>/dev/null || true
 
 # ACME certificate metadata from manager (DO NOT SYNC CONTENT - contains private keys)
 ssh root@100.92.26.38 "stat -c '%a %U %G %s %y' /data/coolify/proxy/acme.json 2>/dev/null" > configs/coolify/re-db/traefik/acme.json.metadata 2>/dev/null || true
 
-# Worker node (re-node-02) - Traefik dynamic configs from Coolify proxy
-for file in $(ssh root@100.89.130.19 "ls /data/coolify/proxy/*.yml 2>/dev/null"); do
-    filename=$(basename "$file")
-    ssh root@100.89.130.19 "cat /data/coolify/proxy/$filename" > "configs/coolify/re-node-02/traefik/$filename" 2>/dev/null || true
+# Traefik dynamic configs from manager
+for file in $(ssh root@100.92.26.38 "ls /data/coolify/proxy/dynamic/ 2>/dev/null"); do
+    ssh root@100.92.26.38 "cat /data/coolify/proxy/dynamic/$file" > "configs/coolify/re-db/proxy-dynamic/$file" 2>/dev/null || true
 done
+
+# Coolify source compose files (the Coolify stack definition)
+ssh root@100.92.26.38 "cat /data/coolify/source/docker-compose.yml" > configs/coolify/re-db/source/docker-compose.yml 2>/dev/null || true
+ssh root@100.92.26.38 "cat /data/coolify/source/docker-compose.prod.yml" > configs/coolify/re-db/source/docker-compose.prod.yml 2>/dev/null || true
+
+# Coolify source .env (sanitize secrets)
+ssh root@100.92.26.38 "cat /data/coolify/source/.env" | grep -vE "^(DB_PASSWORD|REDIS_PASSWORD|PUSHER_SECRET|PUSHER_KEY|APP_KEY|HONEYBADGER_API_KEY|SESSION_PASSWORD|METRICS_API_TOKEN|CUSTOM_CONFIG_SCRIPT|HOSTED_MIEL)" > configs/coolify/re-db/source/.env.example 2>/dev/null || true
+
+# Coolify database dump (full state: apps, env vars, domains, servers, settings)
+ssh root@100.92.26.38 "docker exec coolify-db pg_dump -U coolify coolify --clean --if-exists" > configs/coolify/re-db/coolify-db.dump.sql 2>/dev/null || true
+
+# Application docker-compose and .env files per deployed app
+for app_dir in $(ssh root@100.92.26.38 "ls -d /data/coolify/applications/*/ 2>/dev/null"); do
+    app_uuid=$(basename "$app_dir")
+    mkdir -p "configs/coolify/re-db/applications/$app_uuid"
+    ssh root@100.92.26.38 "cat /data/coolify/applications/$app_uuid/docker-compose.yaml" > "configs/coolify/re-db/applications/$app_uuid/docker-compose.yaml" 2>/dev/null || true
+    ssh root@100.92.26.38 "cat /data/coolify/applications/$app_uuid/README.md" > "configs/coolify/re-db/applications/$app_uuid/README.md" 2>/dev/null || true
+    # Sanitize .env - strip all secret values, keep key names for reference
+    ssh root@100.92.26.38 "cat /data/coolify/applications/$app_uuid/.env 2>/dev/null" | sed -E 's/=.*/=***REDACTED***/' > "configs/coolify/re-db/applications/$app_uuid/.env.example" 2>/dev/null || true
+done
+
+# Coolify SSH key fingerprint (public key only, not private key material)
+ssh root@100.92.26.38 "ls /data/coolify/ssh/keys/ 2>/dev/null" > configs/coolify/re-db/ssh/keys-manifest.txt 2>/dev/null || true
+ssh root@100.92.26.38 "ssh-keygen -l -f /data/coolify/ssh/keys/id.root@host.docker.internal.pub 2>/dev/null || true" > configs/coolify/re-db/ssh/key-fingerprint.txt 2>/dev/null || true
+
+# SSL CA cert
+ssh root@100.92.26.38 "cat /data/coolify/ssl/coolify-ca.crt" > configs/coolify/re-db/coolify-ca.crt 2>/dev/null || true
+
+# Worker node (re-node-02) - Traefik docker-compose from Coolify proxy
+ssh root@100.89.130.19 "cat /data/coolify/proxy/docker-compose.yml" > configs/coolify/re-node-02/traefik/docker-compose.yml 2>/dev/null || true
 
 # ACME certificate metadata from worker (DO NOT SYNC CONTENT - contains private keys)
 ssh root@100.89.130.19 "stat -c '%a %U %G %s %y' /data/coolify/proxy/acme.json 2>/dev/null" > configs/coolify/re-node-02/traefik/acme.json.metadata 2>/dev/null || true
+
+# Traefik dynamic configs from worker
+for file in $(ssh root@100.89.130.19 "ls /data/coolify/proxy/dynamic/ 2>/dev/null"); do
+    ssh root@100.89.130.19 "cat /data/coolify/proxy/dynamic/$file" > "configs/coolify/re-node-02/proxy-dynamic/$file" 2>/dev/null || true
+done
 
 echo "Coolify configs synced"
 
@@ -149,16 +181,16 @@ ssh root@100.89.130.19 "cat /etc/docker/daemon.json" > configs/docker/re-node-02
 
 echo "Docker daemon configs synced"
 
-# ==================== Docker Swarm ====================
-echo "=== Docker Swarm ==="
+# ==================== Docker State ====================
+echo "=== Docker State ==="
 mkdir -p configs/docker/swarm
 
-# Swarm status from manager
-ssh root@100.92.26.38 "docker node ls" > configs/docker/swarm/nodes.txt 2>/dev/null || true
-ssh root@100.92.26.38 "docker service ls" > configs/docker/swarm/services.txt 2>/dev/null || true
+# Container/network state from both nodes
 ssh root@100.92.26.38 "docker network ls" > configs/docker/swarm/networks.txt 2>/dev/null || true
+ssh root@100.92.26.38 "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'" > configs/docker/swarm/containers-re-db.txt 2>/dev/null || true
+ssh root@100.89.130.19 "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'" > configs/docker/swarm/containers-re-node-02.txt 2>/dev/null || true
 
-echo "Docker Swarm state synced"
+echo "Docker state synced"
 
 # ==================== Cleanup ====================
 find configs/ -size 0 -delete

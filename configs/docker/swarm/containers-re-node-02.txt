@@ -1,0 +1,4 @@
+NAMES                                   STATUS                       IMAGE
+a128ztjhsepr68uvluz06lpm-181234517355   Up 50 minutes (healthy)      a128ztjhsepr68uvluz06lpm:092bea2ad2a7b3b47c69662059d72a4d833e505a
+coolify-sentinel                        Up About an hour (healthy)   ghcr.io/coollabsio/sentinel:0.0.21
+coolify-proxy                           Up About an hour (healthy)   traefik:v3.6

@@ -47,3 +47,7 @@ screencapture-*.png
 vault.key
 *.key
 /tmp/vault.key
+
+# Coolify database dump (contains plaintext secrets)
+# Kept locally by sync-configs.sh for disaster recovery only
+configs/coolify/*/coolify-db.dump.sql

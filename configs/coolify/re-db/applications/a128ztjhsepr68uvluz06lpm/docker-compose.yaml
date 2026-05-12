@@ -1,0 +1,57 @@
+services:
+    a128ztjhsepr68uvluz06lpm-180430485179:
+        image: 'a128ztjhsepr68uvluz06lpm:092bea2ad2a7b3b47c69662059d72a4d833e505a'
+        container_name: a128ztjhsepr68uvluz06lpm-180430485179
+        restart: unless-stopped
+        expose:
+            - '80'
+        networks:
+            coolify:
+                aliases:
+                    - a128ztjhsepr68uvluz06lpm-180430485179
+        mem_limit: '0'
+        memswap_limit: '0'
+        mem_swappiness: 60
+        mem_reservation: '0'
+        cpus: 0.0
+        cpu_shares: 1024
+        env_file:
+            - .env
+        labels:
+            - traefik.enable=true
+            - traefik.http.middlewares.gzip.compress=true
+            - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
+            - traefik.http.routers.http-0-a128ztjhsepr68uvluz06lpm.entryPoints=http
+            - traefik.http.routers.http-0-a128ztjhsepr68uvluz06lpm.middlewares=redirect-to-https
+            - 'traefik.http.routers.http-0-a128ztjhsepr68uvluz06lpm.rule=Host(`jonathanloescher.com`) && PathPrefix(`/`)'
+            - traefik.http.routers.http-0-a128ztjhsepr68uvluz06lpm.service=http-0-a128ztjhsepr68uvluz06lpm
+            - traefik.http.routers.https-0-a128ztjhsepr68uvluz06lpm.entryPoints=https
+            - traefik.http.routers.https-0-a128ztjhsepr68uvluz06lpm.middlewares=gzip
+            - 'traefik.http.routers.https-0-a128ztjhsepr68uvluz06lpm.rule=Host(`jonathanloescher.com`) && PathPrefix(`/`)'
+            - traefik.http.routers.https-0-a128ztjhsepr68uvluz06lpm.service=https-0-a128ztjhsepr68uvluz06lpm
+            - traefik.http.routers.https-0-a128ztjhsepr68uvluz06lpm.tls.certresolver=letsencrypt
+            - traefik.http.routers.https-0-a128ztjhsepr68uvluz06lpm.tls=true
+            - traefik.http.services.http-0-a128ztjhsepr68uvluz06lpm.loadbalancer.server.port=80
+            - traefik.http.services.https-0-a128ztjhsepr68uvluz06lpm.loadbalancer.server.port=80
+            - 'caddy_0.encode=zstd gzip'
+            - 'caddy_0.handle_path.0_reverse_proxy={{upstreams 80}}'
+            - 'caddy_0.handle_path=/*'
+            - caddy_0.header=-Server
+            - 'caddy_0.try_files={path} /index.html /index.php'
+            - 'caddy_0=https://jonathanloescher.com'
+            - caddy_ingress_network=coolify
+            - coolify.managed=true
+            - coolify.version=4.0.0
+            - coolify.applicationId=1
+            - coolify.type=application
+            - coolify.name=a128ztjhsepr68uvluz06lpm
+            - coolify.resourceName=jonathanloescher-production
+            - coolify.projectName=jonathan-loescher
+            - coolify.serviceName=jonathanloescher-production
+            - coolify.environmentName=production
+            - coolify.pullRequestId=0
+networks:
+    coolify:
+        external: true
+        name: coolify
+        attachable: true
