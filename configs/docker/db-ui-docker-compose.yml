@@ -1,0 +1,33 @@
+services:
+  pgadmin:
+    image: dpage/pgadmin4:9.15
+    container_name: pgadmin
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@quantyra.internal
+      PGADMIN_DEFAULT_PASSWORD: xgRsJByGrGMkWRHANq62
+      PGADMIN_CONFIG_SERVER_MODE: 'True'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+
+  ivory:
+    image: veegres/ivory:latest
+    container_name: ivory
+    restart: unless-stopped
+    ports:
+      - "8082:80"                     # ← now works again
+    extra_hosts:
+      - "router-01:100.102.220.16"
+      - "router-02:100.116.175.9"
+      - "re-node-04:100.115.75.119"
+      - "re-node-01:100.126.103.51"
+      - "re-node-03:100.114.117.46"
+    volumes:
+      - ivory-data:/opt/ivory/data
+
+volumes:
+  pgadmin-data:
+  ivory-data:
