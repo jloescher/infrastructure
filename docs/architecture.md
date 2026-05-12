@@ -705,9 +705,20 @@ DB_PORT=5001            # RO endpoint
 ### Coolify Dashboard Access
 
 ```
-URL: http://100.92.26.38:8000 (Tailscale only)
+URL: https://deploy.quantyralabs.cc (public)
+Internal: http://100.92.26.38:8000 (Tailscale fallback)
 Location: re-db only (not HA)
 Purpose: Application and domain management
+SSL: Let's Encrypt via DNS-01, routed through Coolify Traefik
+```
+
+### Email (Amazon SES)
+
+```
+Provider: Amazon SES
+SMTP Port: 587 (TLS)
+Usage: Deployment notifications, invite emails, alerts
+Config: Coolify Instance Settings → SMTP
 ```
 
 ### Comparison: Old vs New Deployment

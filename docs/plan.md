@@ -712,6 +712,35 @@ HTTP/2 200
 
 ---
 
+## Milestone: Coolify Public Access + SES Email (2026-05-12)
+
+**Changes:**
+
+1. **Coolify Dashboard Public Access**: Exposed Coolify at `https://deploy.quantyralabs.cc` (previously Tailscale-only at `http://100.92.26.38:8000`).
+
+   - Set Coolify FQDN to `https://deploy.quantyralabs.cc` in InstanceSettings
+   - Created Traefik dynamic config (`/data/coolify/proxy/dynamic/coolify-dashboard.yaml`) routing `deploy.quantyralabs.cc` → `coolify:8080`
+   - Cloudflare DNS A record already pointed to `208.87.128.115` (re-db), proxied
+   - SSL auto-provisioned by Traefik via Let's Encrypt DNS-01
+
+2. **Amazon SES Email**: Configured Coolify to send email via Amazon SES SMTP.
+
+   - SMTP credentials generated via AWS Console → SES → SMTP Settings
+   - Configured in Coolify Instance Settings → SMTP
+   - Port 587 with TLS
+   - Usage: deployment notifications, invite emails, alerts
+
+**Verification:**
+- ✅ `https://deploy.quantyralabs.cc` returns HTTP 200 publicly
+- ✅ SSL certificate valid via Let's Encrypt DNS-01
+- ✅ Internal fallback `http://100.92.26.38:8000` still accessible via Tailscale
+
+**Tracking:**
+- Completed: 2026-05-12 19:42 UTC
+- Status: ✅ Complete
+
+---
+
 ## Milestone: Coolify/Traefik Monitoring Complete (2026-04-03)
 
 **Monitoring Stack Extended:**

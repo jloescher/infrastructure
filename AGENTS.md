@@ -70,13 +70,14 @@ infrastructure/
 ## Key Information
 
 ### Server Access
-- **Coolify Dashboard**: http://100.92.26.38:8000 (Tailscale only, primary deployment interface)
+- **Coolify Dashboard**: https://deploy.quantyralabs.cc (public, primary deployment interface)
+- **Coolify Dashboard (internal)**: http://100.92.26.38:8000 (Tailscale, fallback)
 - **App Servers**: re-db (100.92.26.38, Coolify manager), re-node-02 (100.89.130.19, Coolify remote server)
 - **Routers**: router-01 (100.102.220.16), router-02 (100.116.175.9)
 - **Monitoring**: Prometheus (100.102.220.16:9090), Grafana (100.102.220.16:3000)
 
 ### Critical Credentials
-- **Coolify Dashboard**: http://100.92.26.38:8000 (Tailscale only)
+- **Coolify Dashboard**: https://deploy.quantyralabs.cc (public)
 - **PostgreSQL Leader**: re-node-03 (100.114.117.46)
 - **HAProxy Stats**: Port 8404, auth: admin:jFNeZ2bhfrTjTK7aKApD
 - **Patroni Superuser**: patroni_superuser / 2e7vBpaaVK4vTJzrKebC
@@ -137,7 +138,7 @@ infrastructure/
 
 **Coolify is the primary deployment platform**, replacing the legacy Flask dashboard and Dokploy.
 
-**Dashboard**: http://100.92.26.38:8000 (Tailscale only)
+**Dashboard**: https://deploy.quantyralabs.cc (public)
 
 **Architecture**:
 ```
@@ -146,7 +147,7 @@ Coolify v4 Cluster (Docker Compose):
 - re-node-02 (Remote Server): Coolify Traefik, app containers
 
 Services:
-- coolify: Coolify dashboard (manager only)
+- coolify: Coolify dashboard (manager only, exposed at https://deploy.quantyralabs.cc)
 - coolify-traefik: Reverse proxy on both nodes (handles app routing + SSL)
 - coolify-postgres: Coolify internal DB (manager only)
 ```
@@ -161,6 +162,16 @@ Services:
 7. Deploy
 
 **Never manually create Docker Compose services on app servers**. Always use Coolify dashboard or API.
+
+### Email (Amazon SES)
+
+**UPDATED (2026-05-12)**: Coolify is configured to send email via Amazon SES SMTP.
+
+- **Provider**: Amazon SES
+- **SMTP Host**: Configured in Coolify Instance Settings
+- **SMTP Port**: 587 (TLS)
+- **Credentials**: Generated via AWS Console → SES → SMTP Settings → Create SMTP Credentials
+- **Usage**: Deployment notifications, invite emails, alerts
 
 ### HAProxy Configuration (Database + TCP Passthrough)
 
@@ -187,7 +198,7 @@ Services:
 | Port Range | Purpose | Notes |
 |------------|---------|-------|
 | 5000-5001 | PostgreSQL (HAProxy) | 5000=RW, 5001=RO |
-| 8000 | Coolify Dashboard | Deployment management (Tailscale only) |
+| 8000 | Coolify Dashboard | Internal only (Tailscale fallback) |
 | 8080 | Dashboard | Infrastructure management UI |
 | 8100-8199 | Production Apps | Dockerized app containers via Traefik |
 | 8404 | HAProxy Stats | Admin interface |
@@ -205,7 +216,7 @@ Services:
 5. **Database layer** accessed via HAProxy ports 5000 (write) / 5001 (read)
 
 **Application Deployment**:
-- Via Coolify dashboard: http://100.92.26.38:8000 (Tailscale only)
+- Via Coolify dashboard: https://deploy.quantyralabs.cc (public)
 - Git push to main/staging branches triggers auto-deploy
 - Deploy to multiple servers for high availability
 - Coolify Traefik automatically configures routing and SSL via DNS-01
@@ -319,7 +330,7 @@ ssh root@100.102.220.16 'patronictl switchover'
 
 The Coolify dashboard is the primary interface for deployment and application management.
 
-**Access**: http://100.92.26.38:8000 (Tailscale only)
+**Access**: https://deploy.quantyralabs.cc (public)
 
 **Common Operations**:
 1. **Deploy Application**: Project → [App Name] → Deploy
@@ -435,7 +446,7 @@ Follow Conventional Commits:
 
 ### Deploy New Application
 
-1. Access Coolify dashboard: http://100.92.26.38:8000 (Tailscale only)
+1. Access Coolify dashboard: https://deploy.quantyralabs.cc (public)
 2. Click **Project** → **Create Application**
 3. Connect GitHub repository
 4. Configure build settings (Dockerfile or Nixpacks)

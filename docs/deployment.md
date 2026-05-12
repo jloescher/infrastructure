@@ -56,7 +56,7 @@ Quantyra uses **Coolify v4** as the primary deployment platform, providing:
 
 ### Required Access
 
-- **Coolify Dashboard**: http://100.92.26.38:8000 (Tailscale only)
+- **Coolify Dashboard**: https://deploy.quantyralabs.cc (public)
 - **GitHub Repository**: Write access to application repos
 - **Cloudflare**: DNS management access
 - **SSH Access**: Tailscale-connected to app servers (optional, for troubleshooting)
@@ -356,7 +356,7 @@ See [docs/coolify_deployment_tuning.md](coolify_deployment_tuning.md) for detail
 
 ### Support
 
-- **Coolify Dashboard**: http://100.92.26.38:8000 (Tailscale only)
+- **Coolify Dashboard**: https://deploy.quantyralabs.cc (public)
 - **HAProxy Stats**: http://100.102.220.16:8404/stats
 - **Prometheus**: http://100.102.220.16:9090
 - **Grafana**: http://100.102.220.16:3000
